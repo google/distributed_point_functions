@@ -54,6 +54,11 @@ cc_proto_library(
     deps = [":distributed_point_function_proto"],
 )
 
+go_proto_library(
+    name = "distributed_point_function_go_proto",
+    deps = [":distributed_point_function_proto"],
+)
+
 cc_test(
     name = "distributed_point_function_benchmark",
     srcs = [
