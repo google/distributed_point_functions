@@ -64,6 +64,7 @@ cc_test(
     srcs = [
         "distributed_point_function_benchmark.cc",
     ],
+    tags = ["benchmark"],
     deps = [
         ":distributed_point_function",
         "@com_github_google_benchmark//:benchmark_main",
