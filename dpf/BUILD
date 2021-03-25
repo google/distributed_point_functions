@@ -5,6 +5,7 @@ package_group(
     name = "allowlist",
     packages = [
         "//dpf/...",
+        "//third_party/privacy_sandbox_aggregation/pipeline/...",
     ],
 )
 
@@ -51,11 +52,6 @@ proto_library(
 
 cc_proto_library(
     name = "distributed_point_function_cc_proto",
-    deps = [":distributed_point_function_proto"],
-)
-
-go_proto_library(
-    name = "distributed_point_function_go_proto",
     deps = [":distributed_point_function_proto"],
 )
 
