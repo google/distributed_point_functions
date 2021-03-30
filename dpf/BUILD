@@ -2,16 +2,8 @@ load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 
-package_group(
-    name = "allowlist",
-    packages = [
-        "//dpf/...",
-        "//third_party/privacy_sandbox_aggregation/pipeline/...",
-    ],
-)
-
 package(
-    default_visibility = [":allowlist"],
+    default_visibility = ["//visibility:public"],
 )
 
 licenses(["notice"])
