@@ -18,20 +18,23 @@ cc_library(
         "//dpf/internal:array_conversions",
         "//dpf/internal:pseudorandom_generator",
         "@boringssl//:crypto",
+        "@com_github_google_glog//:glog",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings:str_format",
         "@com_google_protobuf//:protobuf",
     ],
 )
 
 cc_test(
     name = "distributed_point_function_test",
-    size = "small",
+    size = "medium",
     srcs = ["distributed_point_function_test.cc"],
     deps = [
         ":distributed_point_function",
         "//dpf/internal:status_matchers",
         "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/random",
     ],
 )
 

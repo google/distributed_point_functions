@@ -8,8 +8,11 @@ git_repository(
     commit = "cfdc2fa31879c0aebe31ce7702b1a9c8a4be02d2",
     remote = "https://github.com/bazelbuild/rules_proto.git",
 )
+
 load("@rules_proto//proto:repositories.bzl", "rules_proto_dependencies", "rules_proto_toolchains")
+
 rules_proto_dependencies()
+
 rules_proto_toolchains()
 
 # rules_cc defines rules for generating C++ code from Protocol Buffers.
@@ -24,6 +27,7 @@ http_archive(
 )
 
 load("@rules_cc//cc:repositories.bzl", "rules_cc_dependencies")
+
 rules_cc_dependencies()
 
 # io_bazel_rules_go defines rules for generating C++ code from Protocol Buffers.
@@ -44,16 +48,16 @@ go_register_toolchains(version = "1.15.5")
 
 # Install gtest.
 http_archive(
-  name = "com_github_google_googletest",
-  urls = ["https://github.com/google/googletest/archive/a4ab0abb93620ce26efad9de9296b73b16e88588.zip"],
-  strip_prefix = "googletest-a4ab0abb93620ce26efad9de9296b73b16e88588",
+    name = "com_github_google_googletest",
+    strip_prefix = "googletest-a4ab0abb93620ce26efad9de9296b73b16e88588",
+    urls = ["https://github.com/google/googletest/archive/a4ab0abb93620ce26efad9de9296b73b16e88588.zip"],
 )
 
 # abseil-cpp
 http_archive(
-  name = "com_google_absl",
-  urls = ["https://github.com/abseil/abseil-cpp/archive/6af91b35109cb35ae53cfe908e31a0c31c4a47f3.zip"],
-  strip_prefix = "abseil-cpp-6af91b35109cb35ae53cfe908e31a0c31c4a47f3",
+    name = "com_google_absl",
+    strip_prefix = "abseil-cpp-6af91b35109cb35ae53cfe908e31a0c31c4a47f3",
+    urls = ["https://github.com/abseil/abseil-cpp/archive/6af91b35109cb35ae53cfe908e31a0c31c4a47f3.zip"],
 )
 
 # BoringSSL
@@ -66,7 +70,23 @@ git_repository(
 # Benchmarks
 http_archive(
     name = "com_github_google_benchmark",
-    urls = ["https://github.com/google/benchmark/archive/bf585a2789e30585b4e3ce6baf11ef2750b54677.zip"],
-    strip_prefix = "benchmark-bf585a2789e30585b4e3ce6baf11ef2750b54677",
     sha256 = "2a778d821997df7d8646c9c59b8edb9a573a6e04c534c01892a40aa524a7b68c",
+    strip_prefix = "benchmark-bf585a2789e30585b4e3ce6baf11ef2750b54677",
+    urls = ["https://github.com/google/benchmark/archive/bf585a2789e30585b4e3ce6baf11ef2750b54677.zip"],
+)
+
+# gflags needed for glog.
+http_archive(
+    name = "com_github_gflags_gflags",
+    sha256 = "34af2f15cf7367513b352bdcd2493ab14ce43692d2dcd9dfc499492966c64dcf",
+    strip_prefix = "gflags-2.2.2",
+    urls = ["https://github.com/gflags/gflags/archive/v2.2.2.tar.gz"],
+)
+
+# glog for logging
+http_archive(
+    name = "com_github_google_glog",
+    sha256 = "62efeb57ff70db9ea2129a16d0f908941e355d09d6d83c9f7b18557c0a7ab59e",
+    strip_prefix = "glog-d516278b1cd33cd148e8989aec488b6049a4ca0b",
+    urls = ["https://github.com/google/glog/archive/d516278b1cd33cd148e8989aec488b6049a4ca0b.zip"],
 )

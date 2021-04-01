@@ -130,16 +130,17 @@ class DistributedPointFunction {
                            dpf_internal::PseudorandomGenerator prg_right,
                            dpf_internal::PseudorandomGenerator prg_value);
 
-  // Computes the value correction for the given `tree_level`, `seeds`, index
-  // `alpha` and value `beta`. If `invert` is true, the individual values in the
-  // returned block are multiplied element-wise by -1. Expands `seeds` using
-  // `cipher`, then calls ComputeValueCorrectionFor<T> for the right type
-  // depending on `element_bitsize`. Returns INTERNAL in case the PRG expansion
-  // fails, and UNIMPLEMENTED if `element_bitsize` is not supported.
+  // Computes the value correction for the given `hierarchy_level`, `seeds`,
+  // index `alpha` and value `beta`. If `invert` is true, the individual values
+  // in the returned block are multiplied element-wise by -1. Expands `seeds`
+  // using `prg_ctx_value_`, then calls ComputeValueCorrectionFor<T> for the
+  // right type depending on `parameters_[hierarchy_level].element_bitsize()`.
+  //
+  // Returns INTERNAL in case the PRG expansion fails, and UNIMPLEMENTED if
+  // `element_bitsize` is not supported.
   absl::StatusOr<absl::uint128> ComputeValueCorrection(
-      int tree_level, int element_bitsize,
-      absl::Span<const absl::uint128> seeds, absl::uint128 alpha,
-      absl::uint128 beta, bool invert) const;
+      int hierarchy_level, absl::Span<const absl::uint128> seeds,
+      absl::uint128 alpha, absl::uint128 beta, bool invert) const;
 
   // Expands the PRG seeds at the next `tree_level` for an incremental DPF with
   // index `alpha` and values `beta`, updates `seeds` and `control_bits`, and
@@ -154,6 +155,17 @@ class DistributedPointFunction {
   // Checks if the parameters of `ctx` are compatible with this DPF. Returns OK
   // if that's the case, and INVALID_ARGUMENT otherwise.
   absl::Status CheckContextParameters(const EvaluationContext& ctx) const;
+
+  // Computes the tree index (representing a path in the FSS tree) from the
+  // given `domain_index` and `hierarchy_level`. Does NOT check whether the
+  // given domain index fits in the domain at `hierarchy_level`.
+  absl::uint128 DomainToTreeIndex(absl::uint128 domain_index,
+                                  int hierarchy_level) const;
+
+  // Computes the block index (pointing to an element in a batched 128-bit
+  // block) from the given `domain_index` and `hierarchy_level`. Does NOT check
+  // whether the given domain index fits in the domain at `hierarchy_level`.
+  int DomainToBlockIndex(absl::uint128 domain_index, int hierarchy_level) const;
 
   // Seeds and control bits resulting from a DPF expansion. This type is
   // returned by `ExpandSeeds` and `ExpandAndUpdateContext`.
