@@ -63,6 +63,7 @@ cc_test(
     deps = [
         ":distributed_point_function",
         "@com_github_google_benchmark//:benchmark_main",
+        "@com_google_absl//absl/random",
     ],
 )
 
