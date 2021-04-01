@@ -16,6 +16,9 @@ syntax = "proto3";
 
 package private_statistics.dpf;
 
+// For faster allocations of submessages.
+option cc_enable_arenas = true;
+
 // Parameters of a distributed point function (DPF).
 message DpfParameters {
   int32 log_domain_size = 1;

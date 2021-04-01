@@ -288,8 +288,10 @@ DistributedPointFunction::ExpandSeeds(
   int num_expansions = static_cast<int>(correction_words.size());
 
   // Allocate buffers with the correct size to avoid reallocations.
+  auto current_level_size =
+      static_cast<int64_t>(partial_evaluations.seeds.size());
   DCHECK(num_expansions < 63);
-  int64_t output_size = 1LL << num_expansions;
+  int64_t output_size = current_level_size << num_expansions;
   std::vector<absl::uint128> prg_buffer_left, prg_buffer_right;
   prg_buffer_left.reserve(output_size / 2);
   prg_buffer_right.reserve(output_size / 2);
@@ -300,8 +302,6 @@ DistributedPointFunction::ExpandSeeds(
   expansion.control_bits.reserve(output_size);
 
   // We use an iterative expansion here to pipeline AES as much as possible.
-  auto current_level_size =
-      static_cast<int64_t>(partial_evaluations.seeds.size());
   for (int i = 0; i < num_expansions; ++i) {
     // Expand PRG.
     prg_buffer_left.resize(current_level_size);
@@ -405,6 +405,7 @@ DistributedPointFunction::ExpandAndUpdateContext(
   // Update `partial_evaluations` in `ctx` if there are more evaluations to
   // come, and update `hierarchy_level`.
   ctx.clear_partial_evaluations();
+  ctx.mutable_partial_evaluations()->Reserve(expansion.seeds.size());
   if (ctx.hierarchy_level() < static_cast<int>(parameters_.size()) - 1) {
     DCHECK(stop_level - start_level < 63);
     int64_t expanded_blocks_per_seed = 1LL << (stop_level - start_level);
