@@ -1,4 +1,4 @@
-# An Implementation of Incremental Distributed Point Functions in C++ [![Build status](https://badge.buildkite.com/64bb7c0fcc8c11d630517356b2c3932d7e14850801a5f22c48.svg)](https://buildkite.com/bazel/google-distributed-point-functions)
+# An Implementation of Incremental Distributed Point Functions in C++ [![Build status](https://badge.buildkite.com/64bb7c0fcc8c11d630517356b2c3932d7e14850801a5f22c48.svg?branch=master)](https://buildkite.com/bazel/google-distributed-point-functions)
 
 This library contains an implementation of incremental distributed point
 functions, based on the following paper:
