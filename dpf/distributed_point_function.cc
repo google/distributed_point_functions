@@ -19,6 +19,7 @@
 
 #include <limits>
 
+#include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/str_format.h"
 #include "dpf/internal/array_conversions.h"
@@ -356,27 +357,30 @@ DistributedPointFunction::ExpandAndUpdateContext(
   } else {
     // Second or later expansion -> Extract all seeds for `prefixes` from
     // `ctx.partial_evaluations`. To do that, Parse `ctx.partial_evaluations`
-    // into another hash map for quick lookups up by prefix...
-    absl::flat_hash_map<absl::uint128, std::pair<absl::uint128, bool>>
+    // into a btree_map for quick lookups up by prefix. We use a btree_map
+    // because `ctx.partial_evaluations()` will usually be sorted.
+    absl::btree_map<absl::uint128, std::pair<absl::uint128, bool>>
         partial_evaluations;
     for (const PartialEvaluation& element : ctx.partial_evaluations()) {
       absl::uint128 prefix =
           absl::MakeUint128(element.prefix().high(), element.prefix().low());
       // Try inserting `(seed, control_bit)` at `prefix` into
       // partial_evaluations. Return an error if `prefix` is already present.
-      bool was_inserted;
-      std::tie(std::ignore, was_inserted) =
-          partial_evaluations.insert(std::make_pair(
-              prefix, std::make_pair(absl::MakeUint128(element.seed().high(),
-                                                       element.seed().low()),
-                                     element.control_bit())));
-      if (!was_inserted) {
+      size_t previous_size = partial_evaluations.size();
+      // try_emplace with end() as hint is faster if partial evaluations are
+      // sorted.
+      partial_evaluations.try_emplace(
+          partial_evaluations.end(), prefix,
+          std::make_pair(
+              absl::MakeUint128(element.seed().high(), element.seed().low()),
+              element.control_bit()));
+      if (partial_evaluations.size() <= previous_size) {
         return absl::InvalidArgumentError(
             "Duplicate prefix in `ctx.partial_evaluations()`");
       }
     }
-    // ... Then, select all partial evaluations from the hash map that
-    // correspond to `prefixes`.
+    // Now select all partial evaluations from the map that correspond to
+    // `prefixes`.
     selected_partial_evaluations.seeds.reserve(prefixes.size());
     selected_partial_evaluations.control_bits.reserve(prefixes.size());
     for (int64_t i = 0; i < static_cast<int64_t>(prefixes.size()); ++i) {
@@ -408,7 +412,7 @@ DistributedPointFunction::ExpandAndUpdateContext(
   ctx.mutable_partial_evaluations()->Reserve(expansion.seeds.size());
   if (ctx.hierarchy_level() < static_cast<int>(parameters_.size()) - 1) {
     DCHECK(stop_level - start_level < 63);
-    int64_t expanded_blocks_per_seed = 1LL << (stop_level - start_level);
+    int64_t expanded_blocks_per_seed = int64_t{1} << (stop_level - start_level);
     for (int64_t i = 0; i < static_cast<int64_t>(expansion.seeds.size()); ++i) {
       absl::uint128 current_prefix = 0;
       if (!prefixes.empty()) {
@@ -769,7 +773,7 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateNext(
   // level.
   int log_domain_size = parameters_[current_hierarchy_level].log_domain_size();
   DCHECK(log_domain_size - previous_log_domain_size < 63);
-  int64_t outputs_per_prefix = 1LL
+  int64_t outputs_per_prefix = int64_t{1}
                                << (log_domain_size - previous_log_domain_size);
 
   if (current_hierarchy_level == 0) {

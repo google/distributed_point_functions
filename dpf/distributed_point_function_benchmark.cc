@@ -136,6 +136,7 @@ std::vector<std::vector<absl::uint128>> GenerateRandomPrefixes(
         prefixes[i][j] = prefix | dist_value(rng);
       }
     }
+    std::sort(prefixes[i].begin(), prefixes[i].end());
   }
   return prefixes;
 }
