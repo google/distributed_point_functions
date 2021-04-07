@@ -55,32 +55,33 @@ absl::Status PseudorandomGenerator::Evaluate(
     // Nothing to do.
     return absl::OkStatus();
   }
-  if (static_cast<int64_t>(in.size() * sizeof(absl::uint128)) >
-      static_cast<int64_t>(std::numeric_limits<int>::max())) {
-    return absl::InvalidArgumentError(
-        "`in` is too large: OpenSSL needs the size (in bytes) to fit in an "
-        "int");
-  }
-  // Compute orthomorphism sigma for each element in `in`.
-  std::vector<absl::uint128> sigma_in(in.size());
-  for (int64_t i = 0; i < static_cast<int64_t>(in.size()); ++i) {
-    sigma_in[i] = absl::MakeUint128(
-        absl::Uint128High64(in[i]) ^ absl::Uint128Low64(in[i]),
-        absl::Uint128High64(in[i]));
-  }
-  int out_len;
-  int openssl_status = EVP_EncryptUpdate(
-      prg_ctx_.get(), reinterpret_cast<uint8_t*>(out.data()), &out_len,
-      reinterpret_cast<const uint8_t*>(sigma_in.data()),
-      static_cast<int>(in.size() * sizeof(absl::uint128)));
-  if (openssl_status != 1) {
-    return absl::InternalError("AES encryption failed");
-  }
-  if (static_cast<size_t>(out_len) != out.size() * sizeof(absl::uint128)) {
-    return absl::InternalError("OpenSSL output size does not match");
-  }
-  for (int64_t i = 0; i < static_cast<int64_t>(in.size()); ++i) {
-    out[i] ^= sigma_in[i];
+  // Compute orthomorphism sigma for each element in `in`, `kBatchSize` elements
+  // at a time.
+  auto in_size = static_cast<int64_t>(in.size());
+  std::vector<absl::uint128> sigma_in(kBatchSize);
+  for (int64_t start_block = 0; start_block < in_size;
+       start_block += kBatchSize) {
+    int64_t batch_size = std::min<int64_t>(in_size - start_block, kBatchSize);
+    for (int i = 0; i < batch_size; ++i) {
+      sigma_in[i] =
+          absl::MakeUint128(absl::Uint128High64(in[start_block + i]) ^
+                                absl::Uint128Low64(in[start_block + i]),
+                            absl::Uint128High64(in[start_block + i]));
+    }
+    int out_len;
+    int openssl_status = EVP_EncryptUpdate(
+        prg_ctx_.get(), reinterpret_cast<uint8_t*>(out.data() + start_block),
+        &out_len, reinterpret_cast<const uint8_t*>(sigma_in.data()),
+        static_cast<int>(batch_size * sizeof(absl::uint128)));
+    if (openssl_status != 1) {
+      return absl::InternalError("AES encryption failed");
+    }
+    if (out_len != static_cast<int>(sizeof(absl::uint128)) * batch_size) {
+      return absl::InternalError("OpenSSL output size does not match");
+    }
+    for (int64_t i = 0; i < batch_size; ++i) {
+      out[start_block + i] ^= sigma_in[i];
+    }
   }
   return absl::OkStatus();
 }

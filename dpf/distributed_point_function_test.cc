@@ -654,6 +654,11 @@ INSTANTIATE_TEST_SUITE_P(
                 {.log_domain_size = 10, .element_bitsize = 128},
                 {.log_domain_size = 20, .element_bitsize = 128},
                 {.log_domain_size = 30, .element_bitsize = 128}},
+            // Varying element sizes
+            std::vector<DpfTestParameters>{
+                {.log_domain_size = 10, .element_bitsize = 8},
+                {.log_domain_size = 20, .element_bitsize = 16},
+                {.log_domain_size = 30, .element_bitsize = 32}},
             // Small level distances.
             std::vector<DpfTestParameters>{
                 {.log_domain_size = 4, .element_bitsize = 8},

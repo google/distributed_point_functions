@@ -56,6 +56,11 @@ class PseudorandomGenerator {
   PseudorandomGenerator(PseudorandomGenerator&&) = default;
   PseudorandomGenerator& operator=(PseudorandomGenerator&&) = default;
 
+  // The maximum number of AES blocks encrypted at once. Chosen to pipeline AES
+  // as much as possible, while still allowing both source and destination to
+  // comfortably fit in the L2 CPU cache.
+  static constexpr int kBatchSize = 4096;
+
  private:
   // Called by `Create`.
   PseudorandomGenerator(bssl::UniquePtr<EVP_CIPHER_CTX> prg_ctx);

@@ -293,49 +293,63 @@ DistributedPointFunction::ExpandSeeds(
       static_cast<int64_t>(partial_evaluations.seeds.size());
   DCHECK(num_expansions < 63);
   int64_t output_size = current_level_size << num_expansions;
-  std::vector<absl::uint128> prg_buffer_left, prg_buffer_right;
-  prg_buffer_left.reserve(output_size / 2);
-  prg_buffer_right.reserve(output_size / 2);
+  std::vector<absl::uint128> prg_buffer_left(
+      dpf_internal::PseudorandomGenerator::kBatchSize),
+      prg_buffer_right(dpf_internal::PseudorandomGenerator::kBatchSize);
 
-  // Copy seeds and control bits. We will update these in-place.
+  // Copy seeds and control bits. We will swap these after every expansion.
   DpfExpansion expansion = partial_evaluations;
   expansion.seeds.reserve(output_size);
   expansion.control_bits.reserve(output_size);
+  DpfExpansion next_level_expansion;
+  next_level_expansion.seeds.reserve(output_size);
+  next_level_expansion.control_bits.reserve(output_size);
 
   // We use an iterative expansion here to pipeline AES as much as possible.
   for (int i = 0; i < num_expansions; ++i) {
-    // Expand PRG.
-    prg_buffer_left.resize(current_level_size);
-    prg_buffer_right.resize(current_level_size);
-    DPF_RETURN_IF_ERROR(prg_left_.Evaluate(
-        absl::MakeConstSpan(expansion.seeds).subspan(0, current_level_size),
-        absl::MakeSpan(prg_buffer_left)));
-    DPF_RETURN_IF_ERROR(prg_right_.Evaluate(
-        absl::MakeConstSpan(expansion.seeds).subspan(0, current_level_size),
-        absl::MakeSpan(prg_buffer_right)));
-
-    // Merge results into next level of seeds and perform correction.
+    next_level_expansion.seeds.resize(2 * current_level_size);
+    next_level_expansion.control_bits.resize(2 * current_level_size);
     absl::uint128 correction_seed = absl::MakeUint128(
         correction_words[i]->seed().high(), correction_words[i]->seed().low());
     bool correction_control_left = correction_words[i]->control_left();
     bool correction_control_right = correction_words[i]->control_right();
-    expansion.seeds.resize(2 * current_level_size);
-    expansion.control_bits.resize(2 * current_level_size);
-    for (int64_t j = 0; j < current_level_size; ++j) {
-      if (expansion.control_bits[j]) {
-        prg_buffer_left[j] ^= correction_seed;
-        prg_buffer_left[j] ^= correction_control_left;
-        prg_buffer_right[j] ^= correction_seed;
-        prg_buffer_right[j] ^= correction_control_right;
-      }
-      expansion.seeds[2 * j] = prg_buffer_left[j];
-      expansion.seeds[2 * j + 1] = prg_buffer_right[j];
-    }
+    // Expand PRG.
+    for (int64_t start_block = 0; start_block < current_level_size;
+         start_block += dpf_internal::PseudorandomGenerator::kBatchSize) {
+      int64_t batch_size =
+          std::min<int64_t>(current_level_size - start_block,
+                            dpf_internal::PseudorandomGenerator::kBatchSize);
+      DPF_RETURN_IF_ERROR(prg_left_.Evaluate(
+          absl::MakeConstSpan(expansion.seeds).subspan(start_block, batch_size),
+          absl::MakeSpan(prg_buffer_left).subspan(0, batch_size)));
+      DPF_RETURN_IF_ERROR(prg_right_.Evaluate(
+          absl::MakeConstSpan(expansion.seeds).subspan(start_block, batch_size),
+          absl::MakeSpan(prg_buffer_right).subspan(0, batch_size)));
 
-    // Extract next level control bits and update size.
-    for (int64_t j = 0; j < 2 * current_level_size; ++j) {
-      expansion.control_bits[j] = ExtractAndClearLowestBit(expansion.seeds[j]);
+      // Merge results into next level of seeds and perform correction.
+      for (int64_t j = 0; j < batch_size; ++j) {
+        int64_t index_expanded = 2 * (start_block + j);
+        if (expansion.control_bits[start_block + j]) {
+          prg_buffer_left[j] ^= correction_seed;
+          prg_buffer_right[j] ^= correction_seed;
+        }
+        next_level_expansion.seeds[index_expanded] = prg_buffer_left[j];
+        next_level_expansion.seeds[index_expanded + 1] = prg_buffer_right[j];
+        next_level_expansion.control_bits[index_expanded] =
+            ExtractAndClearLowestBit(
+                next_level_expansion.seeds[index_expanded]);
+        next_level_expansion.control_bits[index_expanded + 1] =
+            ExtractAndClearLowestBit(
+                next_level_expansion.seeds[index_expanded + 1]);
+        if (expansion.control_bits[start_block + j]) {
+          next_level_expansion.control_bits[index_expanded] ^=
+              correction_control_left;
+          next_level_expansion.control_bits[index_expanded + 1] ^=
+              correction_control_right;
+        }
+      }
     }
+    std::swap(expansion, next_level_expansion);
     current_level_size *= 2;
   }
   return expansion;
@@ -367,8 +381,6 @@ DistributedPointFunction::ExpandAndUpdateContext(
       // Try inserting `(seed, control_bit)` at `prefix` into
       // partial_evaluations. Return an error if `prefix` is already present.
       size_t previous_size = partial_evaluations.size();
-      // try_emplace with end() as hint is faster if partial evaluations are
-      // sorted.
       partial_evaluations.try_emplace(
           partial_evaluations.end(), prefix,
           std::make_pair(
@@ -720,8 +732,6 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateNext(
     }
     prefix_map.push_back(std::make_pair(it->second, block_index));
   }
-  tree_indices.shrink_to_fit();
-  tree_indices_inverse.clear();
 
   // Perform expansion of unique `tree_indices`.
   DPF_ASSIGN_OR_RETURN(DpfExpansion expansion,
