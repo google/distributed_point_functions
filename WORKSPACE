@@ -1,4 +1,3 @@
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 # rules_proto defines abstract rules for building Protocol Buffers.
