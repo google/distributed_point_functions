@@ -175,6 +175,17 @@ class DistributedPointFunction {
     absl::InlinedVector<bool, 256> control_bits;
   };
 
+  // Computes partial evaluations of the paths to `prefixes` to be used as the
+  // starting point of the expansion of `ctx`. Called by
+  // `ExpandAndUpdateContext`.
+  //
+  // Returns INVALID_ARGUMENT if any element of `prefixes` is not found in
+  // `ctx.partial_evaluations()`, or `ctx.partial_evaluations()` contains
+  // duplicate seeds.
+  absl::StatusOr<DpfExpansion> GetPartialEvaluations(
+      absl::Span<const absl::uint128> prefixes,
+      const EvaluationContext& ctx) const;
+
   // Performs DPF expansion of the given `partial_evaluations` using
   // prg_ctx_left_ and prg_ctx_right_, and the given `correction_words`.
   // In more detail, each of the partial evaluations is subjected to a full
@@ -197,7 +208,8 @@ class DistributedPointFunction {
   // expansion.
   //
   // Returns INVALID_ARGUMENT if any element of `prefixes` is not found in
-  // `ctx.partial_evaluations()`.
+  // `ctx.partial_evaluations()`, or `ctx.partial_evaluations()` contains
+  // duplicate seeds. Returns INTERNAL in case of OpenSSL errors.
   absl::StatusOr<DpfExpansion> ExpandAndUpdateContext(
       absl::Span<const absl::uint128> prefixes, EvaluationContext& ctx) const;
 

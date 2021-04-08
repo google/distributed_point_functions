@@ -283,6 +283,51 @@ int DistributedPointFunction::DomainToBlockIndex(absl::uint128 domain_index,
 }
 
 absl::StatusOr<DistributedPointFunction::DpfExpansion>
+DistributedPointFunction::GetPartialEvaluations(
+    absl::Span<const absl::uint128> prefixes,
+    const EvaluationContext& ctx) const {
+  DpfExpansion selected_partial_evaluations;
+  // Parse `ctx.partial_evaluations`
+  // into a btree_map for quick lookups up by prefix. We use a btree_map
+  // because `ctx.partial_evaluations()` will usually be sorted.
+  absl::btree_map<absl::uint128, std::pair<absl::uint128, bool>>
+      partial_evaluations;
+  for (const PartialEvaluation& element : ctx.partial_evaluations()) {
+    absl::uint128 prefix =
+        absl::MakeUint128(element.prefix().high(), element.prefix().low());
+    // Try inserting `(seed, control_bit)` at `prefix` into
+    // partial_evaluations. Return an error if `prefix` is already present.
+    size_t previous_size = partial_evaluations.size();
+    partial_evaluations.try_emplace(
+        partial_evaluations.end(), prefix,
+        std::make_pair(
+            absl::MakeUint128(element.seed().high(), element.seed().low()),
+            element.control_bit()));
+    if (partial_evaluations.size() <= previous_size) {
+      return absl::InvalidArgumentError(
+          "Duplicate prefix in `ctx.partial_evaluations()`");
+    }
+  }
+  // Now select all partial evaluations from the map that correspond to
+  // `prefixes`.
+  selected_partial_evaluations.seeds.reserve(prefixes.size());
+  selected_partial_evaluations.control_bits.reserve(prefixes.size());
+  for (int64_t i = 0; i < static_cast<int64_t>(prefixes.size()); ++i) {
+    auto it = partial_evaluations.find(prefixes[i]);
+    if (it == partial_evaluations.end()) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "Prefix not present in ctx.partial_evaluations at hierarchy level ",
+          ctx.hierarchy_level()));
+    }
+    std::pair<absl::uint128, bool> partial_evaluation = it->second;
+    selected_partial_evaluations.seeds.push_back(partial_evaluation.first);
+    selected_partial_evaluations.control_bits.push_back(
+        partial_evaluation.second);
+  }
+  return selected_partial_evaluations;
+}
+
+absl::StatusOr<DistributedPointFunction::DpfExpansion>
 DistributedPointFunction::ExpandSeeds(
     const DpfExpansion& partial_evaluations,
     absl::Span<const CorrectionWord* const> correction_words) const {
@@ -370,43 +415,9 @@ DistributedPointFunction::ExpandAndUpdateContext(
         static_cast<bool>(ctx.key().party())};
   } else {
     // Second or later expansion -> Extract all seeds for `prefixes` from
-    // `ctx.partial_evaluations`. To do that, Parse `ctx.partial_evaluations`
-    // into a btree_map for quick lookups up by prefix. We use a btree_map
-    // because `ctx.partial_evaluations()` will usually be sorted.
-    absl::btree_map<absl::uint128, std::pair<absl::uint128, bool>>
-        partial_evaluations;
-    for (const PartialEvaluation& element : ctx.partial_evaluations()) {
-      absl::uint128 prefix =
-          absl::MakeUint128(element.prefix().high(), element.prefix().low());
-      // Try inserting `(seed, control_bit)` at `prefix` into
-      // partial_evaluations. Return an error if `prefix` is already present.
-      size_t previous_size = partial_evaluations.size();
-      partial_evaluations.try_emplace(
-          partial_evaluations.end(), prefix,
-          std::make_pair(
-              absl::MakeUint128(element.seed().high(), element.seed().low()),
-              element.control_bit()));
-      if (partial_evaluations.size() <= previous_size) {
-        return absl::InvalidArgumentError(
-            "Duplicate prefix in `ctx.partial_evaluations()`");
-      }
-    }
-    // Now select all partial evaluations from the map that correspond to
-    // `prefixes`.
-    selected_partial_evaluations.seeds.reserve(prefixes.size());
-    selected_partial_evaluations.control_bits.reserve(prefixes.size());
-    for (int64_t i = 0; i < static_cast<int64_t>(prefixes.size()); ++i) {
-      auto it = partial_evaluations.find(prefixes[i]);
-      if (it == partial_evaluations.end()) {
-        return absl::InvalidArgumentError(absl::StrCat(
-            "Prefix not present in ctx.partial_evaluations at hierarchy level ",
-            ctx.hierarchy_level()));
-      }
-      std::pair<absl::uint128, bool> partial_evaluation = it->second;
-      selected_partial_evaluations.seeds.push_back(partial_evaluation.first);
-      selected_partial_evaluations.control_bits.push_back(
-          partial_evaluation.second);
-    }
+    // `ctx.partial_evaluations`.
+    DPF_ASSIGN_OR_RETURN(selected_partial_evaluations,
+                         GetPartialEvaluations(prefixes, ctx));
     start_level = hierarchy_to_tree_[ctx.hierarchy_level() - 1];
   }
 
