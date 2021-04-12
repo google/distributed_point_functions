@@ -283,48 +283,99 @@ int DistributedPointFunction::DomainToBlockIndex(absl::uint128 domain_index,
 }
 
 absl::StatusOr<DistributedPointFunction::DpfExpansion>
-DistributedPointFunction::GetPartialEvaluations(
-    absl::Span<const absl::uint128> prefixes,
-    const EvaluationContext& ctx) const {
-  DpfExpansion selected_partial_evaluations;
-  // Parse `ctx.partial_evaluations`
-  // into a btree_map for quick lookups up by prefix. We use a btree_map
-  // because `ctx.partial_evaluations()` will usually be sorted.
-  absl::btree_map<absl::uint128, std::pair<absl::uint128, bool>>
-      partial_evaluations;
-  for (const PartialEvaluation& element : ctx.partial_evaluations()) {
-    absl::uint128 prefix =
-        absl::MakeUint128(element.prefix().high(), element.prefix().low());
-    // Try inserting `(seed, control_bit)` at `prefix` into
-    // partial_evaluations. Return an error if `prefix` is already present.
-    size_t previous_size = partial_evaluations.size();
-    partial_evaluations.try_emplace(
-        partial_evaluations.end(), prefix,
-        std::make_pair(
-            absl::MakeUint128(element.seed().high(), element.seed().low()),
-            element.control_bit()));
-    if (partial_evaluations.size() <= previous_size) {
-      return absl::InvalidArgumentError(
-          "Duplicate prefix in `ctx.partial_evaluations()`");
+DistributedPointFunction::EvaluateSeeds(
+    DpfExpansion partial_evaluations, absl::Span<const absl::uint128> paths,
+    absl::Span<const CorrectionWord* const> correction_words) const {
+  if (partial_evaluations.seeds.size() !=
+          partial_evaluations.control_bits.size() ||
+      partial_evaluations.seeds.size() != paths.size()) {
+    return absl::InvalidArgumentError(
+        "partial_evaluations.seeds.size(), "
+        "partial_evaluations.control_bits.size() and paths.size() must "
+        "all be equal");
+  }
+  auto num_seeds = static_cast<int64_t>(partial_evaluations.seeds.size());
+  auto num_levels = static_cast<int>(correction_words.size());
+  int64_t max_batch_size = dpf_internal::PseudorandomGenerator::kBatchSize;
+
+  // Allocate output and temporary buffers.
+  DpfExpansion result = std::move(partial_evaluations);
+  std::vector<absl::uint128> buffer_left, buffer_right;
+  buffer_left.reserve(max_batch_size);
+  buffer_right.reserve(max_batch_size);
+  BitVector current_bits(max_batch_size);
+
+  // Parse correction words for faster access (we access them once for each
+  // batch).
+  std::vector<absl::uint128> correction_seeds(num_levels);
+  BitVector correction_controls_left(num_levels);
+  BitVector correction_controls_right(num_levels);
+  for (int level = 0; level < num_levels; ++level) {
+    const CorrectionWord& correction = *(correction_words[level]);
+    correction_seeds[level] =
+        absl::MakeUint128(correction.seed().high(), correction.seed().low());
+    correction_controls_left[level] = correction.control_left();
+    correction_controls_right[level] = correction.control_right();
+  }
+
+  // Perform DPF evaluation in blocks.
+  for (int64_t start_block = 0; start_block < num_seeds;
+       start_block += max_batch_size) {
+    int64_t current_batch_size =
+        std::min<int64_t>(num_seeds - start_block, max_batch_size);
+    for (int level = 0; level < num_levels; ++level) {
+      // Sort seeds into left and right depending on the current bit of the
+      // corresponding prefix.
+      int bit_index = num_levels - level - 1;
+      for (int i = 0; i < current_batch_size; ++i) {
+        current_bits[i] = 0;
+        if (bit_index < 128) {
+          current_bits[i] =
+              (paths[start_block + i] & (absl::uint128{1} << bit_index)) != 0;
+        }
+        if (current_bits[i] == 0) {
+          buffer_left.push_back(result.seeds[start_block + i]);
+        } else {
+          buffer_right.push_back(result.seeds[start_block + i]);
+        }
+      }
+
+      // Compute PRG.
+      DPF_RETURN_IF_ERROR(
+          prg_left_.Evaluate(buffer_left, absl::MakeSpan(buffer_left)));
+      DPF_RETURN_IF_ERROR(
+          prg_right_.Evaluate(buffer_right, absl::MakeSpan(buffer_right)));
+
+      // Merge back into result and compute correction.
+      int64_t left_index = 0, right_index = 0;
+      for (int i = 0; i < current_batch_size; ++i) {
+        absl::uint128 current_seed;
+        if (current_bits[i] == 0) {
+          current_seed = buffer_left[left_index];
+          ++left_index;
+        } else {
+          current_seed = buffer_right[right_index];
+          ++right_index;
+        }
+        if (result.control_bits[start_block + i]) {
+          current_seed ^= correction_seeds[level];
+        }
+        bool current_control_bit = ExtractAndClearLowestBit(current_seed);
+        if (result.control_bits[start_block + i]) {
+          if (current_bits[i] == 0) {
+            current_control_bit ^= correction_controls_left[level];
+          } else {
+            current_control_bit ^= correction_controls_right[level];
+          }
+        }
+        result.seeds[start_block + i] = current_seed;
+        result.control_bits[start_block + i] = current_control_bit;
+      }
+      buffer_left.resize(0);
+      buffer_right.resize(0);
     }
   }
-  // Now select all partial evaluations from the map that correspond to
-  // `prefixes`.
-  selected_partial_evaluations.seeds.reserve(prefixes.size());
-  selected_partial_evaluations.control_bits.reserve(prefixes.size());
-  for (int64_t i = 0; i < static_cast<int64_t>(prefixes.size()); ++i) {
-    auto it = partial_evaluations.find(prefixes[i]);
-    if (it == partial_evaluations.end()) {
-      return absl::InvalidArgumentError(absl::StrCat(
-          "Prefix not present in ctx.partial_evaluations at hierarchy level ",
-          ctx.hierarchy_level()));
-    }
-    std::pair<absl::uint128, bool> partial_evaluation = it->second;
-    selected_partial_evaluations.seeds.push_back(partial_evaluation.first);
-    selected_partial_evaluations.control_bits.push_back(
-        partial_evaluation.second);
-  }
-  return selected_partial_evaluations;
+  return result;
 }
 
 absl::StatusOr<DistributedPointFunction::DpfExpansion>
@@ -332,15 +383,15 @@ DistributedPointFunction::ExpandSeeds(
     const DpfExpansion& partial_evaluations,
     absl::Span<const CorrectionWord* const> correction_words) const {
   int num_expansions = static_cast<int>(correction_words.size());
+  DCHECK(num_expansions < 63);
 
   // Allocate buffers with the correct size to avoid reallocations.
   auto current_level_size =
       static_cast<int64_t>(partial_evaluations.seeds.size());
-  DCHECK(num_expansions < 63);
+  int64_t max_batch_size = dpf_internal::PseudorandomGenerator::kBatchSize;
   int64_t output_size = current_level_size << num_expansions;
-  std::vector<absl::uint128> prg_buffer_left(
-      dpf_internal::PseudorandomGenerator::kBatchSize),
-      prg_buffer_right(dpf_internal::PseudorandomGenerator::kBatchSize);
+  std::vector<absl::uint128> prg_buffer_left(max_batch_size),
+      prg_buffer_right(max_batch_size);
 
   // Copy seeds and control bits. We will swap these after every expansion.
   DpfExpansion expansion = partial_evaluations;
@@ -360,10 +411,9 @@ DistributedPointFunction::ExpandSeeds(
     bool correction_control_right = correction_words[i]->control_right();
     // Expand PRG.
     for (int64_t start_block = 0; start_block < current_level_size;
-         start_block += dpf_internal::PseudorandomGenerator::kBatchSize) {
+         start_block += max_batch_size) {
       int64_t batch_size =
-          std::min<int64_t>(current_level_size - start_block,
-                            dpf_internal::PseudorandomGenerator::kBatchSize);
+          std::min<int64_t>(current_level_size - start_block, max_batch_size);
       DPF_RETURN_IF_ERROR(prg_left_.Evaluate(
           absl::MakeConstSpan(expansion.seeds).subspan(start_block, batch_size),
           absl::MakeSpan(prg_buffer_left).subspan(0, batch_size)));
@@ -401,6 +451,104 @@ DistributedPointFunction::ExpandSeeds(
 }
 
 absl::StatusOr<DistributedPointFunction::DpfExpansion>
+DistributedPointFunction::ComputePartialEvaluations(
+    absl::Span<const absl::uint128> prefixes, EvaluationContext& ctx) const {
+  int hierarchy_level = ctx.hierarchy_level();
+  if (hierarchy_level == 0) {
+    return absl::InvalidArgumentError(
+        "`GetPartialEvaluations` should only be called when "
+        "ctx.hierarchy_level() > 0");
+  }
+  int64_t num_prefixes = static_cast<int64_t>(prefixes.size());
+
+  DpfExpansion partial_evaluations;
+  int previous_tree_level = hierarchy_to_tree_[ctx.partial_evaluations_level()];
+  int current_tree_level = hierarchy_to_tree_[hierarchy_level - 1];
+  if (ctx.partial_evaluations_size() > 0 &&
+      previous_tree_level <= current_tree_level) {
+    // We have partial evaluations from a tree level before the current one.
+    // Parse `ctx.partial_evaluations` into a btree_map for quick lookups up by
+    // prefix. We use a btree_map because `ctx.partial_evaluations()` will
+    // usually be sorted.
+    absl::btree_map<absl::uint128, std::pair<absl::uint128, bool>>
+        previous_partial_evaluations;
+    for (const PartialEvaluation& element : ctx.partial_evaluations()) {
+      absl::uint128 prefix =
+          absl::MakeUint128(element.prefix().high(), element.prefix().low());
+      // Try inserting `(seed, control_bit)` at `prefix` into
+      // partial_evaluations. Return an error if `prefix` is already present.
+      size_t previous_size = previous_partial_evaluations.size();
+      previous_partial_evaluations.try_emplace(
+          previous_partial_evaluations.end(), prefix,
+          std::make_pair(
+              absl::MakeUint128(element.seed().high(), element.seed().low()),
+              element.control_bit()));
+      if (previous_partial_evaluations.size() <= previous_size) {
+        return absl::InvalidArgumentError(
+            "Duplicate prefix in `ctx.partial_evaluations()`");
+      }
+    }
+    // Now select all partial evaluations from the map that correspond to
+    // `prefixes`.
+    partial_evaluations.seeds.reserve(prefixes.size());
+    partial_evaluations.control_bits.reserve(prefixes.size());
+    for (int64_t i = 0; i < num_prefixes; ++i) {
+      absl::uint128 previous_prefix = 0;
+      if (current_tree_level - previous_tree_level < 128) {
+        previous_prefix =
+            prefixes[i] >> (current_tree_level - previous_tree_level);
+      }
+      auto it = previous_partial_evaluations.find(previous_prefix);
+      if (it == previous_partial_evaluations.end()) {
+        return absl::InvalidArgumentError(absl::StrCat(
+            "Prefix not present in ctx.partial_evaluations at hierarchy level ",
+            hierarchy_level));
+      }
+      std::pair<absl::uint128, bool> partial_evaluation = it->second;
+      partial_evaluations.seeds.push_back(partial_evaluation.first);
+      partial_evaluations.control_bits.push_back(partial_evaluation.second);
+    }
+  } else {
+    // No partial evaluations in `ctx` -> Start from the beginning.
+    partial_evaluations.seeds.resize(
+        num_prefixes,
+        absl::MakeUint128(ctx.key().seed().high(), ctx.key().seed().low()));
+    partial_evaluations.control_bits.resize(
+        num_prefixes, static_cast<bool>(ctx.key().party()));
+    previous_tree_level = 0;
+  }
+
+  // Evaluate the DPF up to current_tree_level.
+  DPF_ASSIGN_OR_RETURN(
+      partial_evaluations,
+      EvaluateSeeds(std::move(partial_evaluations), prefixes,
+                    absl::MakeConstSpan(ctx.key().correction_words())
+                        .subspan(previous_tree_level,
+                                 current_tree_level - previous_tree_level)));
+
+  // Update `partial_evaluations` in `ctx` if there are more evaluations to
+  // come.
+  ctx.clear_partial_evaluations();
+  ctx.mutable_partial_evaluations()->Reserve(num_prefixes);
+  if (hierarchy_level < static_cast<int>(parameters_.size()) - 1) {
+    for (int64_t i = 0; i < num_prefixes; ++i) {
+      PartialEvaluation* current_element = ctx.add_partial_evaluations();
+      current_element->mutable_prefix()->set_high(
+          absl::Uint128High64(prefixes[i]));
+      current_element->mutable_prefix()->set_low(
+          absl::Uint128Low64(prefixes[i]));
+      current_element->mutable_seed()->set_high(
+          absl::Uint128High64(partial_evaluations.seeds[i]));
+      current_element->mutable_seed()->set_low(
+          absl::Uint128Low64(partial_evaluations.seeds[i]));
+      current_element->set_control_bit(partial_evaluations.control_bits[i]);
+    }
+  }
+  ctx.set_partial_evaluations_level(hierarchy_level - 1);
+  return partial_evaluations;
+}
+
+absl::StatusOr<DistributedPointFunction::DpfExpansion>
 DistributedPointFunction::ExpandAndUpdateContext(
     absl::Span<const absl::uint128> prefixes, EvaluationContext& ctx) const {
   // Expand seeds by expanding either the DPF key seed, or
@@ -417,7 +565,7 @@ DistributedPointFunction::ExpandAndUpdateContext(
     // Second or later expansion -> Extract all seeds for `prefixes` from
     // `ctx.partial_evaluations`.
     DPF_ASSIGN_OR_RETURN(selected_partial_evaluations,
-                         GetPartialEvaluations(prefixes, ctx));
+                         ComputePartialEvaluations(prefixes, ctx));
     start_level = hierarchy_to_tree_[ctx.hierarchy_level() - 1];
   }
 
@@ -429,32 +577,7 @@ DistributedPointFunction::ExpandAndUpdateContext(
                   absl::MakeConstSpan(ctx.key().correction_words())
                       .subspan(start_level, stop_level - start_level)));
 
-  // Update `partial_evaluations` in `ctx` if there are more evaluations to
-  // come, and update `hierarchy_level`.
-  ctx.clear_partial_evaluations();
-  ctx.mutable_partial_evaluations()->Reserve(expansion.seeds.size());
-  if (ctx.hierarchy_level() < static_cast<int>(parameters_.size()) - 1) {
-    DCHECK(stop_level - start_level < 63);
-    int64_t expanded_blocks_per_seed = int64_t{1} << (stop_level - start_level);
-    for (int64_t i = 0; i < static_cast<int64_t>(expansion.seeds.size()); ++i) {
-      absl::uint128 current_prefix = 0;
-      if (!prefixes.empty()) {
-        current_prefix = prefixes[i / expanded_blocks_per_seed];
-      }
-      current_prefix = (current_prefix << (stop_level - start_level)) +
-                       (i % expanded_blocks_per_seed);
-      PartialEvaluation* current_element = ctx.add_partial_evaluations();
-      current_element->mutable_prefix()->set_high(
-          absl::Uint128High64(current_prefix));
-      current_element->mutable_prefix()->set_low(
-          absl::Uint128Low64(current_prefix));
-      current_element->mutable_seed()->set_high(
-          absl::Uint128High64(expansion.seeds[i]));
-      current_element->mutable_seed()->set_low(
-          absl::Uint128Low64(expansion.seeds[i]));
-      current_element->set_control_bit(expansion.control_bits[i]);
-    }
-  }
+  // Update hierarchy level in ctx.
   ctx.set_hierarchy_level(ctx.hierarchy_level() + 1);
   return expansion;
 }
@@ -720,8 +843,9 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateNext(
   std::vector<absl::uint128> tree_indices;
   tree_indices.reserve(prefixes_size);
   // `tree_indices_inverse` is the inverse of `tree_indices`, used for
-  // deduplicating and constructing `prefix_map`.
-  absl::flat_hash_map<absl::uint128, int64_t> tree_indices_inverse;
+  // deduplicating and constructing `prefix_map`. Use a btree_map because we
+  // expect `prefixes` (and thus `tree_indices`) to be sorted.
+  absl::btree_map<absl::uint128, int64_t> tree_indices_inverse;
   // `prefix_map` maps each i < prefixes.size() to an element of `tree_indices`
   // and a block index. Used to select which elements to return after the
   // expansion, to ensure the result is ordered the same way as `prefixes`.
@@ -734,11 +858,10 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateNext(
         DomainToBlockIndex(prefixes[i], current_hierarchy_level - 1);
 
     // Check if `tree_index` already exists in `tree_indices`.
-    decltype(tree_indices_inverse)::iterator it;
-    bool was_inserted;
-    std::tie(it, was_inserted) = tree_indices_inverse.insert(
-        std::make_pair(tree_index, tree_indices.size()));
-    if (was_inserted) {
+    size_t previous_size = tree_indices_inverse.size();
+    auto it = tree_indices_inverse.try_emplace(tree_indices_inverse.end(),
+                                               tree_index, tree_indices.size());
+    if (tree_indices_inverse.size() > previous_size) {
       tree_indices.push_back(tree_index);
     }
     prefix_map.push_back(std::make_pair(it->second, block_index));

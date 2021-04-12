@@ -77,8 +77,12 @@ message EvaluationContext {
   DpfKey key = 2;
   // The next hierarchy level to be evaluated.
   int32 hierarchy_level = 3;
-  // Maps prefixes from the previous hierarchy level to PRG seeds, which are
-  // used to continue the evaluation under each prefix. Uses a repeated message
-  // field since Protobuf doesn't allow messages (such as `Block`) as map keys.
+  // Maps prefixes from an earlier hierarchy level to PRG seeds, which are used
+  // to continue the evaluation under each prefix. Uses a repeated message field
+  // since Protobuf doesn't allow messages (such as `Block`) as map keys.
   repeated PartialEvaluation partial_evaluations = 4;
+  // The hierarchy level `partial_evaluations` corresponds to. If levels are
+  // expanded sequentially, this is equal to `hierarchy_level - 1`, otherwise it
+  // can be smaller.
+  int32 partial_evaluations_level = 5;
 }

@@ -420,20 +420,23 @@ TEST_P(DpfEvaluationTest, FailsIfContextFullyEvaluated) {
 }
 
 TEST_P(DpfEvaluationTest, FailsIfPrefixNotPresentInCtx) {
-  if (parameters_.size() < 2 || parameters_[0].element_bitsize() != 128 ||
-      parameters_[1].element_bitsize() != 128) {
+  if (parameters_.size() < 3 || parameters_[0].element_bitsize() != 128 ||
+      parameters_[1].element_bitsize() != 128 ||
+      parameters_[2].element_bitsize() != 128) {
     return;
   }
   DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx,
                            dpf_->CreateEvaluationContext(keys_.first));
 
+  // Evaluate on prefixes 0 and 1, then delete partial evaluations for prefix 0.
   DPF_ASSERT_OK(dpf_->EvaluateNext<absl::uint128>({}, ctx));
-  ctx.clear_partial_evaluations();
+  DPF_ASSERT_OK(dpf_->EvaluateNext<absl::uint128>({0, 1}, ctx));
+  ctx.mutable_partial_evaluations()->erase(ctx.partial_evaluations().begin());
 
   EXPECT_THAT(dpf_->EvaluateNext<absl::uint128>({0}, ctx),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        "Prefix not present in ctx.partial_evaluations at "
-                       "hierarchy level 1"));
+                       "hierarchy level 2"));
 }
 
 TEST_P(DpfEvaluationTest, TestCorrectness) {

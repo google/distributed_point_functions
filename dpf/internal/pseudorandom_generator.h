@@ -42,6 +42,7 @@ class PseudorandomGenerator {
   static absl::StatusOr<PseudorandomGenerator> Create(absl::uint128 key);
 
   // Computes pseudorandom values from `in` and writing the output to `out`.
+  // It is safe to call this method if `in` and `out` overlap.
   //
   // Returns INVALID_ARGUMENT if sizes of `in` and `out` don't match or their
   // sizes in bytes exceed an `int`, or INTERNAL in case of OpenSSL errors.

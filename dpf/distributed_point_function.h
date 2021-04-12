@@ -167,13 +167,41 @@ class DistributedPointFunction {
   // whether the given domain index fits in the domain at `hierarchy_level`.
   int DomainToBlockIndex(absl::uint128 domain_index, int hierarchy_level) const;
 
+  // BitVector is a vector of bools. Allows for faster access times than
+  // std::vector<bool>, as well as inlining if the size is small.
+  using BitVector = absl::InlinedVector<bool, 8 / sizeof(bool)>;
+
   // Seeds and control bits resulting from a DPF expansion. This type is
   // returned by `ExpandSeeds` and `ExpandAndUpdateContext`.
   struct DpfExpansion {
     std::vector<absl::uint128> seeds;
-    // Faster than std::vector<bool>.
-    absl::InlinedVector<bool, 256> control_bits;
+    BitVector control_bits;
   };
+
+  // Performs DPF evaluation of the given `partial_evaluations` using
+  // prg_ctx_left_ or prg_ctx_right_, and the given `correction_words`. At each
+  // level `l < correction_words.size()`, the evaluation for the i-th seed in
+  // `partial_evaluations` continues along the left or right path depending on
+  // the l-th most significant bit among the lowest `correction_words.size()`
+  // bits of `paths[i]`.
+  //
+  // Returns INTERNAL in case of OpenSSL errors.
+  absl::StatusOr<DpfExpansion> EvaluateSeeds(
+      DpfExpansion partial_evaluations, absl::Span<const absl::uint128> paths,
+      absl::Span<const CorrectionWord* const> correction_words) const;
+
+  // Performs DPF expansion of the given `partial_evaluations` using
+  // prg_ctx_left_ and prg_ctx_right_, and the given `correction_words`. In more
+  // detail, each of the partial evaluations is subjected to a full subtree
+  // expansion of `correction_words.size()` levels, and the concatenated result
+  // is provided in the response. The result contains
+  // `(partial_evaluations.size() * (2^correction_words.size())` evaluations in
+  // a single `DpfExpansion`.
+  //
+  // Returns INTERNAL in case of OpenSSL errors.
+  absl::StatusOr<DpfExpansion> ExpandSeeds(
+      const DpfExpansion& partial_evaluations,
+      absl::Span<const CorrectionWord* const> correction_words) const;
 
   // Computes partial evaluations of the paths to `prefixes` to be used as the
   // starting point of the expansion of `ctx`. Called by
@@ -182,22 +210,8 @@ class DistributedPointFunction {
   // Returns INVALID_ARGUMENT if any element of `prefixes` is not found in
   // `ctx.partial_evaluations()`, or `ctx.partial_evaluations()` contains
   // duplicate seeds.
-  absl::StatusOr<DpfExpansion> GetPartialEvaluations(
-      absl::Span<const absl::uint128> prefixes,
-      const EvaluationContext& ctx) const;
-
-  // Performs DPF expansion of the given `partial_evaluations` using
-  // prg_ctx_left_ and prg_ctx_right_, and the given `correction_words`.
-  // In more detail, each of the partial evaluations is subjected to a full
-  // subtree expansion of correction_words.size() levels, and the concatenated
-  // result is provided in the response. The result contains
-  // (partial_evaluations.size() * (2^correction_words.size()) evaluations in a
-  // single `DpfExpansion`.
-  //
-  // Returns INTERNAL in case of OpenSSL errors.
-  absl::StatusOr<DpfExpansion> ExpandSeeds(
-      const DpfExpansion& partial_evaluations,
-      absl::Span<const CorrectionWord* const> correction_words) const;
+  absl::StatusOr<DpfExpansion> ComputePartialEvaluations(
+      absl::Span<const absl::uint128> prefixes, EvaluationContext& ctx) const;
 
   // Extracts the seeds for the given `prefixes` from `ctx` and expands them as
   // far as needed for the next hierarchy level. Returns the result as a
