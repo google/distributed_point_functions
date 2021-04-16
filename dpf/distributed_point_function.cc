@@ -477,7 +477,7 @@ DistributedPointFunction::ComputePartialEvaluations(
           absl::MakeUint128(element.prefix().high(), element.prefix().low());
       // Try inserting `(seed, control_bit)` at `prefix` into
       // partial_evaluations. Return an error if `prefix` is already present.
-      size_t previous_size = previous_partial_evaluations.size();
+      int64_t previous_size = previous_partial_evaluations.size();
       previous_partial_evaluations.try_emplace(
           previous_partial_evaluations.end(), prefix,
           std::make_pair(
@@ -858,7 +858,7 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateNext(
         DomainToBlockIndex(prefixes[i], current_hierarchy_level - 1);
 
     // Check if `tree_index` already exists in `tree_indices`.
-    size_t previous_size = tree_indices_inverse.size();
+    int64_t previous_size = tree_indices_inverse.size();
     auto it = tree_indices_inverse.try_emplace(tree_indices_inverse.end(),
                                                tree_index, tree_indices.size());
     if (tree_indices_inverse.size() > previous_size) {
