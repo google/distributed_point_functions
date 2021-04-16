@@ -21,8 +21,7 @@
 
 #include "dpf/internal/status_matchers.h"
 
-namespace private_statistics {
-namespace dpf {
+namespace distributed_point_functions {
 namespace dpf_internal {
 namespace {
 
@@ -148,5 +147,4 @@ TEST(PseudorandomGeneratorTest, EvaluateFailsWhenSizesDontMatch) {
 
 }  // namespace
 }  // namespace dpf_internal
-}  // namespace dpf
-}  // namespace private_statistics
+}  // namespace distributed_point_functions

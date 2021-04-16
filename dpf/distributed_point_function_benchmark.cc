@@ -16,8 +16,7 @@
 #include "benchmark/benchmark.h"
 #include "dpf/distributed_point_function.h"
 
-namespace private_statistics {
-namespace dpf {
+namespace distributed_point_functions {
 namespace {
 
 // Benchmarks a regular DPF evaluation. Expects the first range argument to
@@ -186,5 +185,4 @@ void BM_IsrgExampleHierarchy(benchmark::State& state) {
 BENCHMARK(BM_IsrgExampleHierarchy);
 
 }  // namespace
-}  // namespace dpf
-}  // namespace private_statistics
+}  // namespace distributed_point_functions

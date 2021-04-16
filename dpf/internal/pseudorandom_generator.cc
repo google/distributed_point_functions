@@ -18,8 +18,7 @@
 
 #include <vector>
 
-namespace private_statistics {
-namespace dpf {
+namespace distributed_point_functions {
 namespace dpf_internal {
 
 PseudorandomGenerator::PseudorandomGenerator(
@@ -87,5 +86,4 @@ absl::Status PseudorandomGenerator::Evaluate(
 }
 
 }  // namespace dpf_internal
-}  // namespace dpf
-}  // namespace private_statistics
+}  // namespace distributed_point_functions

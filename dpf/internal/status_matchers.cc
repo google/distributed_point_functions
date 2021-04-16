@@ -17,8 +17,7 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 
-namespace private_statistics {
-namespace dpf {
+namespace distributed_point_functions {
 namespace dpf_internal {
 
 void StatusIsMatcherCommonImpl::DescribeTo(std::ostream* os) const {
@@ -56,5 +55,4 @@ bool StatusIsMatcherCommonImpl::MatchAndExplain(
 }
 
 }  // namespace dpf_internal
-}  // namespace dpf
-}  // namespace private_statistics
+}  // namespace distributed_point_functions

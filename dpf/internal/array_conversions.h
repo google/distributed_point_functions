@@ -23,8 +23,7 @@
 #include "absl/base/casts.h"
 #include "absl/numeric/int128.h"
 
-namespace private_statistics {
-namespace dpf {
+namespace distributed_point_functions {
 namespace dpf_internal {
 
 // Computes the number of unsigned integers of type T that fit into an
@@ -78,7 +77,6 @@ absl::uint128 ArrayToUint128(const std::array<T, ElementsPerBlock<T>()> &in) {
 }
 
 }  // namespace dpf_internal
-}  // namespace dpf
-}  // namespace private_statistics
+}  // namespace distributed_point_functions
 
 #endif  // DISTRIBUTED_POINT_FUNCTIONS_DPF_INTERNAL_ARRAY_CONVERSIONS_H_

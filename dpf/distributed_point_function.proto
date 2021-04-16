@@ -14,7 +14,7 @@
 
 syntax = "proto3";
 
-package private_statistics.dpf;
+package distributed_point_functions;
 
 // For faster allocations of submessages.
 option cc_enable_arenas = true;

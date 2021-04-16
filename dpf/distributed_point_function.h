@@ -27,8 +27,7 @@
 #include "dpf/distributed_point_function.pb.h"
 #include "dpf/internal/pseudorandom_generator.h"
 
-namespace private_statistics {
-namespace dpf {
+namespace distributed_point_functions {
 
 // Implements key generation and evaluation of distributed point functions.
 // A distributed point function (DPF) is parameterized by an index `alpha` and a
@@ -249,7 +248,6 @@ class DistributedPointFunction {
   const dpf_internal::PseudorandomGenerator prg_value_;
 };
 
-}  // namespace dpf
-}  // namespace private_statistics
+}  // namespace distributed_point_functions
 
 #endif  // DISTRIBUTED_POINT_FUNCTIONS_DPF_DISTRIBUTED_POINT_FUNCTION_H_

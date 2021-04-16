@@ -43,7 +43,7 @@
 //   and whose inner value matches matcher m.  Example:
 //
 //     using ::testing::MatchesRegex;
-//     using private_statistics::dpf::IsOkAndHolds;
+//     using distributed_point_functions::IsOkAndHolds;
 //     ...
 //     absl::StatusOr<string> maybe_name = ...;
 //     EXPECT_THAT(maybe_name, IsOkAndHolds(MatchesRegex("John .*")));
@@ -70,7 +70,7 @@
 //     using ::testing::MatchesRegex;
 //     using ::testing::Ne;
 //     using ::testing::_;
-//     using private_statistics::dpf::StatusIs;
+//     using distributed_point_functions::StatusIs;
 //     absl::StatusOr<string> GetName(int id);
 //     ...
 //
@@ -105,7 +105,7 @@
 //   Matches an absl::Status or absl::StatusOr<T> value whose status value is
 //   absl::StatusCode::kOk. Equivalent to 'StatusIs(absl::StatusCode::kOk)'.
 //   Example:
-//     using private_statistics::dpf::IsOk;
+//     using distributed_point_functions::IsOk;
 //     ...
 //     absl::StatusOr<string> maybe_name = ...;
 //     EXPECT_THAT(maybe_name, IsOk());
@@ -124,8 +124,7 @@
 #include "absl/status/statusor.h"
 #include "dpf/status_macros.h"
 
-namespace private_statistics {
-namespace dpf {
+namespace distributed_point_functions {
 namespace dpf_internal {
 
 inline const absl::Status& GetStatus(const absl::Status& status) {
@@ -319,9 +318,9 @@ class IsOkMatcher {
 // Macros for testing the results of functions that return absl::Status or
 // absl::StatusOr<T> (for any type T).
 #define DPF_EXPECT_OK(expression) \
-  EXPECT_THAT(expression, private_statistics::dpf::dpf_internal::IsOk())
+  EXPECT_THAT(expression, distributed_point_functions::dpf_internal::IsOk())
 #define DPF_ASSERT_OK(expression) \
-  ASSERT_THAT(expression, private_statistics::dpf::dpf_internal::IsOk())
+  ASSERT_THAT(expression, distributed_point_functions::dpf_internal::IsOk())
 
 // Executes an expression that returns an absl::StatusOr, and assigns the
 // contained variable to lhs if the error code is OK.
@@ -383,7 +382,6 @@ dpf_internal::StatusIsMatcher StatusIs(StatusCodeMatcher&& code_matcher) {
 inline dpf_internal::IsOkMatcher IsOk() { return dpf_internal::IsOkMatcher(); }
 
 }  // namespace dpf_internal
-}  // namespace dpf
-}  // namespace private_statistics
+}  // namespace distributed_point_functions
 
 #endif  // DISTRIBUTED_POINT_FUNCTIONS_DPF_UTIL_STATUS_MATCHERS_H_

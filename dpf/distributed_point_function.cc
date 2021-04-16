@@ -25,8 +25,7 @@
 #include "dpf/internal/array_conversions.h"
 #include "dpf/status_macros.h"
 
-namespace private_statistics {
-namespace dpf {
+namespace distributed_point_functions {
 
 namespace {
 
@@ -957,5 +956,4 @@ template absl::StatusOr<std::vector<absl::uint128>>
 DistributedPointFunction::EvaluateNext(absl::Span<const absl::uint128> prefixes,
                                        EvaluationContext& ctx) const;
 
-}  // namespace dpf
-}  // namespace private_statistics
+}  // namespace distributed_point_functions

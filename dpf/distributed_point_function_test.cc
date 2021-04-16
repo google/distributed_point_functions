@@ -20,9 +20,9 @@
 #include "absl/random/random.h"
 #include "dpf/internal/status_matchers.h"
 
-namespace private_statistics {
-namespace dpf {
+namespace distributed_point_functions {
 namespace {
+
 using dpf_internal::IsOkAndHolds;
 using dpf_internal::StatusIs;
 using ::testing::Ne;
@@ -711,5 +711,4 @@ INSTANTIATE_TEST_SUITE_P(
             {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}))));  // beta
 
 }  // namespace
-}  // namespace dpf
-}  // namespace private_statistics
+}  // namespace distributed_point_functions

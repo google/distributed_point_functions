@@ -22,8 +22,7 @@
 #include "absl/numeric/int128.h"
 #include "absl/status/statusor.h"
 
-namespace private_statistics {
-namespace dpf {
+namespace distributed_point_functions {
 namespace dpf_internal {
 
 // PseudorandomGenerator (PRG) based on AES. For key `key`, input `in` and
@@ -71,7 +70,6 @@ class PseudorandomGenerator {
 };
 
 }  // namespace dpf_internal
-}  // namespace dpf
-}  // namespace private_statistics
+}  // namespace distributed_point_functions
 
 #endif  // DISTRIBUTED_POINT_FUNCTIONS_DPF_INTERNAL_PSEUDORANDOM_GENERATOR_H_
