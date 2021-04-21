@@ -247,7 +247,8 @@ class DpfEvaluationTest : public testing::TestWithParam<
                               std::tuple</*parameters*/
                                          std::vector<DpfTestParameters>,
                                          /*alpha*/ absl::uint128,
-                                         /*beta*/ std::vector<absl::uint128>>> {
+                                         /*beta*/ std::vector<absl::uint128>,
+                                         /*level_step*/ int>> {
  protected:
   void SetUp() {
     const std::vector<DpfTestParameters>& parameters = std::get<0>(GetParam());
@@ -262,6 +263,8 @@ class DpfEvaluationTest : public testing::TestWithParam<
     beta_ = std::get<2>(GetParam());
     DPF_ASSERT_OK_AND_ASSIGN(keys_,
                              dpf_->GenerateKeysIncremental(alpha_, beta_));
+    level_step_ = std::get<3>(
+        GetParam());  // Number of hierarchy level to evaluate at once.
   }
 
   // Returns the prefix of `index` for the domain of `hierarchy_level`.
@@ -275,64 +278,66 @@ class DpfEvaluationTest : public testing::TestWithParam<
     return result;
   }
 
-  // Evaluates both contexts `ctx0` and `ctx1` at their current hierarchy level,
-  // at the appropriate prefixes of `evaluation_points`. Checks that the
-  // expansion of both keys form correct DPF shares, i.e., they add up to
+  // Evaluates both contexts `ctx0` and `ctx1` at `hierarchy level`, using the
+  // appropriate prefixes of `evaluation_points`. Checks that the expansion of
+  // both keys form correct DPF shares, i.e., they add up to
   // `beta_[ctx.hierarchy_level()]` under prefixes of `alpha_`, and to 0
   // otherwise.
   template <typename T>
-  void EvaluateAndCheck(EvaluationContext& ctx0, EvaluationContext& ctx1,
-                        absl::Span<const absl::uint128> evaluation_points) {
-    int current_hierarchy_level = ctx0.hierarchy_level();
+  void EvaluateAndCheckLevel(int hierarchy_level,
+                             absl::Span<const absl::uint128> evaluation_points,
+                             EvaluationContext& ctx0, EvaluationContext& ctx1) {
+    int previous_hierarchy_level = ctx0.previous_hierarchy_level();
     int current_log_domain_size =
-        parameters_[current_hierarchy_level].log_domain_size();
+        parameters_[hierarchy_level].log_domain_size();
     int previous_log_domain_size = 0;
     int num_expansions = 1;
+    bool is_first_evaluation = previous_hierarchy_level < 0;
     // Generate prefixes if we're not on the first level.
     std::vector<absl::uint128> prefixes;
-    if (current_hierarchy_level > 0) {
+    if (!is_first_evaluation) {
       num_expansions = static_cast<int>(evaluation_points.size());
       prefixes.resize(evaluation_points.size());
       previous_log_domain_size =
-          parameters_[current_hierarchy_level - 1].log_domain_size();
+          parameters_[previous_hierarchy_level].log_domain_size();
       for (int i = 0; i < static_cast<int>(evaluation_points.size()); ++i) {
-        prefixes[i] = GetPrefixForLevel(current_hierarchy_level - 1,
-                                        evaluation_points[i]);
+        prefixes[i] =
+            GetPrefixForLevel(previous_hierarchy_level, evaluation_points[i]);
       }
     }
 
     absl::StatusOr<std::vector<T>> result_0 =
-        dpf_->EvaluateNext<T>(prefixes, ctx0);
+        dpf_->EvaluateUntil<T>(hierarchy_level, prefixes, ctx0);
     absl::StatusOr<std::vector<T>> result_1 =
-        dpf_->EvaluateNext<T>(prefixes, ctx1);
+        dpf_->EvaluateUntil<T>(hierarchy_level, prefixes, ctx1);
 
     // Check results are ok.
     DPF_EXPECT_OK(result_0);
     DPF_EXPECT_OK(result_1);
     if (result_0.ok() && result_1.ok()) {
       // Check output sizes match.
-      EXPECT_EQ(result_0->size(), result_1->size());
+      ASSERT_EQ(result_0->size(), result_1->size());
       int64_t outputs_per_prefix =
           int64_t{1} << (current_log_domain_size - previous_log_domain_size);
       int64_t expected_output_size = num_expansions * outputs_per_prefix;
-      EXPECT_EQ(result_0->size(), expected_output_size);
+      ASSERT_EQ(result_0->size(), expected_output_size);
 
       // Iterate over the outputs and check that they sum up to 0 or to
       // beta_[current_hierarchy_level].
       absl::uint128 previous_alpha_prefix = 0;
-      if (current_hierarchy_level > 0) {
+      if (!is_first_evaluation) {
         previous_alpha_prefix =
-            GetPrefixForLevel(current_hierarchy_level - 1, alpha_);
+            GetPrefixForLevel(previous_hierarchy_level, alpha_);
       }
       absl::uint128 current_alpha_prefix =
-          GetPrefixForLevel(current_hierarchy_level, alpha_);
+          GetPrefixForLevel(hierarchy_level, alpha_);
       for (int64_t i = 0; i < expected_output_size; ++i) {
         int prefix_index = i / outputs_per_prefix;
         int prefix_expansion_index = i % outputs_per_prefix;
         // The output is on the path to alpha, if we're at the first level or
         // under a prefix of alpha, and the current block in the expansion of
         // the prefix is also on the path to alpha.
-        if ((current_hierarchy_level == 0 ||
+        if ((is_first_evaluation ||
              prefixes[prefix_index] == previous_alpha_prefix) &&
             prefix_expansion_index ==
                 (current_alpha_prefix % outputs_per_prefix)) {
@@ -340,15 +345,17 @@ class DpfEvaluationTest : public testing::TestWithParam<
           // unsigned int without doing a modular reduction, which causes the
           // test to fail on types with sizeof(T) < sizeof(unsigned).
           EXPECT_EQ(static_cast<T>((*result_0)[i] + (*result_1)[i]),
-                    beta_[current_hierarchy_level])
-              << "i=" << i << ", hierarchy_level=" << current_hierarchy_level
+                    beta_[hierarchy_level])
+              << "i=" << i << ", hierarchy_level=" << hierarchy_level
               << "\nparameters={\n"
-              << parameters_[current_hierarchy_level].DebugString() << "}\n";
+              << parameters_[hierarchy_level].DebugString() << "}\n"
+              << "previous_alpha_prefix=" << previous_alpha_prefix << "\n"
+              << "current_alpha_prefix=" << current_alpha_prefix << "\n";
         } else {
           EXPECT_EQ(static_cast<T>((*result_0)[i] + (*result_1)[i]), 0)
-              << "i=" << i << ", hierarchy_level=" << current_hierarchy_level
+              << "i=" << i << ", hierarchy_level=" << hierarchy_level
               << "\nparameters={\n"
-              << parameters_[current_hierarchy_level].DebugString() << "}\n";
+              << parameters_[hierarchy_level].DebugString() << "}\n";
         }
       }
     }
@@ -359,6 +366,7 @@ class DpfEvaluationTest : public testing::TestWithParam<
   absl::uint128 alpha_;
   std::vector<absl::uint128> beta_;
   std::pair<DpfKey, DpfKey> keys_;
+  int level_step_;
 };
 
 TEST_P(DpfEvaluationTest, FailsIfOutputCorrectionIsMissing) {
@@ -412,7 +420,7 @@ TEST_P(DpfEvaluationTest, FailsIfContextFullyEvaluated) {
   DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx,
                            dpf_->CreateEvaluationContext(keys_.first));
 
-  ctx.set_hierarchy_level(parameters_.size());
+  ctx.set_previous_hierarchy_level(parameters_.size() - 1);
 
   EXPECT_THAT(dpf_->EvaluateNext<absl::uint128>({}, ctx),
               StatusIs(absl::StatusCode::kInvalidArgument,
@@ -433,10 +441,12 @@ TEST_P(DpfEvaluationTest, FailsIfPrefixNotPresentInCtx) {
   DPF_ASSERT_OK(dpf_->EvaluateNext<absl::uint128>({0, 1}, ctx));
   ctx.mutable_partial_evaluations()->erase(ctx.partial_evaluations().begin());
 
+  // The missing prefix corresponds to hierarchy level 1, even though we
+  // evaluate at level 2.
   EXPECT_THAT(dpf_->EvaluateNext<absl::uint128>({0}, ctx),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        "Prefix not present in ctx.partial_evaluations at "
-                       "hierarchy level 2"));
+                       "hierarchy level 1"));
 }
 
 TEST_P(DpfEvaluationTest, TestCorrectness) {
@@ -452,7 +462,7 @@ TEST_P(DpfEvaluationTest, TestCorrectness) {
   absl::uniform_int_distribution<uint64_t> dist;
   const int kNumEvaluationPoints = 1000;
   std::vector<absl::uint128> evaluation_points(kNumEvaluationPoints);
-  for (int i = 1; i < kNumEvaluationPoints - 1; ++i) {
+  for (int i = 0; i < kNumEvaluationPoints - 1; ++i) {
     evaluation_points[i] = absl::MakeUint128(dist(rng), dist(rng));
     if (parameters_.back().log_domain_size() < 128) {
       evaluation_points[i] %= absl::uint128{1}
@@ -461,22 +471,23 @@ TEST_P(DpfEvaluationTest, TestCorrectness) {
   }
   evaluation_points.back() = alpha_;  // Always evaluate on alpha_.
 
-  for (int i = 0; i < static_cast<int>(parameters_.size()); ++i) {
+  int num_levels = static_cast<int>(parameters_.size());
+  for (int i = level_step_ - 1; i < num_levels; i += level_step_) {
     switch (parameters_[i].element_bitsize()) {
       case 8:
-        EvaluateAndCheck<uint8_t>(ctx0, ctx1, evaluation_points);
+        EvaluateAndCheckLevel<uint8_t>(i, evaluation_points, ctx0, ctx1);
         break;
       case 16:
-        EvaluateAndCheck<uint16_t>(ctx0, ctx1, evaluation_points);
+        EvaluateAndCheckLevel<uint16_t>(i, evaluation_points, ctx0, ctx1);
         break;
       case 32:
-        EvaluateAndCheck<uint32_t>(ctx0, ctx1, evaluation_points);
+        EvaluateAndCheckLevel<uint32_t>(i, evaluation_points, ctx0, ctx1);
         break;
       case 64:
-        EvaluateAndCheck<uint64_t>(ctx0, ctx1, evaluation_points);
+        EvaluateAndCheckLevel<uint64_t>(i, evaluation_points, ctx0, ctx1);
         break;
       case 128:
-        EvaluateAndCheck<absl::uint128>(ctx0, ctx1, evaluation_points);
+        EvaluateAndCheckLevel<absl::uint128>(i, evaluation_points, ctx0, ctx1);
         break;
       default:
         ASSERT_TRUE(0) << "Unsupported element_bitsize";
@@ -514,7 +525,8 @@ INSTANTIATE_TEST_SUITE_P(
         testing::Values(0, 1, 15),  // alpha
         testing::Values(std::vector<absl::uint128>(1, 1),
                         std::vector<absl::uint128>(1, 100),
-                        std::vector<absl::uint128>(1, 255))));  // beta
+                        std::vector<absl::uint128>(1, 255)),  // beta
+        testing::Values(1)));                                 // level_step
 
 INSTANTIATE_TEST_SUITE_P(
     OneHierarchyLevelVaryDomainSizes, DpfEvaluationTest,
@@ -587,7 +599,8 @@ INSTANTIATE_TEST_SUITE_P(
         testing::Values(0),  // alpha
         testing::Values(std::vector<absl::uint128>(1, 1),
                         std::vector<absl::uint128>(1, 100),
-                        std::vector<absl::uint128>(1, 255))));  // beta
+                        std::vector<absl::uint128>(1, 255)),  // beta
+        testing::Values(1)));                                 // level_step
 
 INSTANTIATE_TEST_SUITE_P(
     TwoHierarchyLevels, DpfEvaluationTest,
@@ -629,7 +642,8 @@ INSTANTIATE_TEST_SUITE_P(
         testing::Values(0, 1, 2, 100, 1023),  // alpha
         testing::Values(std::vector<absl::uint128>({1, 2}),
                         std::vector<absl::uint128>({80, 90}),
-                        std::vector<absl::uint128>({255, 255}))));  // beta
+                        std::vector<absl::uint128>({255, 255})),  // beta
+        testing::Values(1, 2)));                                  // level_step
 
 INSTANTIATE_TEST_SUITE_P(
     ThreeHierarchyLevels, DpfEvaluationTest,
@@ -638,30 +652,30 @@ INSTANTIATE_TEST_SUITE_P(
         testing::Values<std::vector<DpfTestParameters>>(
             // Equal element sizes.
             std::vector<DpfTestParameters>{
+                {.log_domain_size = 5, .element_bitsize = 8},
                 {.log_domain_size = 10, .element_bitsize = 8},
-                {.log_domain_size = 20, .element_bitsize = 8},
-                {.log_domain_size = 30, .element_bitsize = 8}},
+                {.log_domain_size = 15, .element_bitsize = 8}},
             std::vector<DpfTestParameters>{
+                {.log_domain_size = 5, .element_bitsize = 16},
                 {.log_domain_size = 10, .element_bitsize = 16},
-                {.log_domain_size = 20, .element_bitsize = 16},
-                {.log_domain_size = 30, .element_bitsize = 16}},
+                {.log_domain_size = 15, .element_bitsize = 16}},
             std::vector<DpfTestParameters>{
+                {.log_domain_size = 5, .element_bitsize = 32},
                 {.log_domain_size = 10, .element_bitsize = 32},
-                {.log_domain_size = 20, .element_bitsize = 32},
-                {.log_domain_size = 30, .element_bitsize = 32}},
+                {.log_domain_size = 15, .element_bitsize = 32}},
             std::vector<DpfTestParameters>{
+                {.log_domain_size = 5, .element_bitsize = 64},
                 {.log_domain_size = 10, .element_bitsize = 64},
-                {.log_domain_size = 20, .element_bitsize = 64},
-                {.log_domain_size = 30, .element_bitsize = 64}},
+                {.log_domain_size = 15, .element_bitsize = 64}},
             std::vector<DpfTestParameters>{
+                {.log_domain_size = 5, .element_bitsize = 128},
                 {.log_domain_size = 10, .element_bitsize = 128},
-                {.log_domain_size = 20, .element_bitsize = 128},
-                {.log_domain_size = 30, .element_bitsize = 128}},
+                {.log_domain_size = 15, .element_bitsize = 128}},
             // Varying element sizes
             std::vector<DpfTestParameters>{
-                {.log_domain_size = 10, .element_bitsize = 8},
-                {.log_domain_size = 20, .element_bitsize = 16},
-                {.log_domain_size = 30, .element_bitsize = 32}},
+                {.log_domain_size = 5, .element_bitsize = 8},
+                {.log_domain_size = 10, .element_bitsize = 16},
+                {.log_domain_size = 15, .element_bitsize = 32}},
             // Small level distances.
             std::vector<DpfTestParameters>{
                 {.log_domain_size = 4, .element_bitsize = 8},
@@ -683,32 +697,27 @@ INSTANTIATE_TEST_SUITE_P(
                 {.log_domain_size = 0, .element_bitsize = 128},
                 {.log_domain_size = 1, .element_bitsize = 128},
                 {.log_domain_size = 2, .element_bitsize = 128}}),
-        testing::Values(0, 1),                                     // alpha
-        testing::Values(std::vector<absl::uint128>({1, 2, 3}))));  // beta
+        testing::Values(0, 1),                                   // alpha
+        testing::Values(std::vector<absl::uint128>({1, 2, 3})),  // beta
+        testing::Values(1, 2)));                                 // level_step
 
 INSTANTIATE_TEST_SUITE_P(
     MaximumOutputDomainSize, DpfEvaluationTest,
     testing::Combine(
-        // DPF parameters.
-        testing::Values<std::vector<DpfTestParameters>>(
-            std::vector<DpfTestParameters>{
-                {.log_domain_size = 0, .element_bitsize = 64},
-                {.log_domain_size = 10, .element_bitsize = 64},
-                {.log_domain_size = 20, .element_bitsize = 64},
-                {.log_domain_size = 30, .element_bitsize = 64},
-                {.log_domain_size = 40, .element_bitsize = 64},
-                {.log_domain_size = 50, .element_bitsize = 64},
-                {.log_domain_size = 60, .element_bitsize = 64},
-                {.log_domain_size = 70, .element_bitsize = 64},
-                {.log_domain_size = 80, .element_bitsize = 64},
-                {.log_domain_size = 90, .element_bitsize = 64},
-                {.log_domain_size = 100, .element_bitsize = 64},
-                {.log_domain_size = 110, .element_bitsize = 64},
-                {.log_domain_size = 120, .element_bitsize = 64},
-                {.log_domain_size = 128, .element_bitsize = 64}}),
+        // DPF parameters. We want to be able to evaluate at every bit, so this
+        // lambda returns a vector with 129 parameters with log domain sizes
+        // 0...128.
+        testing::Values([]() -> std::vector<DpfTestParameters> {
+          std::vector<DpfTestParameters> parameters(129);
+          for (int i = 0; i < static_cast<int>(parameters.size()); ++i) {
+            parameters[i].log_domain_size = i;
+            parameters[i].element_bitsize = 64;
+          }
+          return parameters;
+        }()),
         testing::Values(absl::MakeUint128(23, 42)),  // alpha
-        testing::Values(std::vector<absl::uint128>(
-            {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}))));  // beta
+        testing::Values(std::vector<absl::uint128>(129, 1234567)),
+        testing::Values(1, 2, 3, 5, 7)));  // level_step
 
 }  // namespace
 }  // namespace distributed_point_functions

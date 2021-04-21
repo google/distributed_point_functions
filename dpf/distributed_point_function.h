@@ -82,31 +82,37 @@ class DistributedPointFunction {
   // construction.
   absl::StatusOr<EvaluationContext> CreateEvaluationContext(DpfKey key);
 
-  // Evaluates the next hierarchy level of the DPF under all `prefixes` passed
-  // to this function. Each element of `prefixes` must fit in the previous
-  // hierarchy level's domain size. On the first call, `prefixes` must be empty.
-  // On subsequent calls, `prefixes` may only contain extensions of the prefixes
-  // passed in the previous call. For example, in the following sequence of
-  // calls, for each element p2 of `prefixes2`, there must be an element p1 of
-  // `prefixes1` such that p1 is a prefix of p2:
+  // Evaluates the given `hierarchy_level` of the DPF under all `prefixes`
+  // passed to this function. If `prefixes` is empty, evaluation starts from the
+  // seed of `ctx.key`. Otherwise, each element of `prefixes` must fit in the
+  // domain size of `ctx.previous_hierarchy_level`. Further, `prefixes` may only
+  // contain extensions of the prefixes passed in the previous call. For
+  // example, in the following sequence of calls, for each element p2 of
+  // `prefixes2`, there must be an element p1 of `prefixes1` such that p1 is a
+  // prefix of p2:
   //
   //   DPF_ASSIGN_OR_RETURN(std::unique_ptr<EvaluationContext> ctx,
   //                        dpf->CreateEvaluationContext(key));
+  //   using T0 = ...;
+  //   DPF_ASSIGN_OR_RETURN(std::vector<T0> evaluations0,
+  //                        dpf->EvaluateUntil(0, {}, *ctx));
+  //
   //   std::vector<absl::uint128> prefixes1 = ...;
   //   using T1 = ...;
   //   DPF_ASSIGN_OR_RETURN(std::vector<T1> evaluations1,
-  //                        dpf->EvaluateNext(prefixes1, *ctx));
+  //                        dpf->EvaluateUntil(1, prefixes1, *ctx));
   //   ...
   //   std::vector<absl::uint128> prefixes2 = ...;
   //   using T2 = ...;
   //   DPF_ASSIGN_OR_RETURN(std::vector<T2> evaluations2,
-  //                        dpf->EvaluateNext(prefixes2, *ctx));
+  //                        dpf->EvaluateUntil(3, prefixes2, *ctx));
   //
   // The prefixes are read from the lowest-order bits of the corresponding
   // absl::uint128. The number of bits used for each prefix depends on the
-  // output domain size of the previous hierarchy level. For example, if `ctx`
-  // was last evaluated on a hierarchy level with output domain size 2**20, then
-  // the 20 lowest-order bits of each element in `prefixes` are used.
+  // output domain size of the previously evaluated hierarchy level. For
+  // example, if `ctx` was last evaluated on a hierarchy level with output
+  // domain size 2**20, then the 20 lowest-order bits of each element in
+  // `prefixes` are used.
   //
   // Returns `INVALID_ARGUMENT` if
   //   - any element of `prefixes` is larger than the next hierarchy level's
@@ -116,8 +122,20 @@ class DistributedPointFunction {
   //   - the bit-size of T doesn't match the next hierarchy level's
   //     element_bitsize.
   template <typename T>
+  absl::StatusOr<std::vector<T>> EvaluateUntil(
+      int hierarchy_level, absl::Span<const absl::uint128> prefixes,
+      EvaluationContext& ctx) const;
+
+  template <typename T>
   absl::StatusOr<std::vector<T>> EvaluateNext(
-      absl::Span<const absl::uint128> prefixes, EvaluationContext& ctx) const;
+      absl::Span<const absl::uint128> prefixes, EvaluationContext& ctx) const {
+    if (prefixes.empty()) {
+      return EvaluateUntil<T>(0, prefixes, ctx);
+    } else {
+      return EvaluateUntil<T>(ctx.previous_hierarchy_level() + 1, prefixes,
+                              ctx);
+    }
+  }
 
  private:
   // Private constructor, called by `CreateIncremental`.
@@ -203,18 +221,21 @@ class DistributedPointFunction {
       absl::Span<const CorrectionWord* const> correction_words) const;
 
   // Computes partial evaluations of the paths to `prefixes` to be used as the
-  // starting point of the expansion of `ctx`. Called by
-  // `ExpandAndUpdateContext`.
+  // starting point of the expansion of `ctx`. If `update_ctx == true`, saves
+  // the partial evaluations of `ctx.previous_hierarchy_level` to `ctx` and sets
+  // `ctx.partial_evaluations_level` to `ctx.previous_hierarchy_level`.
+  // Called by `ExpandAndUpdateContext`.
   //
   // Returns INVALID_ARGUMENT if any element of `prefixes` is not found in
   // `ctx.partial_evaluations()`, or `ctx.partial_evaluations()` contains
   // duplicate seeds.
   absl::StatusOr<DpfExpansion> ComputePartialEvaluations(
-      absl::Span<const absl::uint128> prefixes, EvaluationContext& ctx) const;
+      absl::Span<const absl::uint128> prefixes, bool update_ctx,
+      EvaluationContext& ctx) const;
 
   // Extracts the seeds for the given `prefixes` from `ctx` and expands them as
   // far as needed for the next hierarchy level. Returns the result as a
-  // `DpfExpansion`. Called by `EvaluateNext`, where the expanded seeds are
+  // `DpfExpansion`. Called by `EvaluateUntil`, where the expanded seeds are
   // corrected to obtain output values.
   // After expansion, `ctx.hierarchy_level()` is increased. If this isn't the
   // last expansion, the expanded seeds are also saved in `ctx` for the next
@@ -224,7 +245,8 @@ class DistributedPointFunction {
   // `ctx.partial_evaluations()`, or `ctx.partial_evaluations()` contains
   // duplicate seeds. Returns INTERNAL in case of OpenSSL errors.
   absl::StatusOr<DpfExpansion> ExpandAndUpdateContext(
-      absl::Span<const absl::uint128> prefixes, EvaluationContext& ctx) const;
+      int hierarchy_level, absl::Span<const absl::uint128> prefixes,
+      EvaluationContext& ctx) const;
 
   // DP parameters passed to the factory function. Contains the domain size and
   // element size for hierarchy level of the incremental DPF.

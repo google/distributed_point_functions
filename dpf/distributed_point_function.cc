@@ -250,9 +250,14 @@ absl::Status DistributedPointFunction::CheckContextParameters(
     return absl::InvalidArgumentError(
         "Number of parameters in `ctx` doesn't match");
   }
-  if (ctx.hierarchy_level() >= ctx.parameters_size()) {
+  if (ctx.previous_hierarchy_level() >= ctx.parameters_size() - 1) {
     return absl::InvalidArgumentError(
         "This context has already been fully evaluated");
+  }
+  if (!ctx.partial_evaluations().empty() &&
+      ctx.partial_evaluations_level() >= ctx.previous_hierarchy_level()) {
+    return absl::InvalidArgumentError(
+        "ctx.previous_hierarchy_level must be less than ctx.hierarchy_level");
   }
   for (int i = 0; i < ctx.parameters_size(); ++i) {
     if (!google::protobuf::util::MessageDifferencer::Equivalent(
@@ -451,20 +456,14 @@ DistributedPointFunction::ExpandSeeds(
 
 absl::StatusOr<DistributedPointFunction::DpfExpansion>
 DistributedPointFunction::ComputePartialEvaluations(
-    absl::Span<const absl::uint128> prefixes, EvaluationContext& ctx) const {
-  int hierarchy_level = ctx.hierarchy_level();
-  if (hierarchy_level == 0) {
-    return absl::InvalidArgumentError(
-        "`GetPartialEvaluations` should only be called when "
-        "ctx.hierarchy_level() > 0");
-  }
+    absl::Span<const absl::uint128> prefixes, bool update_ctx,
+    EvaluationContext& ctx) const {
   int64_t num_prefixes = static_cast<int64_t>(prefixes.size());
 
   DpfExpansion partial_evaluations;
-  int previous_tree_level = hierarchy_to_tree_[ctx.partial_evaluations_level()];
-  int current_tree_level = hierarchy_to_tree_[hierarchy_level - 1];
-  if (ctx.partial_evaluations_size() > 0 &&
-      previous_tree_level <= current_tree_level) {
+  int start_level = hierarchy_to_tree_[ctx.partial_evaluations_level()];
+  int stop_level = hierarchy_to_tree_[ctx.previous_hierarchy_level()];
+  if (ctx.partial_evaluations_size() > 0 && start_level <= stop_level) {
     // We have partial evaluations from a tree level before the current one.
     // Parse `ctx.partial_evaluations` into a btree_map for quick lookups up by
     // prefix. We use a btree_map because `ctx.partial_evaluations()` will
@@ -493,15 +492,14 @@ DistributedPointFunction::ComputePartialEvaluations(
     partial_evaluations.control_bits.reserve(prefixes.size());
     for (int64_t i = 0; i < num_prefixes; ++i) {
       absl::uint128 previous_prefix = 0;
-      if (current_tree_level - previous_tree_level < 128) {
-        previous_prefix =
-            prefixes[i] >> (current_tree_level - previous_tree_level);
+      if (stop_level - start_level < 128) {
+        previous_prefix = prefixes[i] >> (stop_level - start_level);
       }
       auto it = previous_partial_evaluations.find(previous_prefix);
       if (it == previous_partial_evaluations.end()) {
         return absl::InvalidArgumentError(absl::StrCat(
             "Prefix not present in ctx.partial_evaluations at hierarchy level ",
-            hierarchy_level));
+            ctx.previous_hierarchy_level()));
       }
       std::pair<absl::uint128, bool> partial_evaluation = it->second;
       partial_evaluations.seeds.push_back(partial_evaluation.first);
@@ -514,7 +512,7 @@ DistributedPointFunction::ComputePartialEvaluations(
         absl::MakeUint128(ctx.key().seed().high(), ctx.key().seed().low()));
     partial_evaluations.control_bits.resize(
         num_prefixes, static_cast<bool>(ctx.key().party()));
-    previous_tree_level = 0;
+    start_level = 0;
   }
 
   // Evaluate the DPF up to current_tree_level.
@@ -522,14 +520,13 @@ DistributedPointFunction::ComputePartialEvaluations(
       partial_evaluations,
       EvaluateSeeds(std::move(partial_evaluations), prefixes,
                     absl::MakeConstSpan(ctx.key().correction_words())
-                        .subspan(previous_tree_level,
-                                 current_tree_level - previous_tree_level)));
+                        .subspan(start_level, stop_level - start_level)));
 
   // Update `partial_evaluations` in `ctx` if there are more evaluations to
   // come.
   ctx.clear_partial_evaluations();
   ctx.mutable_partial_evaluations()->Reserve(num_prefixes);
-  if (hierarchy_level < static_cast<int>(parameters_.size()) - 1) {
+  if (update_ctx) {
     for (int64_t i = 0; i < num_prefixes; ++i) {
       PartialEvaluation* current_element = ctx.add_partial_evaluations();
       current_element->mutable_prefix()->set_high(
@@ -543,18 +540,19 @@ DistributedPointFunction::ComputePartialEvaluations(
       current_element->set_control_bit(partial_evaluations.control_bits[i]);
     }
   }
-  ctx.set_partial_evaluations_level(hierarchy_level - 1);
+  ctx.set_partial_evaluations_level(ctx.previous_hierarchy_level());
   return partial_evaluations;
 }
 
 absl::StatusOr<DistributedPointFunction::DpfExpansion>
 DistributedPointFunction::ExpandAndUpdateContext(
-    absl::Span<const absl::uint128> prefixes, EvaluationContext& ctx) const {
+    int hierarchy_level, absl::Span<const absl::uint128> prefixes,
+    EvaluationContext& ctx) const {
   // Expand seeds by expanding either the DPF key seed, or
   // `ctx.partial_evaluations` for the given `prefixes`.
   DpfExpansion selected_partial_evaluations;
   int start_level = 0;
-  if (ctx.hierarchy_level() == 0) {
+  if (prefixes.empty()) {
     // First expansion -> Expand seed of the DPF key.
     selected_partial_evaluations.seeds = {
         absl::MakeUint128(ctx.key().seed().high(), ctx.key().seed().low())};
@@ -562,14 +560,18 @@ DistributedPointFunction::ExpandAndUpdateContext(
         static_cast<bool>(ctx.key().party())};
   } else {
     // Second or later expansion -> Extract all seeds for `prefixes` from
-    // `ctx.partial_evaluations`.
+    // `ctx.partial_evaluations`. Update `ctx` if this is not the last
+    // evaluation.
+    bool update_ctx =
+        (hierarchy_level < static_cast<int>(parameters_.size()) - 1);
     DPF_ASSIGN_OR_RETURN(selected_partial_evaluations,
-                         ComputePartialEvaluations(prefixes, ctx));
-    start_level = hierarchy_to_tree_[ctx.hierarchy_level() - 1];
+                         ComputePartialEvaluations(prefixes, update_ctx, ctx));
+    DCHECK(ctx.previous_hierarchy_level() >= 0);
+    start_level = hierarchy_to_tree_[ctx.previous_hierarchy_level()];
   }
 
   // Expand up to the next hierarchy level.
-  int stop_level = hierarchy_to_tree_[ctx.hierarchy_level()];
+  int stop_level = hierarchy_to_tree_[hierarchy_level];
   DPF_ASSIGN_OR_RETURN(
       DpfExpansion expansion,
       ExpandSeeds(selected_partial_evaluations,
@@ -577,7 +579,7 @@ DistributedPointFunction::ExpandAndUpdateContext(
                       .subspan(start_level, stop_level - start_level)));
 
   // Update hierarchy level in ctx.
-  ctx.set_hierarchy_level(ctx.hierarchy_level() + 1);
+  ctx.set_previous_hierarchy_level(hierarchy_level);
   return expansion;
 }
 
@@ -646,16 +648,21 @@ DistributedPointFunction::CreateIncremental(
   // and vice versa.
   absl::flat_hash_map<int, int> tree_to_hierarchy;
   std::vector<int> hierarchy_to_tree(parameters.size());
-  // Also keep track of the height needed for the evaluation tree.
-  int tree_levels_needed = 1;
+  // Also keep track of the height needed for the evaluation tree so far.
+  int tree_levels_needed = 0;
   for (int i = 0; i < static_cast<int>(parameters.size()); ++i) {
     int log_element_size =
         static_cast<int>(std::log2(parameters[i].element_bitsize()));
     // The tree level depends on the domain size and the element size. A single
-    // AES block can fit 128 = 2^7 bits, so tree_level == log_domain_size iff
-    // log_element_size == 7.
+    // AES block can fit 128 = 2^7 bits, so usually tree_level ==
+    // log_domain_size iff log_element_size == 7. For smaller element sizes, we
+    // can reduce the tree_level (and thus the height of the tree) by the
+    // difference between log_element_size and 7. However, since the minimum
+    // tree level is 0, we have to ensure that no two hierarchy levels map to
+    // the same tree_level, hence the std::max.
     int tree_level =
-        std::max(0, parameters[i].log_domain_size() - 7 + log_element_size);
+        std::max(tree_levels_needed,
+                 parameters[i].log_domain_size() - 7 + log_element_size);
     tree_to_hierarchy[tree_level] = i;
     hierarchy_to_tree[i] = tree_level;
     tree_levels_needed = std::max(tree_levels_needed, tree_level + 1);
@@ -787,33 +794,51 @@ DistributedPointFunction::CreateEvaluationContext(DpfKey key) {
     *(result.add_parameters()) = parameters_[i];
   }
   *(result.mutable_key()) = std::move(key);
+  // previous_hierarchy_level = -1 means that this context has not been
+  // evaluated at all.
+  result.set_previous_hierarchy_level(-1);
   return result;
 }
 
 template <typename T>
-absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateNext(
-    absl::Span<const absl::uint128> prefixes, EvaluationContext& ctx) const {
+absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
+    int hierarchy_level, absl::Span<const absl::uint128> prefixes,
+    EvaluationContext& ctx) const {
   DPF_RETURN_IF_ERROR(CheckContextParameters(ctx));
-  if (prefixes.empty() && ctx.hierarchy_level() != 0) {
+  if (hierarchy_level < 0 ||
+      hierarchy_level >= static_cast<int>(parameters_.size())) {
     return absl::InvalidArgumentError(
-        "`prefixes` may only be empty if `ctx.hierarchy_level() == 0`");
+        "`hierarchy_level` must be non-negative and less than "
+        "parameters_.size()");
   }
-  if (sizeof(T) * 8 != parameters_[ctx.hierarchy_level()].element_bitsize()) {
+  if (sizeof(T) * 8 != parameters_[hierarchy_level].element_bitsize()) {
     return absl::InvalidArgumentError(
         "Size of template parameter T doesn't match the element size of "
-        "`ctx.hierarchy_level()`");
+        "`hierarchy_level`");
   }
-  int current_hierarchy_level = ctx.hierarchy_level();
+  if (hierarchy_level <= ctx.previous_hierarchy_level()) {
+    return absl::InvalidArgumentError(
+        "`hierarchy_level` must be greater than "
+        "`ctx.previous_hierarchy_level`");
+  }
+  if ((ctx.previous_hierarchy_level() < 0) != (prefixes.empty())) {
+    return absl::InvalidArgumentError(
+        "`prefixes` must be empty if and only if this is the first call with "
+        "`ctx`.");
+  }
+
   int previous_log_domain_size = 0;
-  if (current_hierarchy_level > 0) {
+  int previous_hierarchy_level = ctx.previous_hierarchy_level();
+  if (!prefixes.empty()) {
+    DCHECK(ctx.previous_hierarchy_level() >= 0);
     previous_log_domain_size =
-        parameters_[current_hierarchy_level - 1].log_domain_size();
+        parameters_[previous_hierarchy_level].log_domain_size();
     for (absl::uint128 prefix : prefixes) {
       if (previous_log_domain_size < 128 &&
           prefix > (absl::uint128{1} << previous_log_domain_size)) {
         return absl::InvalidArgumentError(
             absl::StrFormat("Index %d out of range for hierarchy level %d",
-                            prefix, current_hierarchy_level));
+                            prefix, previous_hierarchy_level));
       }
     }
   }
@@ -852,9 +877,8 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateNext(
   prefix_map.reserve(prefixes_size);
   for (int64_t i = 0; i < prefixes_size; ++i) {
     absl::uint128 tree_index =
-        DomainToTreeIndex(prefixes[i], current_hierarchy_level - 1);
-    int block_index =
-        DomainToBlockIndex(prefixes[i], current_hierarchy_level - 1);
+        DomainToTreeIndex(prefixes[i], previous_hierarchy_level);
+    int block_index = DomainToBlockIndex(prefixes[i], previous_hierarchy_level);
 
     // Check if `tree_index` already exists in `tree_indices`.
     int64_t previous_size = tree_indices_inverse.size();
@@ -867,16 +891,17 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateNext(
   }
 
   // Perform expansion of unique `tree_indices`.
-  DPF_ASSIGN_OR_RETURN(DpfExpansion expansion,
-                       ExpandAndUpdateContext(tree_indices, ctx));
+  DPF_ASSIGN_OR_RETURN(
+      DpfExpansion expansion,
+      ExpandAndUpdateContext(hierarchy_level, tree_indices, ctx));
 
   // Get output correction word from `ctx`.
   constexpr int elements_per_block = dpf_internal::ElementsPerBlock<T>();
   const Block* output_correction = nullptr;
-  if (current_hierarchy_level < static_cast<int>(parameters_.size()) - 1) {
+  if (hierarchy_level < static_cast<int>(parameters_.size()) - 1) {
     output_correction =
         &(ctx.key()
-              .correction_words(hierarchy_to_tree_[current_hierarchy_level])
+              .correction_words(hierarchy_to_tree_[hierarchy_level])
               .output());
   } else {
     // Last level output correction is stored in an extra proto field, since we
@@ -894,35 +919,41 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateNext(
   DPF_RETURN_IF_ERROR(
       prg_value_.Evaluate(expansion.seeds, absl::MakeSpan(hashed_expansion)));
 
-  // Compute value corrections for each block in `expanded_seeds`.
+  // Compute value corrections for each block in `expanded_seeds`. We have to
+  // account for the fact that blocks might not be full (i.e., have less than
+  // elements_per_block elements).
+  const int corrected_elements_per_block =
+      1 << (parameters_[hierarchy_level].log_domain_size() -
+            hierarchy_to_tree_[hierarchy_level]);
   std::vector<T> corrected_expansion(hashed_expansion.size() *
-                                     elements_per_block);
+                                     corrected_elements_per_block);
   for (int64_t i = 0; i < static_cast<int64_t>(hashed_expansion.size()); ++i) {
     std::array<T, elements_per_block> current_elements =
         dpf_internal::Uint128ToArray<T>(hashed_expansion[i]);
-    for (int j = 0; j < elements_per_block; ++j) {
+    for (int j = 0; j < corrected_elements_per_block; ++j) {
       if (expansion.control_bits[i]) {
         current_elements[j] += correction_ints[j];
       }
       if (ctx.key().party() == 1) {
         current_elements[j] = -current_elements[j];
       }
-      corrected_expansion[i * elements_per_block + j] = current_elements[j];
+      corrected_expansion[i * corrected_elements_per_block + j] =
+          current_elements[j];
     }
   }
 
   // Compute the number of outputs we will have. For each prefix, we will have a
   // full expansion from the previous heirarchy level to the current heirarchy
   // level.
-  int log_domain_size = parameters_[current_hierarchy_level].log_domain_size();
+  int log_domain_size = parameters_[hierarchy_level].log_domain_size();
   DCHECK(log_domain_size - previous_log_domain_size < 63);
   int64_t outputs_per_prefix = int64_t{1}
                                << (log_domain_size - previous_log_domain_size);
 
-  if (current_hierarchy_level == 0) {
-    // If prefixes is empty (i.e., current_hierarchy_level == 0), just return
-    // the expansion, after shrinking to the correct size.
-    corrected_expansion.resize(outputs_per_prefix);
+  if (prefixes.empty()) {
+    // If prefixes is empty (i.e., this is the first evaluation of `ctx`), just
+    // return the expansion.
+    DCHECK(static_cast<int>(corrected_expansion.size()) == outputs_per_prefix);
     return corrected_expansion;
   } else {
     // Otherwise, only return elements under `prefixes`.
@@ -930,7 +961,8 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateNext(
     std::vector<T> result(prefixes_size * outputs_per_prefix);
     for (int64_t i = 0; i < prefixes_size; ++i) {
       int64_t prefix_expansion_start =
-          prefix_map[i].first * blocks_per_tree_prefix * elements_per_block +
+          prefix_map[i].first * blocks_per_tree_prefix *
+              corrected_elements_per_block +
           prefix_map[i].second * outputs_per_prefix;
       std::copy_n(&corrected_expansion[prefix_expansion_start],
                   outputs_per_prefix, &result[i * outputs_per_prefix]);
@@ -941,19 +973,24 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateNext(
 
 // Template instantiations for all types we support.
 template absl::StatusOr<std::vector<uint8_t>>
-DistributedPointFunction::EvaluateNext(absl::Span<const absl::uint128> prefixes,
-                                       EvaluationContext& ctx) const;
+DistributedPointFunction::EvaluateUntil(
+    int hierarchy_level, absl::Span<const absl::uint128> prefixes,
+    EvaluationContext& ctx) const;
 template absl::StatusOr<std::vector<uint16_t>>
-DistributedPointFunction::EvaluateNext(absl::Span<const absl::uint128> prefixes,
-                                       EvaluationContext& ctx) const;
+DistributedPointFunction::EvaluateUntil(
+    int hierarchy_level, absl::Span<const absl::uint128> prefixes,
+    EvaluationContext& ctx) const;
 template absl::StatusOr<std::vector<uint32_t>>
-DistributedPointFunction::EvaluateNext(absl::Span<const absl::uint128> prefixes,
-                                       EvaluationContext& ctx) const;
+DistributedPointFunction::EvaluateUntil(
+    int hierarchy_level, absl::Span<const absl::uint128> prefixes,
+    EvaluationContext& ctx) const;
 template absl::StatusOr<std::vector<uint64_t>>
-DistributedPointFunction::EvaluateNext(absl::Span<const absl::uint128> prefixes,
-                                       EvaluationContext& ctx) const;
+DistributedPointFunction::EvaluateUntil(
+    int hierarchy_level, absl::Span<const absl::uint128> prefixes,
+    EvaluationContext& ctx) const;
 template absl::StatusOr<std::vector<absl::uint128>>
-DistributedPointFunction::EvaluateNext(absl::Span<const absl::uint128> prefixes,
-                                       EvaluationContext& ctx) const;
+DistributedPointFunction::EvaluateUntil(
+    int hierarchy_level, absl::Span<const absl::uint128> prefixes,
+    EvaluationContext& ctx) const;
 
 }  // namespace distributed_point_functions
