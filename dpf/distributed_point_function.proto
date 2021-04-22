@@ -16,6 +16,9 @@ syntax = "proto3";
 
 package distributed_point_functions;
 
+// For compatibility with protobuf lite.
+option optimize_for = LITE_RUNTIME;
+
 // For faster allocations of submessages.
 option cc_enable_arenas = true;
 
