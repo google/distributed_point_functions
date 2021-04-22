@@ -715,8 +715,8 @@ INSTANTIATE_TEST_SUITE_P(
           }
           return parameters;
         }()),
-        testing::Values(absl::MakeUint128(23, 42)),  // alpha
-        testing::Values(std::vector<absl::uint128>(129, 1234567)),
+        testing::Values(absl::MakeUint128(23, 42)),                 // alpha
+        testing::Values(std::vector<absl::uint128>(129, 1234567)),  // beta
         testing::Values(1, 2, 3, 5, 7)));  // level_step
 
 }  // namespace

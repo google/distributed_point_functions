@@ -17,7 +17,6 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_DPF_DISTRIBUTED_POINT_FUNCTION_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_DPF_DISTRIBUTED_POINT_FUNCTION_H_
 
-#include <google/protobuf/util/message_differencer.h>
 #include <openssl/cipher.h>
 
 #include <memory>

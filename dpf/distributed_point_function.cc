@@ -260,8 +260,10 @@ absl::Status DistributedPointFunction::CheckContextParameters(
         "ctx.previous_hierarchy_level must be less than ctx.hierarchy_level");
   }
   for (int i = 0; i < ctx.parameters_size(); ++i) {
-    if (!google::protobuf::util::MessageDifferencer::Equivalent(
-            ctx.parameters(i), parameters_[i])) {
+    if (ctx.parameters(i).log_domain_size() !=
+            parameters_[i].log_domain_size() ||
+        ctx.parameters(i).element_bitsize() !=
+            parameters_[i].element_bitsize()) {
       return absl::InvalidArgumentError(
           absl::StrCat("Parameter ", i, " in `ctx` doesn't match"));
     }
