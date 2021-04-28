@@ -83,10 +83,8 @@ absl::uint128 ComputeValueCorrectionFor(absl::Span<const absl::uint128> seeds,
 DistributedPointFunction::DistributedPointFunction(
     std::vector<DpfParameters> parameters, int tree_levels_needed,
     absl::flat_hash_map<int, int> tree_to_hierarchy,
-    std::vector<int> hierarchy_to_tree,
-    dpf_internal::PseudorandomGenerator prg_left,
-    dpf_internal::PseudorandomGenerator prg_right,
-    dpf_internal::PseudorandomGenerator prg_value)
+    std::vector<int> hierarchy_to_tree, Aes128FixedKeyHash prg_left,
+    Aes128FixedKeyHash prg_right, Aes128FixedKeyHash prg_value)
     : parameters_(std::move(parameters)),
       tree_levels_needed_(tree_levels_needed),
       tree_to_hierarchy_(std::move(tree_to_hierarchy)),
@@ -302,7 +300,7 @@ DistributedPointFunction::EvaluateSeeds(
   }
   auto num_seeds = static_cast<int64_t>(partial_evaluations.seeds.size());
   auto num_levels = static_cast<int>(correction_words.size());
-  int64_t max_batch_size = dpf_internal::PseudorandomGenerator::kBatchSize;
+  int64_t max_batch_size = Aes128FixedKeyHash::kBatchSize;
 
   // Allocate output and temporary buffers.
   DpfExpansion result = std::move(partial_evaluations);
@@ -394,7 +392,7 @@ DistributedPointFunction::ExpandSeeds(
   // Allocate buffers with the correct size to avoid reallocations.
   auto current_level_size =
       static_cast<int64_t>(partial_evaluations.seeds.size());
-  int64_t max_batch_size = dpf_internal::PseudorandomGenerator::kBatchSize;
+  int64_t max_batch_size = Aes128FixedKeyHash::kBatchSize;
   int64_t output_size = current_level_size << num_expansions;
   std::vector<absl::uint128> prg_buffer_left(max_batch_size),
       prg_buffer_right(max_batch_size);
@@ -671,15 +669,12 @@ DistributedPointFunction::CreateIncremental(
   }
 
   // Set up PRGs.
-  DPF_ASSIGN_OR_RETURN(
-      dpf_internal::PseudorandomGenerator prg_left,
-      dpf_internal::PseudorandomGenerator::Create(kPrgKeyLeft));
-  DPF_ASSIGN_OR_RETURN(
-      dpf_internal::PseudorandomGenerator prg_right,
-      dpf_internal::PseudorandomGenerator::Create(kPrgKeyRight));
-  DPF_ASSIGN_OR_RETURN(
-      dpf_internal::PseudorandomGenerator prg_value,
-      dpf_internal::PseudorandomGenerator::Create(kPrgKeyValue));
+  DPF_ASSIGN_OR_RETURN(Aes128FixedKeyHash prg_left,
+                       Aes128FixedKeyHash::Create(kPrgKeyLeft));
+  DPF_ASSIGN_OR_RETURN(Aes128FixedKeyHash prg_right,
+                       Aes128FixedKeyHash::Create(kPrgKeyRight));
+  DPF_ASSIGN_OR_RETURN(Aes128FixedKeyHash prg_value,
+                       Aes128FixedKeyHash::Create(kPrgKeyValue));
 
   // Copy parameters and return new DPF.
   return absl::WrapUnique(new DistributedPointFunction(

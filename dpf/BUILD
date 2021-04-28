@@ -13,10 +13,10 @@ cc_library(
     srcs = ["distributed_point_function.cc"],
     hdrs = ["distributed_point_function.h"],
     deps = [
+        ":aes_128_fixed_key_hash",
         ":distributed_point_function_cc_proto",
         ":status_macros",
         "//dpf/internal:array_conversions",
-        "//dpf/internal:pseudorandom_generator",
         "@boringssl//:crypto",
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/container:btree",
@@ -70,4 +70,26 @@ cc_test(
 cc_library(
     name = "status_macros",
     hdrs = ["status_macros.h"],
+)
+
+cc_library(
+    name = "aes_128_fixed_key_hash",
+    srcs = ["aes_128_fixed_key_hash.cc"],
+    hdrs = ["aes_128_fixed_key_hash.h"],
+    deps = [
+        "@boringssl//:crypto",
+        "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+cc_test(
+    name = "aes_128_fixed_key_hash_test",
+    srcs = ["aes_128_fixed_key_hash_test.cc"],
+    deps = [
+        ":aes_128_fixed_key_hash",
+        "//dpf/internal:status_matchers",
+        "@com_github_google_googletest//:gtest_main",
+    ],
 )

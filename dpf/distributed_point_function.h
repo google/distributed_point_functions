@@ -23,8 +23,8 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
+#include "dpf/aes_128_fixed_key_hash.h"
 #include "dpf/distributed_point_function.pb.h"
-#include "dpf/internal/pseudorandom_generator.h"
 
 namespace distributed_point_functions {
 
@@ -142,9 +142,9 @@ class DistributedPointFunction {
                            int tree_levels_needed,
                            absl::flat_hash_map<int, int> tree_to_hierarchy,
                            std::vector<int> hierarchy_to_tree,
-                           dpf_internal::PseudorandomGenerator prg_left,
-                           dpf_internal::PseudorandomGenerator prg_right,
-                           dpf_internal::PseudorandomGenerator prg_value);
+                           Aes128FixedKeyHash prg_left,
+                           Aes128FixedKeyHash prg_right,
+                           Aes128FixedKeyHash prg_value);
 
   // Computes the value correction for the given `hierarchy_level`, `seeds`,
   // index `alpha` and value `beta`. If `invert` is true, the individual values
@@ -262,11 +262,12 @@ class DistributedPointFunction {
   // The inverse of tree_to_hierarchy_.
   const std::vector<int> hierarchy_to_tree_;
 
-  // Pseudorandom generators for seed expansion (left and right), and value
-  // correction.
-  const dpf_internal::PseudorandomGenerator prg_left_;
-  const dpf_internal::PseudorandomGenerator prg_right_;
-  const dpf_internal::PseudorandomGenerator prg_value_;
+  // Pseudorandom generator used for seed expansion (left and right), and value
+  // correction. The PRG is defined by the concatenation of the following three
+  // fixed-key hash functions
+  const Aes128FixedKeyHash prg_left_;
+  const Aes128FixedKeyHash prg_right_;
+  const Aes128FixedKeyHash prg_value_;
 };
 
 }  // namespace distributed_point_functions

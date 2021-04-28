@@ -39,25 +39,3 @@ cc_library(
         "@com_google_absl//absl/strings",
     ],
 )
-
-cc_library(
-    name = "pseudorandom_generator",
-    srcs = ["pseudorandom_generator.cc"],
-    hdrs = ["pseudorandom_generator.h"],
-    deps = [
-        "@boringssl//:crypto",
-        "@com_google_absl//absl/numeric:int128",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-    ],
-)
-
-cc_test(
-    name = "pseudorandom_generator_test",
-    srcs = ["pseudorandom_generator_test.cc"],
-    deps = [
-        ":pseudorandom_generator",
-        ":status_matchers",
-        "@com_github_google_googletest//:gtest_main",
-    ],
-)
