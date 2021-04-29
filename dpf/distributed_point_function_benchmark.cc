@@ -184,5 +184,32 @@ void BM_IsrgExampleHierarchy(benchmark::State& state) {
 }
 BENCHMARK(BM_IsrgExampleHierarchy);
 
+// Benchmarks the time needed to generate keys. We use a variable number of
+// hierarchy levels with 1-bit domain size increments, and 32 bit elements.
+void BM_KeyGeneration(benchmark::State& state) {
+  int num_parameters = state.range(0);
+  std::vector<DpfParameters> parameters(num_parameters);
+  for (int i = 0; i < num_parameters; ++i) {
+    parameters[i].set_log_domain_size(i + 1);
+    parameters[i].set_element_bitsize(32);
+  }
+  std::unique_ptr<DistributedPointFunction> dpf =
+      *(DistributedPointFunction::CreateIncremental(parameters));
+
+  std::vector<absl::uint128> beta(num_parameters, 23);
+  absl::BitGen rng;
+  absl::uniform_int_distribution<uint64_t> dist;
+  absl::uint128 alpha_mask =
+      (absl::uint128{1} << parameters.back().log_domain_size()) - 1;
+  for (auto s : state) {
+    // Sample alpha randomly, so we don't rely on any structure here.
+    absl::uint128 alpha = absl::MakeUint128(dist(rng), dist(rng)) & alpha_mask;
+    std::pair<DpfKey, DpfKey> result =
+        dpf->GenerateKeysIncremental(alpha, beta).value();
+    benchmark::DoNotOptimize(result);
+  }
+}
+BENCHMARK(BM_KeyGeneration)->RangeMultiplier(2)->Range(1, 128);
+
 }  // namespace
 }  // namespace distributed_point_functions
