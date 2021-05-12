@@ -25,6 +25,7 @@
 #include "absl/status/statusor.h"
 #include "dpf/aes_128_fixed_key_hash.h"
 #include "dpf/distributed_point_function.pb.h"
+#include "dpf/internal/proto_validator.h"
 
 namespace distributed_point_functions {
 
@@ -138,13 +139,10 @@ class DistributedPointFunction {
 
  private:
   // Private constructor, called by `CreateIncremental`.
-  DistributedPointFunction(std::vector<DpfParameters> parameters,
-                           int tree_levels_needed,
-                           absl::flat_hash_map<int, int> tree_to_hierarchy,
-                           std::vector<int> hierarchy_to_tree,
-                           Aes128FixedKeyHash prg_left,
-                           Aes128FixedKeyHash prg_right,
-                           Aes128FixedKeyHash prg_value);
+  DistributedPointFunction(
+      std::unique_ptr<dpf_internal::ProtoValidator> proto_validator,
+      Aes128FixedKeyHash prg_left, Aes128FixedKeyHash prg_right,
+      Aes128FixedKeyHash prg_value);
 
   // Computes the value correction for the given `hierarchy_level`, `seeds`,
   // index `alpha` and value `beta`. If `invert` is true, the individual values
@@ -247,9 +245,13 @@ class DistributedPointFunction {
       int hierarchy_level, absl::Span<const absl::uint128> prefixes,
       EvaluationContext& ctx) const;
 
+  // Used to validate DpfKey and EvaluationContext protos.
+  const std::unique_ptr<dpf_internal::ProtoValidator> proto_validator_;
+
   // DP parameters passed to the factory function. Contains the domain size and
-  // element size for hierarchy level of the incremental DPF.
-  const std::vector<DpfParameters> parameters_;
+  // element size for hierarchy level of the incremental DPF. Owned by
+  // proto_validator_.
+  const absl::Span<const DpfParameters> parameters_;
 
   // Number of levels in the evaluation tree. This is always less than or equal
   // to the largest log_domain_size in parameters_.
@@ -257,10 +259,10 @@ class DistributedPointFunction {
 
   // Maps levels of the FSS evaluation tree to hierarchy levels (i.e., elements
   // of parameters_).
-  const absl::flat_hash_map<int, int> tree_to_hierarchy_;
+  const absl::flat_hash_map<int, int>& tree_to_hierarchy_;
 
   // The inverse of tree_to_hierarchy_.
-  const std::vector<int> hierarchy_to_tree_;
+  const std::vector<int>& hierarchy_to_tree_;
 
   // Pseudorandom generator used for seed expansion (left and right), and value
   // correction. The PRG is defined by the concatenation of the following three

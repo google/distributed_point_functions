@@ -115,3 +115,13 @@ http_archive(
         "https://github.com/google/glog/archive/a79416bab739907a31a1e139540921ff0492f010.zip",
     ],
 )
+
+# IREE for cc_embed_data.
+http_archive(
+    name = "com_github_google_iree",
+    sha256 = "aa369b29a5c45ae9d7aa8bf49ea1308221d1711277222f0755df6e0a575f6879",
+    strip_prefix = "iree-7e6012468cbaafaaf30302748a2943771b40e2c3",
+    urls = [
+        "https://github.com/google/iree/archive/7e6012468cbaafaaf30302748a2943771b40e2c3.zip",
+    ],
+)

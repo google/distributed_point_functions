@@ -58,99 +58,6 @@ TEST(DistributedPointFunction, TestCreateCreateIncrementalLargeDomain) {
               IsOkAndHolds(Ne(nullptr)));
 }
 
-TEST(DistributedPointFunction, FailsWithoutParameters) {
-  EXPECT_THAT(DistributedPointFunction::CreateIncremental({}),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       "`parameters` must not be empty"));
-}
-
-TEST(DistributedPointFunction, FailsWhenParametersNotSorted) {
-  std::vector<DpfParameters> parameters(2);
-
-  parameters[0].set_log_domain_size(12);
-  parameters[1].set_log_domain_size(10);
-  parameters[0].set_element_bitsize(32);
-  parameters[1].set_element_bitsize(32);
-
-  EXPECT_THAT(DistributedPointFunction::CreateIncremental(parameters),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       "`log_domain_size` fields must be in ascending order in "
-                       "`parameters`"));
-}
-
-TEST(DistributedPointFunction, FailsWhenDomainSizeNegative) {
-  DpfParameters parameters;
-
-  parameters.set_log_domain_size(-1);
-  parameters.set_element_bitsize(32);
-
-  EXPECT_THAT(DistributedPointFunction::Create(parameters),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       "`log_domain_size` must be non-negative"));
-}
-
-TEST(DistributedPointFunction, FailsWhenElementBitsizeZeroOrNegative) {
-  for (int element_bitsize : {0, -1}) {
-    DpfParameters parameters;
-
-    parameters.set_log_domain_size(10);
-    parameters.set_element_bitsize(element_bitsize);
-
-    EXPECT_THAT(DistributedPointFunction::Create(parameters),
-                StatusIs(absl::StatusCode::kInvalidArgument,
-                         "`element_bitsize` must be positive"));
-  }
-}
-
-TEST(DistributedPointFunction, FailsWhenElementBitsizeTooLarge) {
-  DpfParameters parameters;
-
-  parameters.set_log_domain_size(10);
-  parameters.set_element_bitsize(256);
-
-  EXPECT_THAT(DistributedPointFunction::Create(parameters),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       "`element_bitsize` must be less than or equal to 128"));
-}
-
-TEST(DistributedPointFunction, FailsWhenElementBitsizeNotAPowerOfTwo) {
-  DpfParameters parameters;
-
-  parameters.set_log_domain_size(10);
-  parameters.set_element_bitsize(23);
-
-  EXPECT_THAT(DistributedPointFunction::Create(parameters),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       "`element_bitsize` must be a power of 2"));
-}
-
-TEST(DistributedPointFunction, FailsWhenElementBitsizesDecrease) {
-  std::vector<DpfParameters> parameters(2);
-  parameters[0].set_log_domain_size(10);
-  parameters[1].set_log_domain_size(12);
-
-  parameters[0].set_element_bitsize(128);
-  parameters[1].set_element_bitsize(32);
-
-  EXPECT_THAT(DistributedPointFunction::CreateIncremental(parameters),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       "`element_bitsize` fields must be non-decreasing in "
-                       "`parameters`"));
-}
-
-TEST(DistributedPointFunction, FailsWhenHierarchiesAreTooFarApart) {
-  std::vector<DpfParameters> parameters(2);
-  parameters[0].set_element_bitsize(128);
-  parameters[1].set_element_bitsize(128);
-
-  parameters[0].set_log_domain_size(10);
-  parameters[1].set_log_domain_size(73);
-
-  EXPECT_THAT(DistributedPointFunction::CreateIncremental(parameters),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       "Hierarchies may be at most 62 levels apart"));
-}
-
 class DpfKeyGenerationTest
     : public testing::TestWithParam<std::tuple<int, int>> {
  public:
@@ -161,12 +68,15 @@ class DpfKeyGenerationTest
     parameters.set_element_bitsize(element_bitsize_);
     DPF_ASSERT_OK_AND_ASSIGN(dpf_,
                              DistributedPointFunction::Create(parameters));
+    DPF_ASSERT_OK_AND_ASSIGN(
+        proto_validator_, dpf_internal::ProtoValidator::Create({parameters}));
   }
 
  protected:
   int log_domain_size_;
   int element_bitsize_;
   std::unique_ptr<DistributedPointFunction> dpf_;
+  std::unique_ptr<dpf_internal::ProtoValidator> proto_validator_;
 };
 
 TEST_P(DpfKeyGenerationTest, KeyHasCorrectFormat) {
@@ -176,9 +86,9 @@ TEST_P(DpfKeyGenerationTest, KeyHasCorrectFormat) {
   // Check that party is set correctly.
   EXPECT_EQ(key_a.party(), 0);
   EXPECT_EQ(key_b.party(), 1);
-  // Check that keys are accepted by `CreateEvaluationContext`.
-  DPF_EXPECT_OK(dpf_->CreateEvaluationContext(key_a));
-  DPF_EXPECT_OK(dpf_->CreateEvaluationContext(key_b));
+  // Check that keys are accepted by proto_validator_.
+  DPF_EXPECT_OK(proto_validator_->ValidateDpfKey(key_a));
+  DPF_EXPECT_OK(proto_validator_->ValidateDpfKey(key_b));
 }
 
 TEST_P(DpfKeyGenerationTest, FailsIfBetaHasTheWrongSize) {
@@ -211,20 +121,6 @@ TEST_P(DpfKeyGenerationTest, FailsIfBetaIsTooLarge) {
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           "`beta[0]` larger than `parameters[0].element_bitsize()` allows"));
-}
-
-TEST_P(DpfKeyGenerationTest, FailsIfNumberOfCorrectionWordsDoesntMatch) {
-  DpfKey key_a, key_b;
-
-  DPF_ASSERT_OK_AND_ASSIGN(std::tie(key_a, key_b), dpf_->GenerateKeys(0, 0));
-  key_a.add_correction_words();
-
-  EXPECT_THAT(dpf_->CreateEvaluationContext(key_a),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       absl::StrCat("Malformed DpfKey: expected ",
-                                    key_b.correction_words_size(),
-                                    " correction words, but got ",
-                                    key_a.correction_words_size())));
 }
 
 INSTANTIATE_TEST_SUITE_P(VaryDomainAndElementSizes, DpfKeyGenerationTest,
@@ -265,6 +161,8 @@ class DpfEvaluationTest : public testing::TestWithParam<
                              dpf_->GenerateKeysIncremental(alpha_, beta_));
     level_step_ = std::get<3>(
         GetParam());  // Number of hierarchy level to evaluate at once.
+    DPF_ASSERT_OK_AND_ASSIGN(proto_validator_,
+                             dpf_internal::ProtoValidator::Create(parameters_));
   }
 
   // Returns the prefix of `index` for the domain of `hierarchy_level`.
@@ -367,64 +265,13 @@ class DpfEvaluationTest : public testing::TestWithParam<
   std::vector<absl::uint128> beta_;
   std::pair<DpfKey, DpfKey> keys_;
   int level_step_;
+  std::unique_ptr<dpf_internal::ProtoValidator> proto_validator_;
 };
 
-TEST_P(DpfEvaluationTest, FailsIfOutputCorrectionIsMissing) {
-  if (parameters_.size() == 1) {
-    // Only one hierarchy level -> No output correction in correction words.
-    return;
-  }
-  int tree_level;
-
-  for (tree_level = 0; tree_level < keys_.first.correction_words_size();
-       ++tree_level) {
-    CorrectionWord* word = keys_.first.mutable_correction_words(tree_level);
-    // Remove first output correction word.
-    if (word->has_output()) {
-      word->clear_output();
-      break;
-    }
-  }
-
-  EXPECT_THAT(dpf_->CreateEvaluationContext(keys_.first),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       StartsWith(absl::StrCat(
-                           "Malformed DpfKey: expected correction_words[",
-                           tree_level, "] to contain the output correction"))));
-}
-
-TEST_P(DpfEvaluationTest, FailsIfParameterSizeDoesntMatch) {
+TEST_P(DpfEvaluationTest, CreateEvaluationContextCreatesValidContext) {
   DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx,
                            dpf_->CreateEvaluationContext(keys_.first));
-
-  ctx.mutable_parameters()->erase(ctx.parameters().end() - 1);
-
-  EXPECT_THAT(dpf_->EvaluateNext<absl::uint128>({}, ctx),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       "Number of parameters in `ctx` doesn't match"));
-}
-
-TEST_P(DpfEvaluationTest, FailsIfParameterDoesntMatch) {
-  DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx,
-                           dpf_->CreateEvaluationContext(keys_.first));
-
-  ctx.mutable_parameters(0)->set_log_domain_size(
-      ctx.parameters(0).log_domain_size() + 1);
-
-  EXPECT_THAT(dpf_->EvaluateNext<absl::uint128>({}, ctx),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       "Parameter 0 in `ctx` doesn't match"));
-}
-
-TEST_P(DpfEvaluationTest, FailsIfContextFullyEvaluated) {
-  DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx,
-                           dpf_->CreateEvaluationContext(keys_.first));
-
-  ctx.set_previous_hierarchy_level(parameters_.size() - 1);
-
-  EXPECT_THAT(dpf_->EvaluateNext<absl::uint128>({}, ctx),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       "This context has already been fully evaluated"));
+  DPF_EXPECT_OK(proto_validator_->ValidateEvaluationContext(ctx));
 }
 
 TEST_P(DpfEvaluationTest, FailsIfPrefixNotPresentInCtx) {

@@ -17,6 +17,7 @@ cc_library(
         ":distributed_point_function_cc_proto",
         ":status_macros",
         "//dpf/internal:array_conversions",
+        "//dpf/internal:proto_validator",
         "@boringssl//:crypto",
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/container:btree",
