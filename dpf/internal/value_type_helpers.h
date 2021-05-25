@@ -14,14 +14,16 @@
  * limitations under the License.
  */
 
-#ifndef DISTRIBUTED_POINT_FUNCTIONS_DPF_INTERNAL_ARRAY_CONVERSIONS_H_
-#define DISTRIBUTED_POINT_FUNCTIONS_DPF_INTERNAL_ARRAY_CONVERSIONS_H_
+#ifndef DISTRIBUTED_POINT_FUNCTIONS_DPF_INTERNAL_VALUE_TYPE_HELPERS_H_
+#define DISTRIBUTED_POINT_FUNCTIONS_DPF_INTERNAL_VALUE_TYPE_HELPERS_H_
 
 #include <array>
 #include <type_traits>
 
 #include "absl/base/casts.h"
 #include "absl/numeric/int128.h"
+#include "absl/status/statusor.h"
+#include "absl/types/any.h"
 
 namespace distributed_point_functions {
 namespace dpf_internal {
@@ -64,7 +66,7 @@ std::array<T, ElementsPerBlock<T>()> Uint128ToArray(absl::uint128 in) {
 // block. The first item in `in` will be placed in the lowest-order bits of the
 // uint128.
 template <typename T>
-absl::uint128 ArrayToUint128(const std::array<T, ElementsPerBlock<T>()> &in) {
+absl::uint128 ArrayToUint128(const std::array<T, ElementsPerBlock<T>()>& in) {
 #ifdef ABSL_IS_LITTLE_ENDIAN
   return absl::bit_cast<absl::uint128>(in);
 #else
@@ -76,7 +78,64 @@ absl::uint128 ArrayToUint128(const std::array<T, ElementsPerBlock<T>()> &in) {
 #endif
 }
 
+// Converts a given absl::any to a numerical type T. Tries converting directly
+// first. If that doesn't work, tries converting to absl::uin128 and then doing
+// a static_cast to T. Returns INVALID_ARGUMENT if both approaches fail.
+template <typename T>
+absl::StatusOr<T> ConvertAnyTo(const absl::any& in) {
+  if (!std::is_same_v<T, absl::uint128>) {
+    const T* in_T = absl::any_cast<T>(&in);
+    if (in_T) {
+      return *in_T;
+    }
+  }
+  const absl::uint128* in_128 = absl::any_cast<absl::uint128>(&in);
+  if (in_128) {
+    return static_cast<T>(*in_128);
+  }
+  return absl::InvalidArgumentError(
+      absl::StrCat("Conversion of absl::any (typeid: ", in.type().name(),
+                   ") to type T (typeid: ", typeid(T).name(),
+                   ", size: ", sizeof(T), ") failed"));
+}
+
+// Computes the value correction word given two seeds `seed_a`, `seed_b` for
+// parties a and b, such that the element at `block_index` is equal to `beta`.
+// If `invert` is true, the result is multiplied element-wise by -1. Templated
+// to use the correct integer type without needing modular reduction.
+template <typename T>
+absl::StatusOr<absl::uint128> ComputeValueCorrectionFor(
+    absl::Span<const absl::uint128> seeds, int block_index,
+    const absl::any& beta, bool invert) {
+  absl::StatusOr<T> beta_T = ConvertAnyTo<T>(beta);
+  if (!beta_T.ok()) {
+    return beta_T.status();
+  }
+
+  constexpr int elements_per_block = dpf_internal::ElementsPerBlock<T>();
+
+  // Split up seeds into individual integers.
+  std::array<T, elements_per_block> ints_a = dpf_internal::Uint128ToArray<T>(
+                                        seeds[0]),
+                                    ints_b = dpf_internal::Uint128ToArray<T>(
+                                        seeds[1]);
+
+  // Add beta to the right position.
+  ints_b[block_index] += *beta_T;
+
+  // Add up shares, invert if needed.
+  for (int i = 0; i < elements_per_block; i++) {
+    ints_b[i] = ints_b[i] - ints_a[i];
+    if (invert) {
+      ints_b[i] = -ints_b[i];
+    }
+  }
+
+  // Re-assemble block.
+  return dpf_internal::ArrayToUint128(ints_b);
+}
+
 }  // namespace dpf_internal
 }  // namespace distributed_point_functions
 
-#endif  // DISTRIBUTED_POINT_FUNCTIONS_DPF_INTERNAL_ARRAY_CONVERSIONS_H_
+#endif  // DISTRIBUTED_POINT_FUNCTIONS_DPF_INTERNAL_VALUE_TYPE_HELPERS_H_

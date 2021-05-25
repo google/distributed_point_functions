@@ -19,9 +19,6 @@
 
 #include <limits>
 
-#include "absl/container/btree_map.h"
-#include "absl/strings/str_format.h"
-#include "dpf/internal/array_conversions.h"
 #include "dpf/status_macros.h"
 
 namespace distributed_point_functions {
@@ -47,60 +44,6 @@ bool ExtractAndClearLowestBit(absl::uint128& x) {
   return bit;
 }
 
-// Converts a given absl::any to a numerical type T. Tries converting directly
-// first. If that doesn't work, tries converting to absl::uin128 and then doing
-// a static_cast to T. Returns INVALID_ARGUMENT if both approaches fail.
-template <typename T>
-absl::StatusOr<T> ConvertAnyTo(const absl::any& in) {
-  if (!std::is_same_v<T, absl::uint128>) {
-    const T* in_T = absl::any_cast<T>(&in);
-    if (in_T) {
-      return *in_T;
-    }
-  }
-  const absl::uint128* in_128 = absl::any_cast<absl::uint128>(&in);
-  if (in_128) {
-    return static_cast<T>(*in_128);
-  }
-  return absl::InvalidArgumentError(
-      absl::StrCat("Conversion of absl::any (typeid: ", in.type().name(),
-                   ") to type T (typeid: ", typeid(T).name(),
-                   ", size: ", sizeof(T), ") failed"));
-}
-
-// Computes the value correction word given two seeds `seed_a`, `seed_b` for
-// parties a and b, such that the element at `block_index` is equal to `beta`.
-// If `invert` is true, the result is multiplied element-wise by -1. Templated
-// to use the correct integer type without needing modular reduction.
-template <typename T>
-absl::StatusOr<absl::uint128> ComputeValueCorrectionFor(
-    absl::Span<const absl::uint128> seeds, int block_index,
-    const absl::any& beta, bool invert) {
-  DPF_ASSIGN_OR_RETURN(T beta_T, ConvertAnyTo<T>(beta));
-
-  constexpr int elements_per_block = dpf_internal::ElementsPerBlock<T>();
-
-  // Split up seeds into individual integers.
-  std::array<T, elements_per_block> ints_a = dpf_internal::Uint128ToArray<T>(
-                                        seeds[0]),
-                                    ints_b = dpf_internal::Uint128ToArray<T>(
-                                        seeds[1]);
-
-  // Add beta to the right position.
-  ints_b[block_index] += beta_T;
-
-  // Add up shares, invert if needed.
-  for (int i = 0; i < elements_per_block; i++) {
-    ints_b[i] = ints_b[i] - ints_a[i];
-    if (invert) {
-      ints_b[i] = -ints_b[i];
-    }
-  }
-
-  // Re-assemble block.
-  return dpf_internal::ArrayToUint128(ints_b);
-}
-
 }  // namespace
 
 DistributedPointFunction::DistributedPointFunction(
@@ -114,7 +57,15 @@ DistributedPointFunction::DistributedPointFunction(
       hierarchy_to_tree_(proto_validator_->hierarchy_to_tree()),
       prg_left_(std::move(prg_left)),
       prg_right_(std::move(prg_right)),
-      prg_value_(std::move(prg_value)) {}
+      prg_value_(std::move(prg_value)) {
+  // For backwards compatibility, register all single unsigned integers as value
+  // types.
+  RegisterValueType<uint8_t>();
+  RegisterValueType<uint16_t>();
+  RegisterValueType<uint32_t>();
+  RegisterValueType<uint64_t>();
+  RegisterValueType<absl::uint128>();
+}
 
 absl::StatusOr<absl::uint128> DistributedPointFunction::ComputeValueCorrection(
     int hierarchy_level, absl::Span<const absl::uint128> seeds,
@@ -128,34 +79,10 @@ absl::StatusOr<absl::uint128> DistributedPointFunction::ComputeValueCorrection(
   int index_in_block = DomainToBlockIndex(alpha, hierarchy_level);
 
   // Choose implementation depending on element_bitsize.
-  int element_bitsize = parameters_[hierarchy_level].element_bitsize();
-  absl::StatusOr<absl::uint128> value_correction;
-  switch (element_bitsize) {
-    case 8:
-      value_correction = ComputeValueCorrectionFor<uint8_t>(
-          value_correction_shares, index_in_block, beta, invert);
-      break;
-    case 16:
-      value_correction = ComputeValueCorrectionFor<uint16_t>(
-          value_correction_shares, index_in_block, beta, invert);
-      break;
-    case 32:
-      value_correction = ComputeValueCorrectionFor<uint32_t>(
-          value_correction_shares, index_in_block, beta, invert);
-      break;
-    case 64:
-      value_correction = ComputeValueCorrectionFor<uint64_t>(
-          value_correction_shares, index_in_block, beta, invert);
-      break;
-    case 128:
-      value_correction = ComputeValueCorrectionFor<absl::uint128>(
-          value_correction_shares, index_in_block, beta, invert);
-      break;
-    default:
-      return absl::UnimplementedError(absl::StrCat(
-          "`element_bitsize = ", element_bitsize, "` unimplemented"));
-  }
-  return value_correction;
+  DPF_ASSIGN_OR_RETURN(
+      ValueCorrectionFunction func,
+      GetValueCorrectionFunction(parameters_[hierarchy_level]));
+  return func(value_correction_shares, index_in_block, beta, invert);
 }
 
 // Expands the PRG seeds at the next `tree_level`, updates `seeds` and
@@ -572,6 +499,20 @@ DistributedPointFunction::ExpandAndUpdateContext(
   return expansion;
 }
 
+absl::StatusOr<DistributedPointFunction::ValueCorrectionFunction>
+DistributedPointFunction::GetValueCorrectionFunction(
+    const DpfParameters& parameters) const {
+  int element_bitsize = parameters.element_bitsize();
+  auto it = value_correction_functions_.find(element_bitsize);
+  if (it == value_correction_functions_.end()) {
+    return absl::UnimplementedError(absl::StrCat(
+        "No value correction function known for the following parameters:\n",
+        parameters.DebugString(),
+        "Did you call RegisterValueType<T>() with your value type?"));
+  }
+  return it->second;
+}
+
 absl::StatusOr<std::unique_ptr<DistributedPointFunction>>
 DistributedPointFunction::Create(const DpfParameters& parameters) {
   return CreateIncremental(absl::MakeConstSpan(&parameters, 1));
@@ -614,7 +555,7 @@ DistributedPointFunction::GenerateKeysIncremental(
     // conversion to absl::uint128 fails here, do nothing. If `beta[i]` is
     // invalid, this will fail in `ComputeValueCorrection`.
     absl::StatusOr<absl::uint128> beta_128 =
-        ConvertAnyTo<absl::uint128>(beta[i]);
+        dpf_internal::ConvertAnyTo<absl::uint128>(beta[i]);
     if (beta_128.ok() && parameters_[i].element_bitsize() < 128 &&
         *beta_128 >= (absl::uint128{1} << (parameters_[i].element_bitsize()))) {
       return absl::InvalidArgumentError(
@@ -696,198 +637,5 @@ DistributedPointFunction::CreateEvaluationContext(DpfKey key) {
   result.set_previous_hierarchy_level(-1);
   return result;
 }
-
-template <typename T>
-absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
-    int hierarchy_level, absl::Span<const absl::uint128> prefixes,
-    EvaluationContext& ctx) const {
-  DPF_RETURN_IF_ERROR(proto_validator_->ValidateEvaluationContext(ctx));
-  if (hierarchy_level < 0 ||
-      hierarchy_level >= static_cast<int>(parameters_.size())) {
-    return absl::InvalidArgumentError(
-        "`hierarchy_level` must be non-negative and less than "
-        "parameters_.size()");
-  }
-  if (sizeof(T) * 8 != parameters_[hierarchy_level].element_bitsize()) {
-    return absl::InvalidArgumentError(
-        "Size of template parameter T doesn't match the element size of "
-        "`hierarchy_level`");
-  }
-  if (hierarchy_level <= ctx.previous_hierarchy_level()) {
-    return absl::InvalidArgumentError(
-        "`hierarchy_level` must be greater than "
-        "`ctx.previous_hierarchy_level`");
-  }
-  if ((ctx.previous_hierarchy_level() < 0) != (prefixes.empty())) {
-    return absl::InvalidArgumentError(
-        "`prefixes` must be empty if and only if this is the first call with "
-        "`ctx`.");
-  }
-
-  int previous_log_domain_size = 0;
-  int previous_hierarchy_level = ctx.previous_hierarchy_level();
-  if (!prefixes.empty()) {
-    DCHECK(ctx.previous_hierarchy_level() >= 0);
-    previous_log_domain_size =
-        parameters_[previous_hierarchy_level].log_domain_size();
-    for (absl::uint128 prefix : prefixes) {
-      if (previous_log_domain_size < 128 &&
-          prefix > (absl::uint128{1} << previous_log_domain_size)) {
-        return absl::InvalidArgumentError(
-            absl::StrFormat("Index %d out of range for hierarchy level %d",
-                            prefix, previous_hierarchy_level));
-      }
-    }
-  }
-  int64_t prefixes_size = static_cast<int64_t>(prefixes.size());
-
-  // The `prefixes` passed in by the caller refer to the domain of the previous
-  // hierarchy level. However, because we batch multiple elements of type T in a
-  // single uint128 block, multiple prefixes can actually refer to the same
-  // block in the FSS evaluation tree. On a high level, our approach is as
-  // follows:
-  //
-  // 1. Split up each element of `prefixes` into a tree index, pointing to a
-  //    block in the FSS tree, and a block index, pointing to an element of type
-  //    T in that block.
-  //
-  // 2. Compute a list of unique `tree_indices`, and for each original prefix,
-  //    remember the position of the corresponding tree index in `tree_indices`.
-  //
-  // 3. After expanding the unique `tree_indices`, use the positions saved in
-  //    Step (2) together with the corresponding block index to retrieve the
-  //    expanded values for each prefix, and return them in the same order as
-  //    `prefixes`.
-  //
-  // `tree_indices` holds the unique tree indices from `prefixes`, to be passed
-  // to `ExpandAndUpdateContext`.
-  std::vector<absl::uint128> tree_indices;
-  tree_indices.reserve(prefixes_size);
-  // `tree_indices_inverse` is the inverse of `tree_indices`, used for
-  // deduplicating and constructing `prefix_map`. Use a btree_map because we
-  // expect `prefixes` (and thus `tree_indices`) to be sorted.
-  absl::btree_map<absl::uint128, int64_t> tree_indices_inverse;
-  // `prefix_map` maps each i < prefixes.size() to an element of `tree_indices`
-  // and a block index. Used to select which elements to return after the
-  // expansion, to ensure the result is ordered the same way as `prefixes`.
-  std::vector<std::pair<int64_t, int>> prefix_map;
-  prefix_map.reserve(prefixes_size);
-  for (int64_t i = 0; i < prefixes_size; ++i) {
-    absl::uint128 tree_index =
-        DomainToTreeIndex(prefixes[i], previous_hierarchy_level);
-    int block_index = DomainToBlockIndex(prefixes[i], previous_hierarchy_level);
-
-    // Check if `tree_index` already exists in `tree_indices`.
-    int64_t previous_size = tree_indices_inverse.size();
-    auto it = tree_indices_inverse.try_emplace(tree_indices_inverse.end(),
-                                               tree_index, tree_indices.size());
-    if (tree_indices_inverse.size() > previous_size) {
-      tree_indices.push_back(tree_index);
-    }
-    prefix_map.push_back(std::make_pair(it->second, block_index));
-  }
-
-  // Perform expansion of unique `tree_indices`.
-  DPF_ASSIGN_OR_RETURN(
-      DpfExpansion expansion,
-      ExpandAndUpdateContext(hierarchy_level, tree_indices, ctx));
-
-  // Get output correction word from `ctx`.
-  constexpr int elements_per_block = dpf_internal::ElementsPerBlock<T>();
-  const Block* output_correction = nullptr;
-  if (hierarchy_level < static_cast<int>(parameters_.size()) - 1) {
-    output_correction =
-        &(ctx.key()
-              .correction_words(hierarchy_to_tree_[hierarchy_level])
-              .output());
-  } else {
-    // Last level output correction is stored in an extra proto field, since we
-    // have one less correction word than tree levels.
-    output_correction = &(ctx.key().last_level_output_correction());
-  }
-
-  // Split output correction into elements of type T.
-  std::array<T, elements_per_block> correction_ints =
-      dpf_internal::Uint128ToArray<T>(absl::MakeUint128(
-          output_correction->high(), output_correction->low()));
-
-  // Compute output PRG value of expanded seeds using prg_ctx_value_.
-  std::vector<absl::uint128> hashed_expansion(expansion.seeds.size());
-  DPF_RETURN_IF_ERROR(
-      prg_value_.Evaluate(expansion.seeds, absl::MakeSpan(hashed_expansion)));
-
-  // Compute value corrections for each block in `expanded_seeds`. We have to
-  // account for the fact that blocks might not be full (i.e., have less than
-  // elements_per_block elements).
-  const int corrected_elements_per_block =
-      1 << (parameters_[hierarchy_level].log_domain_size() -
-            hierarchy_to_tree_[hierarchy_level]);
-  std::vector<T> corrected_expansion(hashed_expansion.size() *
-                                     corrected_elements_per_block);
-  for (int64_t i = 0; i < static_cast<int64_t>(hashed_expansion.size()); ++i) {
-    std::array<T, elements_per_block> current_elements =
-        dpf_internal::Uint128ToArray<T>(hashed_expansion[i]);
-    for (int j = 0; j < corrected_elements_per_block; ++j) {
-      if (expansion.control_bits[i]) {
-        current_elements[j] += correction_ints[j];
-      }
-      if (ctx.key().party() == 1) {
-        current_elements[j] = -current_elements[j];
-      }
-      corrected_expansion[i * corrected_elements_per_block + j] =
-          current_elements[j];
-    }
-  }
-
-  // Compute the number of outputs we will have. For each prefix, we will have a
-  // full expansion from the previous heirarchy level to the current heirarchy
-  // level.
-  int log_domain_size = parameters_[hierarchy_level].log_domain_size();
-  DCHECK(log_domain_size - previous_log_domain_size < 63);
-  int64_t outputs_per_prefix = int64_t{1}
-                               << (log_domain_size - previous_log_domain_size);
-
-  if (prefixes.empty()) {
-    // If prefixes is empty (i.e., this is the first evaluation of `ctx`), just
-    // return the expansion.
-    DCHECK(static_cast<int>(corrected_expansion.size()) == outputs_per_prefix);
-    return corrected_expansion;
-  } else {
-    // Otherwise, only return elements under `prefixes`.
-    int blocks_per_tree_prefix = expansion.seeds.size() / tree_indices.size();
-    std::vector<T> result(prefixes_size * outputs_per_prefix);
-    for (int64_t i = 0; i < prefixes_size; ++i) {
-      int64_t prefix_expansion_start =
-          prefix_map[i].first * blocks_per_tree_prefix *
-              corrected_elements_per_block +
-          prefix_map[i].second * outputs_per_prefix;
-      std::copy_n(&corrected_expansion[prefix_expansion_start],
-                  outputs_per_prefix, &result[i * outputs_per_prefix]);
-    }
-    return result;
-  }
-}
-
-// Template instantiations for all types we support.
-template absl::StatusOr<std::vector<uint8_t>>
-DistributedPointFunction::EvaluateUntil(
-    int hierarchy_level, absl::Span<const absl::uint128> prefixes,
-    EvaluationContext& ctx) const;
-template absl::StatusOr<std::vector<uint16_t>>
-DistributedPointFunction::EvaluateUntil(
-    int hierarchy_level, absl::Span<const absl::uint128> prefixes,
-    EvaluationContext& ctx) const;
-template absl::StatusOr<std::vector<uint32_t>>
-DistributedPointFunction::EvaluateUntil(
-    int hierarchy_level, absl::Span<const absl::uint128> prefixes,
-    EvaluationContext& ctx) const;
-template absl::StatusOr<std::vector<uint64_t>>
-DistributedPointFunction::EvaluateUntil(
-    int hierarchy_level, absl::Span<const absl::uint128> prefixes,
-    EvaluationContext& ctx) const;
-template absl::StatusOr<std::vector<absl::uint128>>
-DistributedPointFunction::EvaluateUntil(
-    int hierarchy_level, absl::Span<const absl::uint128> prefixes,
-    EvaluationContext& ctx) const;
 
 }  // namespace distributed_point_functions

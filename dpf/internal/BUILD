@@ -8,19 +8,21 @@ package(
 licenses(["notice"])
 
 cc_library(
-    name = "array_conversions",
-    hdrs = ["array_conversions.h"],
+    name = "value_type_helpers",
+    hdrs = ["value_type_helpers.h"],
     deps = [
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:any",
     ],
 )
 
 cc_test(
-    name = "array_conversions_test",
-    srcs = ["array_conversions_test.cc"],
+    name = "value_type_helpers_test",
+    srcs = ["value_type_helpers_test.cc"],
     deps = [
-        ":array_conversions",
+        ":value_type_helpers",
         "@com_github_google_googletest//:gtest_main",
     ],
 )

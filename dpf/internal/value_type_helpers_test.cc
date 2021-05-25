@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dpf/internal/array_conversions.h"
+#include "dpf/internal/value_type_helpers.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
