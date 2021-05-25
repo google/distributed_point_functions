@@ -20,9 +20,11 @@
 #include <openssl/cipher.h>
 
 #include <memory>
+#include <type_traits>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
+#include "absl/types/any.h"
 #include "dpf/aes_128_fixed_key_hash.h"
 #include "dpf/distributed_point_function.pb.h"
 #include "dpf/internal/proto_validator.h"
@@ -60,20 +62,53 @@ class DistributedPointFunction {
   DistributedPointFunction& operator=(const DistributedPointFunction&) = delete;
 
   // Generates a pair of keys for a DPF that evaluates to `beta` when evaluated
-  // `alpha`. Returns INVALID_ARGUMENT if used on an incremental DPF with more
-  // than one set of parameters, or if `alpha` or `beta` are outside of the
-  // domains specified at construction.
+  // `alpha`. `beta` may be any numeric type.
+  //
+  // Returns INVALID_ARGUMENT if used on an incremental DPF with more
+  // than one set of parameters, if `alpha` is outside of the domain specified
+  // at construction, or if `beta` does not match the element type passed at
+  // construction.
+  //
   absl::StatusOr<std::pair<DpfKey, DpfKey>> GenerateKeys(
-      absl::uint128 alpha, absl::uint128 beta) const;
+      absl::uint128 alpha, absl::uint128 beta) const {
+    return GenerateKeysIncremental(alpha, absl::MakeConstSpan(&beta, 1));
+  }
+
+  // Overload for types not convertible to absl::uint128.
+  template <typename T, typename = std::enable_if_t<
+                            !std::is_convertible_v<T, absl::uint128>>>
+  absl::StatusOr<std::pair<DpfKey, DpfKey>> GenerateKeys(absl::uint128 alpha,
+                                                         const T& beta) const {
+    const absl::any beta_any = beta;
+    return GenerateKeysIncremental(alpha, absl::MakeConstSpan(&beta_any, 1));
+  }
 
   // Generates a pair of keys for an incremental DPF. For each parameter i
   // passed at construction, the DPF evaluates to `beta[i]` at the first
   // `parameters_[i].log_domain_size()` bits of `alpha`.
-  // Returns INVALID_ARGUMENT if `beta.size() != parameters_.size()` or if
-  // `alpha` or any element of `beta` are outside of the domains specified at
-  // construction.
+  //
+  // `beta` must be a span of absl::uint128 values, or a span of unsigned
+  // integers (wrapped in absl::any), where the integer at `beta[i]` matches the
+  // size passed in `parameters[i]` at construction.
+  //
+  // Returns INVALID_ARGUMENT if `beta.size() != parameters_.size()`, if `alpha`
+  // is outside of the domain specified at construction, or if `beta` does not
+  // match the element type passed at construction.
+  //
   absl::StatusOr<std::pair<DpfKey, DpfKey>> GenerateKeysIncremental(
-      absl::uint128 alpha, absl::Span<const absl::uint128> beta) const;
+      absl::uint128 alpha, absl::Span<const absl::any> beta) const;
+
+  // Overload for absl::Span<const absl::uint128>.
+  template <typename T,
+            typename = std::enable_if_t<
+                !std::is_convertible_v<T, absl::Span<const absl::any>> &&
+                std::is_convertible_v<T, absl::Span<const absl::uint128>>>>
+  absl::StatusOr<std::pair<DpfKey, DpfKey>> GenerateKeysIncremental(
+      absl::uint128 alpha, const T& beta) const {
+    absl::Span<const absl::uint128> beta_span(beta);
+    std::vector<absl::any> beta_any(beta_span.begin(), beta_span.end());
+    return GenerateKeysIncremental(alpha, beta_any);
+  }
 
   // Returns an `EvaluationContext` for incrementally evaluating the given
   // DpfKey.
@@ -154,14 +189,14 @@ class DistributedPointFunction {
   // `element_bitsize` is not supported.
   absl::StatusOr<absl::uint128> ComputeValueCorrection(
       int hierarchy_level, absl::Span<const absl::uint128> seeds,
-      absl::uint128 alpha, absl::uint128 beta, bool invert) const;
+      absl::uint128 alpha, const absl::any& beta, bool invert) const;
 
   // Expands the PRG seeds at the next `tree_level` for an incremental DPF with
   // index `alpha` and values `beta`, updates `seeds` and `control_bits`, and
   // writes the next correction word to `keys`. Called from
   // `GenerateKeysIncremental`.
   absl::Status GenerateNext(int tree_level, absl::uint128 alpha,
-                            absl::Span<const absl::uint128> beta,
+                            absl::Span<const absl::any> beta,
                             absl::Span<absl::uint128> seeds,
                             absl::Span<bool> control_bits,
                             absl::Span<DpfKey> keys) const;

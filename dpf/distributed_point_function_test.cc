@@ -45,7 +45,7 @@ TEST(DistributedPointFunction, TestCreate) {
   }
 }
 
-TEST(DistributedPointFunction, TestCreateCreateIncrementalLargeDomain) {
+TEST(DistributedPointFunction, TestCreateIncrementalLargeDomain) {
   std::vector<DpfParameters> parameters(2);
   parameters[0].set_element_bitsize(128);
   parameters[1].set_element_bitsize(128);
@@ -58,7 +58,7 @@ TEST(DistributedPointFunction, TestCreateCreateIncrementalLargeDomain) {
               IsOkAndHolds(Ne(nullptr)));
 }
 
-class DpfKeyGenerationTest
+class RegularDpfKeyGenerationTest
     : public testing::TestWithParam<std::tuple<int, int>> {
  public:
   void SetUp() {
@@ -79,7 +79,7 @@ class DpfKeyGenerationTest
   std::unique_ptr<dpf_internal::ProtoValidator> proto_validator_;
 };
 
-TEST_P(DpfKeyGenerationTest, KeyHasCorrectFormat) {
+TEST_P(RegularDpfKeyGenerationTest, KeyHasCorrectFormat) {
   DpfKey key_a, key_b;
   DPF_ASSERT_OK_AND_ASSIGN(std::tie(key_a, key_b), dpf_->GenerateKeys(0, 0));
 
@@ -91,7 +91,7 @@ TEST_P(DpfKeyGenerationTest, KeyHasCorrectFormat) {
   DPF_EXPECT_OK(proto_validator_->ValidateDpfKey(key_b));
 }
 
-TEST_P(DpfKeyGenerationTest, FailsIfBetaHasTheWrongSize) {
+TEST_P(RegularDpfKeyGenerationTest, FailsIfBetaHasTheWrongSize) {
   EXPECT_THAT(
       dpf_->GenerateKeysIncremental(0, {1, 2}),
       StatusIs(absl::StatusCode::kInvalidArgument,
@@ -99,7 +99,7 @@ TEST_P(DpfKeyGenerationTest, FailsIfBetaHasTheWrongSize) {
                "construction"));
 }
 
-TEST_P(DpfKeyGenerationTest, FailsIfAlphaIsTooLarge) {
+TEST_P(RegularDpfKeyGenerationTest, FailsIfAlphaIsTooLarge) {
   if (log_domain_size_ >= 128) {
     // Alpha is an absl::uint128, so never too large in this case.
     return;
@@ -110,7 +110,7 @@ TEST_P(DpfKeyGenerationTest, FailsIfAlphaIsTooLarge) {
                        "`alpha` must be smaller than the output domain size"));
 }
 
-TEST_P(DpfKeyGenerationTest, FailsIfBetaIsTooLarge) {
+TEST_P(RegularDpfKeyGenerationTest, FailsIfBetaIsTooLarge) {
   if (element_bitsize_ >= 128) {
     // Beta is an absl::uint128, so never too large in this case.
     return;
@@ -123,7 +123,23 @@ TEST_P(DpfKeyGenerationTest, FailsIfBetaIsTooLarge) {
           "`beta[0]` larger than `parameters[0].element_bitsize()` allows"));
 }
 
-INSTANTIATE_TEST_SUITE_P(VaryDomainAndElementSizes, DpfKeyGenerationTest,
+TEST_P(RegularDpfKeyGenerationTest, FailsIfAnyIsWrongType) {
+  absl::any beta = uint64_t{23};
+
+  // We use an absl::any explicitly here to call the wrong function on purpose.
+  // Calling `GenerateKeys` with an uint64_t directly would succeed.
+  auto result = dpf_->GenerateKeys(0, beta);
+
+  if (element_bitsize_ == 64) {
+    // This should fail for all bit sizes except 64.
+    DPF_EXPECT_OK(result);
+  } else {
+    EXPECT_THAT(result, StatusIs(absl::StatusCode::kInvalidArgument,
+                                 StartsWith("Conversion of absl::any")));
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(VaryDomainAndElementSizes, RegularDpfKeyGenerationTest,
                          testing::Combine(testing::Values(0, 1, 2, 3, 4, 5, 6,
                                                           7, 8, 9, 10, 32, 62),
                                           testing::Values(8, 16, 32, 64, 128)));
@@ -139,12 +155,12 @@ struct DpfTestParameters {
   }
 };
 
-class DpfEvaluationTest : public testing::TestWithParam<
-                              std::tuple</*parameters*/
-                                         std::vector<DpfTestParameters>,
-                                         /*alpha*/ absl::uint128,
-                                         /*beta*/ std::vector<absl::uint128>,
-                                         /*level_step*/ int>> {
+class IncrementalDpfTest : public testing::TestWithParam<
+                               std::tuple</*parameters*/
+                                          std::vector<DpfTestParameters>,
+                                          /*alpha*/ absl::uint128,
+                                          /*beta*/ std::vector<absl::uint128>,
+                                          /*level_step*/ int>> {
  protected:
   void SetUp() {
     const std::vector<DpfTestParameters>& parameters = std::get<0>(GetParam());
@@ -268,13 +284,45 @@ class DpfEvaluationTest : public testing::TestWithParam<
   std::unique_ptr<dpf_internal::ProtoValidator> proto_validator_;
 };
 
-TEST_P(DpfEvaluationTest, CreateEvaluationContextCreatesValidContext) {
+TEST_P(IncrementalDpfTest, KeyGenerationWithDifferentTypesWorks) {
+  std::vector<absl::any> beta_any(parameters_.size());
+  for (int i = 0; i < static_cast<int>(parameters_.size()); ++i) {
+    switch (parameters_[i].element_bitsize()) {
+      case 8:
+        beta_any[i] = static_cast<uint8_t>(beta_[i]);
+        break;
+      case 16:
+        beta_any[i] = static_cast<uint16_t>(beta_[i]);
+        break;
+      case 32:
+        beta_any[i] = static_cast<uint32_t>(beta_[i]);
+        break;
+      case 64:
+        beta_any[i] = static_cast<uint64_t>(beta_[i]);
+        break;
+      case 128:
+        beta_any[i] = static_cast<absl::uint128>(beta_[i]);
+        break;
+      default:
+        ASSERT_TRUE(0) << "Unsupported element_bitsize";
+    }
+  }
+
+  DpfKey key_a, key_b;
+  DPF_ASSERT_OK_AND_ASSIGN(std::tie(key_a, key_b),
+                           dpf_->GenerateKeysIncremental(alpha_, beta_any));
+
+  DPF_EXPECT_OK(proto_validator_->ValidateDpfKey(key_a));
+  DPF_EXPECT_OK(proto_validator_->ValidateDpfKey(key_b));
+}
+
+TEST_P(IncrementalDpfTest, CreateEvaluationContextCreatesValidContext) {
   DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx,
                            dpf_->CreateEvaluationContext(keys_.first));
   DPF_EXPECT_OK(proto_validator_->ValidateEvaluationContext(ctx));
 }
 
-TEST_P(DpfEvaluationTest, FailsIfPrefixNotPresentInCtx) {
+TEST_P(IncrementalDpfTest, FailsIfPrefixNotPresentInCtx) {
   if (parameters_.size() < 3 || parameters_[0].element_bitsize() != 128 ||
       parameters_[1].element_bitsize() != 128 ||
       parameters_[2].element_bitsize() != 128) {
@@ -296,7 +344,7 @@ TEST_P(DpfEvaluationTest, FailsIfPrefixNotPresentInCtx) {
                        "hierarchy level 1"));
 }
 
-TEST_P(DpfEvaluationTest, TestCorrectness) {
+TEST_P(IncrementalDpfTest, TestCorrectness) {
   DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx0,
                            dpf_->CreateEvaluationContext(keys_.first));
   DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx1,
@@ -343,7 +391,7 @@ TEST_P(DpfEvaluationTest, TestCorrectness) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    OneHierarchyLevelVaryElementSizes, DpfEvaluationTest,
+    OneHierarchyLevelVaryElementSizes, IncrementalDpfTest,
     testing::Combine(
         // DPF parameters.
         testing::Values(
@@ -376,7 +424,7 @@ INSTANTIATE_TEST_SUITE_P(
         testing::Values(1)));                                 // level_step
 
 INSTANTIATE_TEST_SUITE_P(
-    OneHierarchyLevelVaryDomainSizes, DpfEvaluationTest,
+    OneHierarchyLevelVaryDomainSizes, IncrementalDpfTest,
     testing::Combine(
         // DPF parameters.
         testing::Values(
@@ -450,7 +498,7 @@ INSTANTIATE_TEST_SUITE_P(
         testing::Values(1)));                                 // level_step
 
 INSTANTIATE_TEST_SUITE_P(
-    TwoHierarchyLevels, DpfEvaluationTest,
+    TwoHierarchyLevels, IncrementalDpfTest,
     testing::Combine(
         // DPF parameters.
         testing::Values(
@@ -493,7 +541,7 @@ INSTANTIATE_TEST_SUITE_P(
         testing::Values(1, 2)));                                  // level_step
 
 INSTANTIATE_TEST_SUITE_P(
-    ThreeHierarchyLevels, DpfEvaluationTest,
+    ThreeHierarchyLevels, IncrementalDpfTest,
     testing::Combine(
         // DPF parameters.
         testing::Values<std::vector<DpfTestParameters>>(
@@ -549,7 +597,7 @@ INSTANTIATE_TEST_SUITE_P(
         testing::Values(1, 2)));                                 // level_step
 
 INSTANTIATE_TEST_SUITE_P(
-    MaximumOutputDomainSize, DpfEvaluationTest,
+    MaximumOutputDomainSize, IncrementalDpfTest,
     testing::Combine(
         // DPF parameters. We want to be able to evaluate at every bit, so this
         // lambda returns a vector with 129 parameters with log domain sizes

@@ -20,7 +20,6 @@
 #include <limits>
 
 #include "absl/container/btree_map.h"
-#include "absl/container/flat_hash_map.h"
 #include "absl/strings/str_format.h"
 #include "dpf/internal/array_conversions.h"
 #include "dpf/status_macros.h"
@@ -48,13 +47,37 @@ bool ExtractAndClearLowestBit(absl::uint128& x) {
   return bit;
 }
 
+// Converts a given absl::any to a numerical type T. Tries converting directly
+// first. If that doesn't work, tries converting to absl::uin128 and then doing
+// a static_cast to T. Returns INVALID_ARGUMENT if both approaches fail.
+template <typename T>
+absl::StatusOr<T> ConvertAnyTo(const absl::any& in) {
+  if (!std::is_same_v<T, absl::uint128>) {
+    const T* in_T = absl::any_cast<T>(&in);
+    if (in_T) {
+      return *in_T;
+    }
+  }
+  const absl::uint128* in_128 = absl::any_cast<absl::uint128>(&in);
+  if (in_128) {
+    return static_cast<T>(*in_128);
+  }
+  return absl::InvalidArgumentError(
+      absl::StrCat("Conversion of absl::any (typeid: ", in.type().name(),
+                   ") to type T (typeid: ", typeid(T).name(),
+                   ", size: ", sizeof(T), ") failed"));
+}
+
 // Computes the value correction word given two seeds `seed_a`, `seed_b` for
 // parties a and b, such that the element at `block_index` is equal to `beta`.
 // If `invert` is true, the result is multiplied element-wise by -1. Templated
 // to use the correct integer type without needing modular reduction.
 template <typename T>
-absl::uint128 ComputeValueCorrectionFor(absl::Span<const absl::uint128> seeds,
-                                        int block_index, T beta, bool invert) {
+absl::StatusOr<absl::uint128> ComputeValueCorrectionFor(
+    absl::Span<const absl::uint128> seeds, int block_index,
+    const absl::any& beta, bool invert) {
+  DPF_ASSIGN_OR_RETURN(T beta_T, ConvertAnyTo<T>(beta));
+
   constexpr int elements_per_block = dpf_internal::ElementsPerBlock<T>();
 
   // Split up seeds into individual integers.
@@ -64,7 +87,7 @@ absl::uint128 ComputeValueCorrectionFor(absl::Span<const absl::uint128> seeds,
                                         seeds[1]);
 
   // Add beta to the right position.
-  ints_b[block_index] += beta;
+  ints_b[block_index] += beta_T;
 
   // Add up shares, invert if needed.
   for (int i = 0; i < elements_per_block; i++) {
@@ -95,7 +118,7 @@ DistributedPointFunction::DistributedPointFunction(
 
 absl::StatusOr<absl::uint128> DistributedPointFunction::ComputeValueCorrection(
     int hierarchy_level, absl::Span<const absl::uint128> seeds,
-    absl::uint128 alpha, absl::uint128 beta, bool invert) const {
+    absl::uint128 alpha, const absl::any& beta, bool invert) const {
   // Compute third PRG output component of current seed.
   std::array<absl::uint128, 2> value_correction_shares;
   DPF_RETURN_IF_ERROR(
@@ -106,32 +129,27 @@ absl::StatusOr<absl::uint128> DistributedPointFunction::ComputeValueCorrection(
 
   // Choose implementation depending on element_bitsize.
   int element_bitsize = parameters_[hierarchy_level].element_bitsize();
-  absl::uint128 value_correction;
+  absl::StatusOr<absl::uint128> value_correction;
   switch (element_bitsize) {
     case 8:
-      value_correction =
-          ComputeValueCorrectionFor(value_correction_shares, index_in_block,
-                                    static_cast<uint8_t>(beta), invert);
+      value_correction = ComputeValueCorrectionFor<uint8_t>(
+          value_correction_shares, index_in_block, beta, invert);
       break;
     case 16:
-      value_correction =
-          ComputeValueCorrectionFor(value_correction_shares, index_in_block,
-                                    static_cast<uint16_t>(beta), invert);
+      value_correction = ComputeValueCorrectionFor<uint16_t>(
+          value_correction_shares, index_in_block, beta, invert);
       break;
     case 32:
-      value_correction =
-          ComputeValueCorrectionFor(value_correction_shares, index_in_block,
-                                    static_cast<uint32_t>(beta), invert);
+      value_correction = ComputeValueCorrectionFor<uint32_t>(
+          value_correction_shares, index_in_block, beta, invert);
       break;
     case 64:
-      value_correction =
-          ComputeValueCorrectionFor(value_correction_shares, index_in_block,
-                                    static_cast<uint64_t>(beta), invert);
+      value_correction = ComputeValueCorrectionFor<uint64_t>(
+          value_correction_shares, index_in_block, beta, invert);
       break;
     case 128:
-      value_correction =
-          ComputeValueCorrectionFor(value_correction_shares, index_in_block,
-                                    static_cast<absl::uint128>(beta), invert);
+      value_correction = ComputeValueCorrectionFor<absl::uint128>(
+          value_correction_shares, index_in_block, beta, invert);
       break;
     default:
       return absl::UnimplementedError(absl::StrCat(
@@ -143,7 +161,7 @@ absl::StatusOr<absl::uint128> DistributedPointFunction::ComputeValueCorrection(
 // Expands the PRG seeds at the next `tree_level`, updates `seeds` and
 // `control_bits`, and writes the next correction word to `keys`.
 absl::Status DistributedPointFunction::GenerateNext(
-    int tree_level, absl::uint128 alpha, absl::Span<const absl::uint128> beta,
+    int tree_level, absl::uint128 alpha, absl::Span<const absl::any> beta,
     absl::Span<absl::uint128> seeds, absl::Span<bool> control_bits,
     absl::Span<DpfKey> keys) const {
   // As in `GenerateKeysIncremental`, we annotate code with the corresponding
@@ -582,14 +600,8 @@ DistributedPointFunction::CreateIncremental(
 }
 
 absl::StatusOr<std::pair<DpfKey, DpfKey>>
-DistributedPointFunction::GenerateKeys(absl::uint128 alpha,
-                                       absl::uint128 beta) const {
-  return GenerateKeysIncremental(alpha, absl::MakeConstSpan(&beta, 1));
-}
-
-absl::StatusOr<std::pair<DpfKey, DpfKey>>
 DistributedPointFunction::GenerateKeysIncremental(
-    absl::uint128 alpha, absl::Span<const absl::uint128> beta) const {
+    absl::uint128 alpha, absl::Span<const absl::any> beta) const {
   // Check validity of beta.
   if (beta.size() != parameters_.size()) {
     return absl::InvalidArgumentError(
@@ -597,8 +609,14 @@ DistributedPointFunction::GenerateKeysIncremental(
         "construction");
   }
   for (int i = 0; i < static_cast<int>(parameters_.size()); ++i) {
-    if (parameters_[i].element_bitsize() < 128 &&
-        beta[i] >= (absl::uint128{1} << (parameters_[i].element_bitsize()))) {
+    // To simplify the interface, we allow absl::uint128 even for smaller
+    // element_bitsizes, as long as we're considering  single elements. If the
+    // conversion to absl::uint128 fails here, do nothing. If `beta[i]` is
+    // invalid, this will fail in `ComputeValueCorrection`.
+    absl::StatusOr<absl::uint128> beta_128 =
+        ConvertAnyTo<absl::uint128>(beta[i]);
+    if (beta_128.ok() && parameters_[i].element_bitsize() < 128 &&
+        *beta_128 >= (absl::uint128{1} << (parameters_[i].element_bitsize()))) {
       return absl::InvalidArgumentError(
           absl::StrCat("`beta[", i, "]` larger than `parameters[", i,
                        "].element_bitsize()` allows"));
