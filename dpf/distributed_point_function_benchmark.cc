@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "absl/container/btree_set.h"
 #include "absl/random/random.h"
 #include "benchmark/benchmark.h"
 #include "dpf/distributed_point_function.h"
@@ -100,7 +101,8 @@ BENCHMARK_TEMPLATE(BM_EvaluateHierarchicalFull, uint64_t)->DenseRange(1, 16, 2);
 BENCHMARK_TEMPLATE(BM_EvaluateHierarchicalFull, absl::uint128)
     ->DenseRange(1, 16, 2);
 
-// Generates `num_nonzeros` random prefixes for the given set of `parameters`.
+// Generates random prefixes for the given set of `parameters`. Generates
+// `num_nonzeros[i]` prefixes at hierarchy level `i`.
 std::vector<std::vector<absl::uint128>> GenerateRandomPrefixes(
     absl::Span<const DpfParameters> parameters,
     absl::Span<const int> num_nonzeros) {
@@ -210,6 +212,86 @@ void BM_KeyGeneration(benchmark::State& state) {
   }
 }
 BENCHMARK(BM_KeyGeneration)->RangeMultiplier(2)->Range(1, 128);
+
+// Generates `num_nonzeros` uniform indices, and computes their prefixes for
+// each hierarchy level in `parameters`.
+absl::StatusOr<std::vector<std::vector<absl::uint128>>> GenerateUniformPrefixes(
+    absl::Span<const DpfParameters> parameters, int num_nonzeros) {
+  int num_parameters = static_cast<int>(parameters.size());
+  std::vector<std::vector<absl::uint128>> result(num_parameters);
+  if (num_parameters <= 1) {
+    return result;
+  }
+  if (std::log2(num_nonzeros) >
+      parameters[num_parameters - 2].log_domain_size()) {
+    return absl::InvalidArgumentError("num_nonzeros out of range");
+  }
+
+  absl::BitGen rng;
+  absl::uniform_int_distribution<uint64_t> dist;
+
+  // Generate prefixes for last level.
+  absl::btree_set<absl::uint128> last_level_prefixes;
+  while (static_cast<int>(last_level_prefixes.size()) < num_nonzeros) {
+    absl::uint128 mask = (absl::uint128{1} << parameters[parameters.size() - 2]
+                                                  .log_domain_size()) -
+                         1;
+    last_level_prefixes.insert(absl::MakeUint128(dist(rng), dist(rng)) & mask);
+  }
+  result.back() = std::vector<absl::uint128>(last_level_prefixes.begin(),
+                                             last_level_prefixes.end());
+
+  // Iterate backwards through previous levels, computing prefixes by
+  // appropriately shifting the ones from higher levels.
+  for (int i = static_cast<int>(result.size()) - 1; i > 1; --i) {
+    absl::btree_set<absl::uint128> current_level_prefixes;
+    for (const auto& x : result[i]) {
+      absl::uint128 prefix = x >> (parameters[i - 1].log_domain_size() -
+                                   parameters[i - 2].log_domain_size());
+      current_level_prefixes.insert(prefix);
+    }
+    result[i - 1] = std::vector<absl::uint128>(current_level_prefixes.begin(),
+                                               current_level_prefixes.end());
+  }
+  return result;
+}
+
+// Benchmark a bit-wise hierarchy as in https://github.com/henrycg/heavyhitters.
+// Uses a variable domain size with 10000 uniform non-zeros at the last
+// hierarchy level, and evaluate at every bit.
+void BM_HeavyHitters(benchmark::State& state) {
+  int num_parameters = state.range(0);
+  const int kNumNonzeros = 10000;
+  std::vector<DpfParameters> parameters(num_parameters);
+  for (int i = 0; i < num_parameters; ++i) {
+    parameters[i].set_log_domain_size(i + 1);
+    parameters[i].set_element_bitsize(64);
+  }
+  std::unique_ptr<DistributedPointFunction> dpf =
+      *(DistributedPointFunction::CreateIncremental(parameters));
+
+  std::vector<absl::uint128> beta(num_parameters, 23);
+  absl::uint128 alpha = 42;
+  DpfKey key = dpf->GenerateKeysIncremental(alpha, beta).value().first;
+  std::vector<std::vector<absl::uint128>> prefixes =
+      GenerateUniformPrefixes(parameters, kNumNonzeros).value();
+
+  // Run hierarchical evaluation.
+  EvaluationContext ctx_0 = dpf->CreateEvaluationContext(key).value();
+  for (auto s : state) {
+    google::protobuf::Arena arena;
+    EvaluationContext* ctx =
+        google::protobuf::Arena::CreateMessage<EvaluationContext>(&arena);
+    *ctx = ctx_0;
+    for (int i = 0; i < num_parameters; ++i) {
+      std::vector<uint64_t> result =
+          dpf->EvaluateNext<uint64_t>(prefixes[i], *ctx).value();
+      benchmark::DoNotOptimize(result);
+    }
+    benchmark::DoNotOptimize(*ctx);
+  }
+}
+BENCHMARK(BM_HeavyHitters)->RangeMultiplier(2)->Range(16, 128);
 
 }  // namespace
 }  // namespace distributed_point_functions
