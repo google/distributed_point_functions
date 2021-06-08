@@ -96,3 +96,20 @@ cc_test(
         "@com_github_google_googletest//:gtest_main",
     ],
 )
+
+cc_library(
+    name = "tuple",
+    hdrs = ["tuple.h"],
+)
+
+cc_test(
+    name = "tuple_test",
+    srcs = [
+        "tuple_test.cc",
+    ],
+    deps = [
+        ":tuple",
+        "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/numeric:int128",
+    ],
+)
