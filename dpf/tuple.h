@@ -14,16 +14,14 @@ namespace dpf_internal {
 
 // Implementation of addition and negation. See
 // https://stackoverflow.com/a/50815143.
+// We declare the templates here, but define them at the end of this header
+// because the definitions need to make use of operator+ and operator-.
 template <typename... T, std::size_t... I>
 constexpr Tuple<T...> add(const Tuple<T...>& lhs, const Tuple<T...>& rhs,
-                          std::index_sequence<I...>) {
-  return Tuple<T...>{std::get<I>(lhs) + std::get<I>(rhs)...};
-}
+                          std::index_sequence<I...>);
 
 template <typename... T, std::size_t... I>
-constexpr Tuple<T...> negate(const Tuple<T...>& t, std::index_sequence<I...>) {
-  return Tuple<T...>{-std::get<I>(t)...};
-}
+constexpr Tuple<T...> negate(const Tuple<T...>& t, std::index_sequence<I...>);
 
 }  // namespace dpf_internal
 
@@ -55,6 +53,19 @@ constexpr Tuple<T...>& operator-=(Tuple<T...>& lhs, const Tuple<T...>& rhs) {
   lhs = lhs - rhs;
   return lhs;
 }
+
+namespace dpf_internal {
+template <typename... T, std::size_t... I>
+constexpr Tuple<T...> add(const Tuple<T...>& lhs, const Tuple<T...>& rhs,
+                          std::index_sequence<I...>) {
+  return Tuple<T...>{std::get<I>(lhs) + std::get<I>(rhs)...};
+}
+
+template <typename... T, std::size_t... I>
+constexpr Tuple<T...> negate(const Tuple<T...>& t, std::index_sequence<I...>) {
+  return Tuple<T...>{-std::get<I>(t)...};
+}
+}  // namespace dpf_internal
 
 }  // namespace distributed_point_functions
 

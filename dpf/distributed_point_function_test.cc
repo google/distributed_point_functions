@@ -614,47 +614,60 @@ INSTANTIATE_TEST_SUITE_P(
         testing::Values(std::vector<absl::uint128>(129, 1234567)),  // beta
         testing::Values(1, 2, 3, 5, 7)));  // level_step
 
-TEST(DistributedPointFunctionTest, TestTupleValues) {
-  using TupleType = Tuple<uint32_t, uint64_t>;
-  int log_domain_size = 10;
-  int alpha = 23;
-  DpfParameters parameters;
-  parameters.set_log_domain_size(log_domain_size);
-  parameters.mutable_value_type()
-      ->mutable_tuple()
-      ->add_elements()
-      ->mutable_integer()
-      ->set_bitsize(32);
-  parameters.mutable_value_type()
-      ->mutable_tuple()
-      ->add_elements()
-      ->mutable_integer()
-      ->set_bitsize(64);
+template <typename T>
+class DpfTupleTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    log_domain_size_ = 10;
+    alpha_ = 23;
+    std::get<0>(beta_) = 42;
+    parameters_.set_log_domain_size(log_domain_size_);
+    *(parameters_.mutable_value_type()) =
+        dpf_internal::GetValueTypeProtoFor<T>();
+    DPF_ASSERT_OK_AND_ASSIGN(dpf_,
+                             DistributedPointFunction::Create(parameters_));
+  }
 
-  DPF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<DistributedPointFunction> dpf,
-                           DistributedPointFunction::Create(parameters));
-  DPF_ASSERT_OK(dpf->RegisterValueType<TupleType>());
+  int log_domain_size_;
+  int alpha_;
+  T beta_;
+  DpfParameters parameters_;
+  std::unique_ptr<DistributedPointFunction> dpf_;
+};
+
+using TupleTypes =
+    ::testing::Types<Tuple<uint8_t>, Tuple<uint32_t>, Tuple<absl::uint128>,
+                     Tuple<uint32_t, uint32_t>, Tuple<uint32_t, uint64_t>,
+                     Tuple<uint64_t, uint64_t>,
+                     Tuple<uint8_t, uint16_t, uint32_t, uint64_t>,
+                     Tuple<uint32_t, uint32_t, uint32_t, uint32_t>,
+                     Tuple<uint32_t, Tuple<uint32_t, uint32_t>, uint32_t>>;
+TYPED_TEST_SUITE(DpfTupleTest, TupleTypes);
+TYPED_TEST(DpfTupleTest, TestRegularDpf) {
+  DPF_ASSERT_OK(this->dpf_->template RegisterValueType<TypeParam>());
   std::pair<DpfKey, DpfKey> keys;
-  TupleType beta = {123, 456};
-  DPF_ASSERT_OK_AND_ASSIGN(keys, dpf->GenerateKeys(alpha, beta));
+  DPF_ASSERT_OK_AND_ASSIGN(keys,
+                           this->dpf_->GenerateKeys(this->alpha_, this->beta_));
 
   DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx_1,
-                           dpf->CreateEvaluationContext(keys.first));
+                           this->dpf_->CreateEvaluationContext(keys.first));
   DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx_2,
-                           dpf->CreateEvaluationContext(keys.second));
-  DPF_ASSERT_OK_AND_ASSIGN(std::vector<TupleType> output_1,
-                           dpf->EvaluateNext<TupleType>({}, ctx_1));
-  DPF_ASSERT_OK_AND_ASSIGN(std::vector<TupleType> output_2,
-                           dpf->EvaluateNext<TupleType>({}, ctx_2));
+                           this->dpf_->CreateEvaluationContext(keys.second));
+  DPF_ASSERT_OK_AND_ASSIGN(
+      std::vector<TypeParam> output_1,
+      this->dpf_->template EvaluateNext<TypeParam>({}, ctx_1));
+  DPF_ASSERT_OK_AND_ASSIGN(
+      std::vector<TypeParam> output_2,
+      this->dpf_->template EvaluateNext<TypeParam>({}, ctx_2));
 
-  EXPECT_EQ(output_1.size(), 1 << log_domain_size);
-  EXPECT_EQ(output_2.size(), 1 << log_domain_size);
-  for (int i = 0; i < (1 << log_domain_size); ++i) {
-    TupleType sum = output_1[i] + output_2[i];
-    if (i == alpha) {
-      EXPECT_EQ(sum, beta);
+  EXPECT_EQ(output_1.size(), 1 << this->log_domain_size_);
+  EXPECT_EQ(output_2.size(), 1 << this->log_domain_size_);
+  for (int i = 0; i < (1 << this->log_domain_size_); ++i) {
+    TypeParam sum = output_1[i] + output_2[i];
+    if (i == this->alpha_) {
+      EXPECT_EQ(sum, this->beta_);
     } else {
-      EXPECT_EQ(sum, TupleType{});
+      EXPECT_EQ(sum, TypeParam{});
     }
   }
 }
