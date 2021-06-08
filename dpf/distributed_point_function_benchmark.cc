@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <glog/logging.h>
+
 #include "absl/container/btree_set.h"
 #include "absl/random/random.h"
 #include "benchmark/benchmark.h"
@@ -26,10 +28,12 @@ template <typename T>
 void BM_EvaluateRegularDpf(benchmark::State& state) {
   DpfParameters parameters;
   parameters.set_log_domain_size(state.range(0));
-  parameters.set_element_bitsize(sizeof(T) * 8);
+  *(parameters.mutable_value_type()) = dpf_internal::GetValueTypeProtoFor<T>();
   std::unique_ptr<DistributedPointFunction> dpf =
       DistributedPointFunction::Create(parameters).value();
-  absl::uint128 alpha = 0, beta = 1;
+  absl::uint128 alpha = 0;
+  T beta{};
+  CHECK(dpf->RegisterValueType<T>().ok());
   std::pair<DpfKey, DpfKey> keys = dpf->GenerateKeys(alpha, beta).value();
   EvaluationContext ctx_0 = dpf->CreateEvaluationContext(keys.first).value();
   for (auto s : state) {
@@ -46,6 +50,15 @@ BENCHMARK_TEMPLATE(BM_EvaluateRegularDpf, uint16_t)->DenseRange(12, 24, 2);
 BENCHMARK_TEMPLATE(BM_EvaluateRegularDpf, uint32_t)->DenseRange(12, 24, 2);
 BENCHMARK_TEMPLATE(BM_EvaluateRegularDpf, uint64_t)->DenseRange(12, 24, 2);
 BENCHMARK_TEMPLATE(BM_EvaluateRegularDpf, absl::uint128)->DenseRange(12, 24, 2);
+BENCHMARK_TEMPLATE(BM_EvaluateRegularDpf, Tuple<uint32_t, uint32_t>)
+    ->DenseRange(12, 24, 2);
+BENCHMARK_TEMPLATE(BM_EvaluateRegularDpf, Tuple<uint32_t, uint64_t>)
+    ->DenseRange(12, 24, 2);
+BENCHMARK_TEMPLATE(BM_EvaluateRegularDpf, Tuple<uint64_t, uint64_t>)
+    ->DenseRange(12, 24, 2);
+BENCHMARK_TEMPLATE(BM_EvaluateRegularDpf,
+                   Tuple<uint32_t, uint32_t, uint32_t, uint32_t>)
+    ->DenseRange(12, 24, 2);
 
 // Benchmarks full evaluation of all hierarchy levels. Expects the first range
 // argument to specify the number of iterations. The output domain size is fixed
