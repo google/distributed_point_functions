@@ -64,7 +64,7 @@ TEST_F(ProtoValidatorTest, FailsWhenElementBitsizeNegative) {
 
   EXPECT_THAT(ProtoValidator::Create(parameters_),
               StatusIs(absl::StatusCode::kInvalidArgument,
-                       "`element_bitsize` must be positive"));
+                       "`bitsize` must be positive"));
 }
 
 TEST_F(ProtoValidatorTest, FailsWhenElementBitsizeZero) {
@@ -73,7 +73,7 @@ TEST_F(ProtoValidatorTest, FailsWhenElementBitsizeZero) {
 
   EXPECT_THAT(ProtoValidator::Create(parameters_),
               StatusIs(absl::StatusCode::kInvalidArgument,
-                       "`element_bitsize` must be positive"));
+                       "`bitsize` must be positive"));
 }
 
 TEST_F(ProtoValidatorTest, FailsWhenElementBitsizeTooLarge) {
@@ -82,7 +82,7 @@ TEST_F(ProtoValidatorTest, FailsWhenElementBitsizeTooLarge) {
 
   EXPECT_THAT(ProtoValidator::Create(parameters_),
               StatusIs(absl::StatusCode::kInvalidArgument,
-                       "`element_bitsize` must be less than or equal to 128"));
+                       "`bitsize` must be less than or equal to 128"));
 }
 
 TEST_F(ProtoValidatorTest, FailsWhenElementBitsizeNotAPowerOfTwo) {
@@ -91,7 +91,7 @@ TEST_F(ProtoValidatorTest, FailsWhenElementBitsizeNotAPowerOfTwo) {
 
   EXPECT_THAT(ProtoValidator::Create(parameters_),
               StatusIs(absl::StatusCode::kInvalidArgument,
-                       "`element_bitsize` must be a power of 2"));
+                       "`bitsize` must be a power of 2"));
 }
 
 TEST_F(ProtoValidatorTest, FailsWhenElementBitsizesDecrease) {
@@ -101,7 +101,7 @@ TEST_F(ProtoValidatorTest, FailsWhenElementBitsizesDecrease) {
 
   EXPECT_THAT(ProtoValidator::Create(parameters_),
               StatusIs(absl::StatusCode::kInvalidArgument,
-                       "`element_bitsize` fields must be non-decreasing in "
+                       "`value_type` fields must be of non-decreasing size in "
                        "`parameters`"));
 }
 
@@ -135,16 +135,16 @@ TEST_F(ProtoValidatorTest, FailsIfSeedIsMissing) {
 }
 
 TEST_F(ProtoValidatorTest, FailsIfLastLevelOutputCorrectionIsMissing) {
-  dpf_key_.clear_last_level_output_correction();
+  dpf_key_.clear_last_level_value_correction();
 
   EXPECT_THAT(proto_validator_->ValidateDpfKey(dpf_key_),
               StatusIs(absl::StatusCode::kInvalidArgument,
-                       "key.last_level_output_correction must be present"));
+                       "key.last_level_value_correction must be present"));
 }
 
 TEST_F(ProtoValidatorTest, FailsIfOutputCorrectionIsMissing) {
   for (CorrectionWord& cw : *(dpf_key_.mutable_correction_words())) {
-    cw.clear_output();
+    cw.clear_value_correction();
   }
 
   EXPECT_THAT(

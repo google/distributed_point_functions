@@ -16,16 +16,73 @@ syntax = "proto3";
 
 package distributed_point_functions;
 
-// For faster allocations of submessages.
+// For faster allocations of sub-messages.
 option cc_enable_arenas = true;
 
-// Parameters of a distributed point function (DPF).
+// Describes the type of a single DPF output value. Any additional types added
+// here should also be supported in internal/value_type_helpers.h.
+// LINT.IfChange
+message ValueType {
+  // Describes an integer modulo 2^l. Maps to the C++ types `uint8_t`,
+  // `uint16_t`, `uint32_t`, `uint64_t`, and `absl::uint128`.
+  message Integer {
+    // Number of bits per integer. Must be a power of 2 and at most 128.
+    int32 bitsize = 1;
+  }
+
+  // Describes a tuple of value types.
+  message Tuple {
+    repeated ValueType elements = 1;
+  }
+
+  oneof type {
+    // A single integer modulo 2^l.
+    Integer integer = 1;
+    // A tuple of values.
+    Tuple tuple = 2;
+  }
+  // Do not add fields outside of the `oneof` above, to ensure that messages
+  // with known ValueTypes are serialized deterministically. See the
+  // documentation of `value_correction_functions_` in
+  // distributed_point_function.h for details.
+}
+
+// Used to correct output values to the desired DPF magnitude. Holds the values
+// corresponding to the types defined in `ValueType`.
+message Value {
+  message Integer {
+    oneof value {
+      // Any value up to 64 bits.
+      uint64 value_uint64 = 1;
+      // 128-bit values.
+      Block value_uint128 = 2;
+    }
+  }
+
+  message Tuple {
+    repeated Value elements = 1;
+  }
+
+  oneof value {
+    Integer integer = 1;
+    Tuple tuple = 2;
+  }
+}
+// LINT.ThenChange(
+//   internal/value_type_helpers.h,
+//   internal/value_type_helpers.cc
+// )
+
+// Parameters of a single hierarchy level of a distributed point function (DPF).
 message DpfParameters {
   // Base-2 logarithm of the number of elements.
   int32 log_domain_size = 1;
-  // Number of bits per output value in case outputs are single integers.
-  // Must be a power of 2 and at most 128.
-  int32 element_bitsize = 2;
+  // Deprecated field for simple integers. `element_bitsize: x` is equivalent to
+  // `value_type { integer { bitsize: x } }`. If `value_type` is set,
+  // then `element_bitsize` is ignored.
+  int32 element_bitsize = 2 [deprecated = true];
+  // Describes the type of output values at this hierarchy level.
+  ValueType value_type = 3;
 }
 
 // A single 128-bit AES block.
@@ -41,9 +98,12 @@ message CorrectionWord {
   // Correction bits for the left and right control bits.
   bool control_left = 2;
   bool control_right = 3;
-  // Block used to correct the output value at the previous tree layer. Only
-  // included if the previous tree layer is an output layer.
-  Block output = 4;
+  // Reserved for deprecated value correction field.
+  reserved 4;
+  // Used to correct the output value at the previous tree layer. Only included
+  // if the previous tree layer is an output layer. Repeated to capture the case
+  // where multiple correction values are needed due to packing.
+  repeated Value value_correction = 5;
 }
 
 // A key of a distributed point function (DPF).
@@ -54,8 +114,10 @@ message DpfKey {
   repeated CorrectionWord correction_words = 2;
   // Party this DpfKey belongs to (0 or 1).
   int32 party = 3;
-  // Output correction for the last layer.
-  Block last_level_output_correction = 4;
+  // Deprecated last level value correction.
+  reserved 4;
+  // Output correction for the last level of the evaluation tree.
+  repeated Value last_level_value_correction = 5;
 }
 
 // Maps a single prefix of a DPF index to a PRG seed. Used to store partial

@@ -17,44 +17,102 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "dpf/internal/status_matchers.h"
+
 namespace distributed_point_functions {
 namespace dpf_internal {
 namespace {
 
 using ::testing::ElementsAre;
 
-TEST(ArrayConversionTest, TestUint128ToArray) {
-  absl::uint128 block =
-      absl::MakeUint128(0x0f0e0d0c0b0a0908, 0x0706050403020100);
-  EXPECT_THAT(Uint128ToArray<uint8_t>(block),
-              ElementsAre(0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-                          0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F));
-  EXPECT_THAT(Uint128ToArray<uint16_t>(block),
-              ElementsAre(0x0100, 0x0302, 0x0504, 0x0706, 0x0908, 0x0b0a,
-                          0x0d0c, 0x0f0e));
-  EXPECT_THAT(Uint128ToArray<uint32_t>(block),
-              ElementsAre(0x03020100, 0x07060504, 0x0b0a0908, 0x0f0e0d0c));
-  EXPECT_THAT(Uint128ToArray<uint64_t>(block),
-              ElementsAre(0x0706050403020100, 0x0f0e0d0c0b0a0908));
-  EXPECT_THAT(Uint128ToArray<absl::uint128>(block), ElementsAre(block));
+template <typename T>
+class ValueTypeIntegerTest : public testing::Test {};
+using IntegerTypes =
+    ::testing::Types<uint8_t, uint16_t, uint32_t, uint64_t, absl::uint128>;
+TYPED_TEST_SUITE(ValueTypeIntegerTest, IntegerTypes);
+
+TYPED_TEST(ValueTypeIntegerTest, GetValueTypeProtoForIntegers) {
+  ValueType value_type = GetValueTypeProtoFor<TypeParam>();
+
+  EXPECT_TRUE(value_type.has_integer());
+  EXPECT_EQ(value_type.integer().bitsize(), sizeof(TypeParam) * 8);
 }
 
-TEST(ArrayConversionTest, TestArrayToUint128) {
-  absl::uint128 expected =
-      absl::MakeUint128(0x0f0e0d0c0b0a0908, 0x0706050403020100);
-  EXPECT_EQ(
-      ArrayToUint128<uint8_t>({0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-                               0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F}),
-      expected);
-  EXPECT_EQ(ArrayToUint128<uint16_t>({0x0100, 0x0302, 0x0504, 0x0706, 0x0908,
-                                      0x0b0a, 0x0d0c, 0x0f0e}),
-            expected);
-  EXPECT_EQ(ArrayToUint128<uint32_t>(
-                {0x03020100, 0x07060504, 0x0b0a0908, 0x0f0e0d0c}),
-            expected);
-  EXPECT_EQ(ArrayToUint128<uint64_t>({0x0706050403020100, 0x0f0e0d0c0b0a0908}),
-            expected);
-  EXPECT_EQ(ArrayToUint128<absl::uint128>({expected}), expected);
+TYPED_TEST(ValueTypeIntegerTest, TestValueTypesAreEqual) {
+  ValueType value_type_1 = GetValueTypeProtoFor<TypeParam>(), value_type_2;
+  value_type_2.mutable_integer()->set_bitsize(sizeof(TypeParam) * 8);
+
+  EXPECT_TRUE(ValueTypesAreEqual(value_type_1, value_type_2));
+  EXPECT_TRUE(ValueTypesAreEqual(value_type_2, value_type_1));
+}
+
+TYPED_TEST(ValueTypeIntegerTest, TestValueTypesAreNotEqual) {
+  ValueType value_type_1 = GetValueTypeProtoFor<TypeParam>(), value_type_2;
+  value_type_2.mutable_integer()->set_bitsize(sizeof(TypeParam) * 8 * 2);
+
+  EXPECT_FALSE(ValueTypesAreEqual(value_type_1, value_type_2));
+  EXPECT_FALSE(ValueTypesAreEqual(value_type_2, value_type_1));
+}
+
+template <typename T>
+class ValueTypeTupleTest : public testing::Test {};
+using TupleTypes = ::testing::Types<Tuple<uint64_t>, Tuple<uint64_t, uint64_t>,
+                                    Tuple<uint32_t, absl::uint128, uint8_t>,
+                                    Tuple<uint8_t, uint8_t, uint8_t, uint8_t>>;
+TYPED_TEST_SUITE(ValueTypeTupleTest, TupleTypes);
+
+TYPED_TEST(ValueTypeTupleTest, GetValueTypeProtoForTuples) {
+  ValueType value_type = GetValueTypeProtoFor<TypeParam>();
+
+  EXPECT_TRUE(value_type.has_tuple());
+  EXPECT_EQ(value_type.tuple().elements_size(), std::tuple_size<TypeParam>());
+  // Fold expression to iterate over tuple elements. See
+  // https://stackoverflow.com/a/54053084.
+  auto it = value_type.tuple().elements().begin();
+  std::apply(
+      [&it](auto&&... args) {
+        ((
+             // We need an extra lambda because we need multiple statements per
+             // tuple element.
+             [&it] {
+               EXPECT_TRUE(it->has_integer());
+               EXPECT_EQ(it->integer().bitsize(), (sizeof(args) * 8));
+               ++it;
+             }()),
+         ...);
+      },
+      TypeParam());
+}
+
+TYPED_TEST(ValueTypeTupleTest, TestValueTypesSizeIsCorrect) {
+  ValueType value_type = GetValueTypeProtoFor<TypeParam>();
+
+  DPF_ASSERT_OK_AND_ASSIGN(int size,
+                           ValidateValueTypeAndGetBitSize(value_type));
+
+  EXPECT_EQ(size, 8 * GetTotalSize<TypeParam>());
+}
+
+TEST(ValueTypeTupleTest, TestValueTypesAreEqual) {
+  using T1 = Tuple<uint32_t, absl::uint128, uint8_t>;
+  using T2 = Tuple<uint32_t, absl::uint128, uint8_t>;
+
+  ValueType value_type_1 = GetValueTypeProtoFor<T1>();
+  ValueType value_type_2 = GetValueTypeProtoFor<T2>();
+
+  EXPECT_TRUE(ValueTypesAreEqual(value_type_1, value_type_2));
+  EXPECT_TRUE(ValueTypesAreEqual(value_type_2, value_type_1));
+}
+
+TEST(ValueTypeTupleTest, TestValueTypesAreNotEqual) {
+  using T1 = Tuple<uint32_t, absl::uint128, uint8_t>;
+  using T2 = Tuple<uint32_t, absl::uint128, uint16_t>;
+
+  ValueType value_type_1 = GetValueTypeProtoFor<T1>();
+  ValueType value_type_2 = GetValueTypeProtoFor<T2>();
+
+  EXPECT_FALSE(ValueTypesAreEqual(value_type_1, value_type_2));
+  EXPECT_FALSE(ValueTypesAreEqual(value_type_2, value_type_1));
 }
 
 }  // namespace

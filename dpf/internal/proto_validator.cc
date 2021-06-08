@@ -1,8 +1,35 @@
 #include "dpf/internal/proto_validator.h"
 
+#include "dpf/internal/value_type_helpers.h"
 #include "dpf/status_macros.h"
 
 namespace distributed_point_functions::dpf_internal {
+
+namespace {
+
+bool ParametersAreEqual(const DpfParameters& lhs, const DpfParameters& rhs) {
+  if (lhs.log_domain_size() != rhs.log_domain_size()) {
+    return false;
+  }
+  if (lhs.has_value_type() && rhs.has_value_type()) {
+    return dpf_internal::ValueTypesAreEqual(lhs.value_type(), rhs.value_type());
+  }
+
+  // Legacy element_bitsize support.
+  if (!lhs.has_value_type() && rhs.has_value_type()) {
+    ValueType lhs_value_type;
+    lhs_value_type.mutable_integer()->set_bitsize(lhs.element_bitsize());
+    return dpf_internal::ValueTypesAreEqual(lhs_value_type, rhs.value_type());
+  }
+  if (lhs.has_value_type() && !rhs.has_value_type()) {
+    ValueType rhs_value_type;
+    rhs_value_type.mutable_integer()->set_bitsize(rhs.element_bitsize());
+    return dpf_internal::ValueTypesAreEqual(lhs.value_type(), rhs_value_type);
+  }
+  return lhs.element_bitsize() == rhs.element_bitsize();
+}
+
+}  // namespace
 
 ProtoValidator::ProtoValidator(std::vector<DpfParameters> parameters,
                                int tree_levels_needed,
@@ -24,8 +51,20 @@ absl::StatusOr<std::unique_ptr<ProtoValidator>> ProtoValidator::Create(
   // Also keep track of the height needed for the evaluation tree so far.
   int tree_levels_needed = 0;
   for (int i = 0; i < static_cast<int>(parameters.size()); ++i) {
-    int log_element_size =
-        static_cast<int>(std::log2(parameters[i].element_bitsize()));
+    int log_element_size;
+    if (parameters[i].has_value_type()) {
+      DPF_ASSIGN_OR_RETURN(int element_size, ValidateValueTypeAndGetBitSize(
+                                                 parameters[i].value_type()));
+      log_element_size = static_cast<int>(std::ceil(std::log2(element_size)));
+    } else {
+      log_element_size =
+          static_cast<int>(std::log2(parameters[i].element_bitsize()));
+    }
+    if (log_element_size > 7) {
+      return absl::InvalidArgumentError(
+          "ValueTypes of size more than 128 bits are not supported");
+    }
+
     // The tree level depends on the domain size and the element size. A single
     // AES block can fit 128 = 2^7 bits, so usually tree_level ==
     // log_domain_size iff log_element_size == 7. For smaller element sizes, we
@@ -56,10 +95,10 @@ absl::Status ProtoValidator::ValidateParameters(
   // Sentinel values for checking that domain sizes are increasing and not too
   // far apart, and element sizes are non-decreasing.
   int previous_log_domain_size = 0;
-  int previous_element_bitsize = 1;
+  int previous_value_type_size = 1;
   for (int i = 0; i < static_cast<int>(parameters.size()); ++i) {
     // Check log_domain_size.
-    int32_t log_domain_size = parameters[i].log_domain_size();
+    int log_domain_size = parameters[i].log_domain_size();
     if (log_domain_size < 0) {
       return absl::InvalidArgumentError(
           "`log_domain_size` must be non-negative");
@@ -81,25 +120,24 @@ absl::Status ProtoValidator::ValidateParameters(
     }
     previous_log_domain_size = log_domain_size;
 
-    // Check element_bitsize.
-    int32_t element_bitsize = parameters[i].element_bitsize();
-    if (element_bitsize < 1) {
-      return absl::InvalidArgumentError("`element_bitsize` must be positive");
+    int value_type_size;
+    if (!parameters[i].has_value_type()) {
+      ValueType value_type;
+      value_type.mutable_integer()->set_bitsize(
+          parameters[i].element_bitsize());
+      DPF_ASSIGN_OR_RETURN(value_type_size,
+                           ValidateValueTypeAndGetBitSize(value_type));
+    } else {
+      DPF_ASSIGN_OR_RETURN(value_type_size, ValidateValueTypeAndGetBitSize(
+                                                parameters[i].value_type()));
     }
-    if (element_bitsize > 128) {
+
+    if (value_type_size < previous_value_type_size) {
       return absl::InvalidArgumentError(
-          "`element_bitsize` must be less than or equal to 128");
-    }
-    if ((element_bitsize & (element_bitsize - 1)) != 0) {
-      return absl::InvalidArgumentError(
-          "`element_bitsize` must be a power of 2");
-    }
-    if (element_bitsize < previous_element_bitsize) {
-      return absl::InvalidArgumentError(
-          "`element_bitsize` fields must be non-decreasing in "
+          "`value_type` fields must be of non-decreasing size in "
           "`parameters`");
     }
-    previous_element_bitsize = element_bitsize;
+    previous_value_type_size = value_type_size;
   }
   return absl::OkStatus();
 }
@@ -109,9 +147,9 @@ absl::Status ProtoValidator::ValidateDpfKey(const DpfKey& key) const {
   if (!key.has_seed()) {
     return absl::InvalidArgumentError("key.seed must be present");
   }
-  if (!key.has_last_level_output_correction()) {
+  if (key.last_level_value_correction().empty()) {
     return absl::InvalidArgumentError(
-        "key.last_level_output_correction must be present");
+        "key.last_level_value_correction must be present");
   }
   // Check that `key` is valid for the DPF defined by `parameters_`.
   if (key.correction_words_size() != tree_levels_needed_ - 1) {
@@ -125,10 +163,12 @@ absl::Status ProtoValidator::ValidateDpfKey(const DpfKey& key) const {
       // last_level_output_correction.
       continue;
     }
-    if (!key.correction_words(hierarchy_to_tree_[i]).has_output()) {
+    if (key.correction_words(hierarchy_to_tree_[i])
+            .value_correction()
+            .empty()) {
       return absl::InvalidArgumentError(absl::StrCat(
           "Malformed DpfKey: expected correction_words[", hierarchy_to_tree_[i],
-          "] to contain the output correction of hierarchy level ", i));
+          "] to contain the value correction of hierarchy level ", i));
     }
   }
   return absl::OkStatus();
@@ -141,10 +181,7 @@ absl::Status ProtoValidator::ValidateEvaluationContext(
         "Number of parameters in `ctx` doesn't match");
   }
   for (int i = 0; i < ctx.parameters_size(); ++i) {
-    if (ctx.parameters(i).log_domain_size() !=
-            parameters_[i].log_domain_size() ||
-        ctx.parameters(i).element_bitsize() !=
-            parameters_[i].element_bitsize()) {
+    if (!ParametersAreEqual(parameters_[i], ctx.parameters(i))) {
       return absl::InvalidArgumentError(
           absl::StrCat("Parameter ", i, " in `ctx` doesn't match"));
     }

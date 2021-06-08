@@ -51,9 +51,10 @@ key {
       low: 16992210518729579018
     }
     control_right: true
-    output {
-      high: 7834142755536412310
-      low: 941634188165048259
+    value_correction: {
+      integer: {
+        value_uint64: 536412310
+      }
     }
   }
   correction_words {
@@ -70,9 +71,10 @@ key {
     }
     control_left: true
     control_right: true
-    output {
-      high: 5722283769841224518
-      low: 13088841294714862686
+    value_correction: {
+      integer: {
+        value_uint64: 841224518
+      }
     }
   }
   correction_words {
@@ -82,9 +84,10 @@ key {
     }
     control_right: true
   }
-  last_level_output_correction {
-    high: 17108324768471844854
-    low: 3998473854436321102
+  last_level_value_correction: {
+    integer: {
+      value_uint64: 8471844854
+    }
   }
 }
 previous_hierarchy_level: -1

@@ -49,7 +49,9 @@ bool ExtractAndClearLowestBit(absl::uint128& x) {
 DistributedPointFunction::DistributedPointFunction(
     std::unique_ptr<dpf_internal::ProtoValidator> proto_validator,
     Aes128FixedKeyHash prg_left, Aes128FixedKeyHash prg_right,
-    Aes128FixedKeyHash prg_value)
+    Aes128FixedKeyHash prg_value,
+    absl::flat_hash_map<std::string, ValueCorrectionFunction>
+        value_correction_functions)
     : proto_validator_(std::move(proto_validator)),
       parameters_(proto_validator_->parameters()),
       tree_levels_needed_(proto_validator_->tree_levels_needed()),
@@ -57,17 +59,11 @@ DistributedPointFunction::DistributedPointFunction(
       hierarchy_to_tree_(proto_validator_->hierarchy_to_tree()),
       prg_left_(std::move(prg_left)),
       prg_right_(std::move(prg_right)),
-      prg_value_(std::move(prg_value)) {
-  // For backwards compatibility, register all single unsigned integers as value
-  // types.
-  RegisterValueType<uint8_t>();
-  RegisterValueType<uint16_t>();
-  RegisterValueType<uint32_t>();
-  RegisterValueType<uint64_t>();
-  RegisterValueType<absl::uint128>();
-}
+      prg_value_(std::move(prg_value)),
+      value_correction_functions_(value_correction_functions) {}
 
-absl::StatusOr<absl::uint128> DistributedPointFunction::ComputeValueCorrection(
+absl::StatusOr<std::vector<Value>>
+DistributedPointFunction::ComputeValueCorrection(
     int hierarchy_level, absl::Span<const absl::uint128> seeds,
     absl::uint128 alpha, const absl::any& beta, bool invert) const {
   // Compute third PRG output component of current seed.
@@ -109,13 +105,12 @@ absl::Status DistributedPointFunction::GenerateNext(
       alpha_prefix = alpha >> shift_amount;
     }
     DPF_ASSIGN_OR_RETURN(
-        absl::uint128 value_correction,
+        std::vector<Value> value_correction,
         ComputeValueCorrection(hierarchy_level, seeds, alpha_prefix,
                                beta[hierarchy_level], control_bits[1]));
-    correction_word->mutable_output()->set_high(
-        absl::Uint128High64(value_correction));
-    correction_word->mutable_output()->set_low(
-        absl::Uint128Low64(value_correction));
+    for (const Value& value : value_correction) {
+      *(correction_word->add_value_correction()) = value;
+    }
   }
 
   // Line 5: Expand seeds from previous level.
@@ -499,11 +494,40 @@ DistributedPointFunction::ExpandAndUpdateContext(
   return expansion;
 }
 
+absl::StatusOr<std::string>
+DistributedPointFunction::SerializeValueTypeDeterministically(
+    const ValueType& value_type) {
+  // We need to do serialization to a string by hand, in order to use
+  // deterministic serialization.
+  std::string serialized_value_type;
+  {  // Start new block so that stream destructors are run before returning.
+    ::google::protobuf::io::StringOutputStream string_stream(
+        &serialized_value_type);
+    ::google::protobuf::io::CodedOutputStream coded_stream(&string_stream);
+    coded_stream.SetSerializationDeterministic(true);
+    if (!value_type.SerializeToCodedStream(&coded_stream)) {
+      return absl::InternalError("Serializing value_type to string failed");
+    }
+  }
+  return serialized_value_type;
+}
+
 absl::StatusOr<DistributedPointFunction::ValueCorrectionFunction>
 DistributedPointFunction::GetValueCorrectionFunction(
     const DpfParameters& parameters) const {
-  int element_bitsize = parameters.element_bitsize();
-  auto it = value_correction_functions_.find(element_bitsize);
+  std::string serialized_value_type;
+  if (!parameters.has_value_type()) {
+    // Legacy support for DpfParameters with element_bitsize set directly.
+    ValueType value_type;
+    value_type.mutable_integer()->set_bitsize(parameters.element_bitsize());
+    DPF_ASSIGN_OR_RETURN(serialized_value_type,
+                         SerializeValueTypeDeterministically(value_type));
+  } else {
+    DPF_ASSIGN_OR_RETURN(
+        serialized_value_type,
+        SerializeValueTypeDeterministically(parameters.value_type()));
+  }
+  auto it = value_correction_functions_.find(serialized_value_type);
   if (it == value_correction_functions_.end()) {
     return absl::UnimplementedError(absl::StrCat(
         "No value correction function known for the following parameters:\n",
@@ -534,10 +558,25 @@ DistributedPointFunction::CreateIncremental(
   DPF_ASSIGN_OR_RETURN(Aes128FixedKeyHash prg_value,
                        Aes128FixedKeyHash::Create(kPrgKeyValue));
 
+  // For backwards compatibility, register all single unsigned integers as value
+  // types.
+  absl::flat_hash_map<std::string, ValueCorrectionFunction>
+      value_correction_functions;
+  DPF_RETURN_IF_ERROR(
+      RegisterValueTypeImpl<uint8_t>(value_correction_functions));
+  DPF_RETURN_IF_ERROR(
+      RegisterValueTypeImpl<uint16_t>(value_correction_functions));
+  DPF_RETURN_IF_ERROR(
+      RegisterValueTypeImpl<uint32_t>(value_correction_functions));
+  DPF_RETURN_IF_ERROR(
+      RegisterValueTypeImpl<uint64_t>(value_correction_functions));
+  DPF_RETURN_IF_ERROR(
+      RegisterValueTypeImpl<absl::uint128>(value_correction_functions));
+
   // Copy parameters and return new DPF.
   return absl::WrapUnique(new DistributedPointFunction(
       std::move(proto_validator), std::move(prg_left), std::move(prg_right),
-      std::move(prg_value)));
+      std::move(prg_value), std::move(value_correction_functions)));
 }
 
 absl::StatusOr<std::pair<DpfKey, DpfKey>>
@@ -598,6 +637,7 @@ DistributedPointFunction::GenerateKeysIncremental(
 
   // Line 4: Compute correction words for each level after the first one.
   keys[0].mutable_correction_words()->Reserve(tree_levels_needed_ - 1);
+  keys[1].mutable_correction_words()->Reserve(tree_levels_needed_ - 1);
   for (int i = 1; i < tree_levels_needed_; i++) {
     DPF_RETURN_IF_ERROR(GenerateNext(i, alpha, beta, absl::MakeSpan(seeds),
                                      absl::MakeSpan(control_bits),
@@ -606,17 +646,13 @@ DistributedPointFunction::GenerateKeysIncremental(
 
   // Compute output correction word for last layer.
   DPF_ASSIGN_OR_RETURN(
-      absl::uint128 last_level_output_correction,
+      std::vector<Value> last_level_value_correction,
       ComputeValueCorrection(parameters_.size() - 1, seeds, alpha, beta.back(),
                              control_bits[1]));
-  keys[0].mutable_last_level_output_correction()->set_high(
-      absl::Uint128High64(last_level_output_correction));
-  keys[0].mutable_last_level_output_correction()->set_low(
-      absl::Uint128Low64(last_level_output_correction));
-  keys[1].mutable_last_level_output_correction()->set_high(
-      absl::Uint128High64(last_level_output_correction));
-  keys[1].mutable_last_level_output_correction()->set_low(
-      absl::Uint128Low64(last_level_output_correction));
+  for (const Value& value : last_level_value_correction) {
+    *(keys[0].add_last_level_value_correction()) = value;
+    *(keys[1].add_last_level_value_correction()) = value;
+  }
 
   return std::make_pair(std::move(keys[0]), std::move(keys[1]));
 }

@@ -65,14 +65,27 @@ class DistributedPointFunction {
   DistributedPointFunction(const DistributedPointFunction&) = delete;
   DistributedPointFunction& operator=(const DistributedPointFunction&) = delete;
 
+  // Registers the template parameter type with this DPF. Must be called before
+  // generating any keys that use this value type. For backwards compatibility,
+  // this function is called by `Create` and `CreateIncremental` for all
+  // unsigned integer types, including absl::uint128. Aside from these, supports
+  // `std::tuple`s of values.
+  //
+  // Returns OK on success and otherwise an INTERNAL status describing the
+  // failure.
+  template <typename T>
+  absl::Status RegisterValueType() {
+    return RegisterValueTypeImpl<T>(value_correction_functions_);
+  }
+
   // Generates a pair of keys for a DPF that evaluates to `beta` when evaluated
-  // `alpha`. `beta` may be any numeric type.
+  // `alpha`. The type of `beta` must match the ValueType passed in `parameters`
+  // at construction.
   //
   // Returns INVALID_ARGUMENT if used on an incremental DPF with more
   // than one set of parameters, if `alpha` is outside of the domain specified
-  // at construction, or if `beta` does not match the element type passed at
+  // at construction, or if `beta` does not match the value type passed at
   // construction.
-  //
   absl::StatusOr<std::pair<DpfKey, DpfKey>> GenerateKeys(
       absl::uint128 alpha, absl::uint128 beta) const {
     return GenerateKeysIncremental(alpha, absl::MakeConstSpan(&beta, 1));
@@ -88,17 +101,16 @@ class DistributedPointFunction {
   }
 
   // Generates a pair of keys for an incremental DPF. For each parameter i
-  // passed at construction, the DPF evaluates to `beta[i]` at the first
+  // passed at construction, the DPF evaluates to `beta[i]` at the lowest
   // `parameters_[i].log_domain_size()` bits of `alpha`.
   //
-  // `beta` must be a span of absl::uint128 values, or a span of unsigned
-  // integers (wrapped in absl::any), where the integer at `beta[i]` matches the
-  // size passed in `parameters[i]` at construction.
+  // `beta` must be a span of absl::uint128 values, or a span of objects wrapped
+  // in absl::any, where `beta[i]` matches the ValueType passed in
+  // `parameters[i]` at construction.
   //
   // Returns INVALID_ARGUMENT if `beta.size() != parameters_.size()`, if `alpha`
   // is outside of the domain specified at construction, or if `beta` does not
   // match the element type passed at construction.
-  //
   absl::StatusOr<std::pair<DpfKey, DpfKey>> GenerateKeysIncremental(
       absl::uint128 alpha, absl::Span<const absl::any> beta) const;
 
@@ -177,30 +189,43 @@ class DistributedPointFunction {
   }
 
  private:
+  // BitVector is a vector of bools. Allows for faster access times than
+  // std::vector<bool>, as well as inlining if the size is small.
+  using BitVector = absl::InlinedVector<bool, 8 / sizeof(bool)>;
+
+  // Seeds and control bits resulting from a DPF expansion. This type is
+  // returned by `ExpandSeeds` and `ExpandAndUpdateContext`.
+  struct DpfExpansion {
+    std::vector<absl::uint128> seeds;
+    BitVector control_bits;
+  };
+
+  // A function for computing value corrections. Used as return type in
+  // `GetValueCorrectionFunction`.
+  using ValueCorrectionFunction = absl::StatusOr<std::vector<Value>> (*)(
+      absl::Span<const absl::uint128>, int block_index, const absl::any&, bool);
+
   // Private constructor, called by `CreateIncremental`.
   DistributedPointFunction(
       std::unique_ptr<dpf_internal::ProtoValidator> proto_validator,
       Aes128FixedKeyHash prg_left, Aes128FixedKeyHash prg_right,
-      Aes128FixedKeyHash prg_value);
-
-  // Registers the template parameter type with this DPF. Must be called before
-  // generating any keys that use this value type.
-  // For backwards compatibility, this function is called by `Create` and
-  // `CreateIncremental` for all unsigned integer types, including
-  // absl::uint128.
-  //
-  template <typename T>
-  void RegisterValueType();
+      Aes128FixedKeyHash prg_value,
+      absl::flat_hash_map<std::string, ValueCorrectionFunction>
+          value_correction_functions);
 
   // Computes the value correction for the given `hierarchy_level`, `seeds`,
   // index `alpha` and value `beta`. If `invert` is true, the individual values
   // in the returned block are multiplied element-wise by -1. Expands `seeds`
-  // using `prg_ctx_value_`, then calls ComputeValueCorrectionFor<T> for the
-  // right type depending on `parameters_[hierarchy_level].element_bitsize()`.
+  // using `prg_ctx_value_`, then calls the function returned by
+  // `GetValueCorrectionFunction(parameters_[hierarchy_level])` to obtain the
+  // value correction words.
+  //
+  // Returns multiple values in the case of packing, and a single Value
+  // otherwise.
   //
   // Returns INTERNAL in case the PRG expansion fails, and UNIMPLEMENTED if
   // `element_bitsize` is not supported.
-  absl::StatusOr<absl::uint128> ComputeValueCorrection(
+  absl::StatusOr<std::vector<Value>> ComputeValueCorrection(
       int hierarchy_level, absl::Span<const absl::uint128> seeds,
       absl::uint128 alpha, const absl::any& beta, bool invert) const;
 
@@ -228,17 +253,6 @@ class DistributedPointFunction {
   // block) from the given `domain_index` and `hierarchy_level`. Does NOT check
   // whether the given domain index fits in the domain at `hierarchy_level`.
   int DomainToBlockIndex(absl::uint128 domain_index, int hierarchy_level) const;
-
-  // BitVector is a vector of bools. Allows for faster access times than
-  // std::vector<bool>, as well as inlining if the size is small.
-  using BitVector = absl::InlinedVector<bool, 8 / sizeof(bool)>;
-
-  // Seeds and control bits resulting from a DPF expansion. This type is
-  // returned by `ExpandSeeds` and `ExpandAndUpdateContext`.
-  struct DpfExpansion {
-    std::vector<absl::uint128> seeds;
-    BitVector control_bits;
-  };
 
   // Performs DPF evaluation of the given `partial_evaluations` using
   // prg_ctx_left_ or prg_ctx_right_, and the given `correction_words`. At each
@@ -293,11 +307,11 @@ class DistributedPointFunction {
       int hierarchy_level, absl::Span<const absl::uint128> prefixes,
       EvaluationContext& ctx) const;
 
-  // A function for computing value corrections. Used as return type in
-  // `GetValueCorrectionFunction`.
-  using ValueCorrectionFunction = std::function<absl::StatusOr<absl::uint128>(
-      absl::Span<const absl::uint128>, int block_index, const absl::any&,
-      bool)>;
+  // Deterministically serializes the given value_type.
+  //
+  // Returns OK on success and INTERNAL in case serialization fails.
+  static absl::StatusOr<std::string> SerializeValueTypeDeterministically(
+      const ValueType& value_type);
 
   // Returns the value correction function for the given parameters.
   // For all value types except unsigned integers, these functions have to be
@@ -306,6 +320,13 @@ class DistributedPointFunction {
   // Returns UNIMPLEMENTED if no matching function was registered.
   absl::StatusOr<ValueCorrectionFunction> GetValueCorrectionFunction(
       const DpfParameters& parameters) const;
+
+  // Static implementation of RegisterValueType<T>, so we can call it from
+  // `Create`.
+  template <typename T>
+  static absl::Status RegisterValueTypeImpl(
+      absl::flat_hash_map<std::string, ValueCorrectionFunction>&
+          value_correction_functions);
 
   // Used to validate DpfKey and EvaluationContext protos.
   const std::unique_ptr<dpf_internal::ProtoValidator> proto_validator_;
@@ -333,10 +354,17 @@ class DistributedPointFunction {
   const Aes128FixedKeyHash prg_right_;
   const Aes128FixedKeyHash prg_value_;
 
-  // Maps element bit sizes to functions computing a value correction word.
-  // These functions be instantiations of
-  // dpf_internal::ComputeValueCorrectionFor.
-  absl::flat_hash_map<int, ValueCorrectionFunction> value_correction_functions_;
+  // Maps serialized `ValueType` messages to the correct value correction
+  // functions. Map values are instantiations of
+  // `dpf_internal::ComputeValueCorrectionFor`. Relies on protobuf's
+  // deterministic serialization feature. This has the caveat that messages with
+  // unknown fields are not supported. However, as long as `ValueType` consists
+  // of a single `oneof` field, this is fine, since we either know the value
+  // type and have deterministic serialization because the `ValueType` can only
+  // contain one field, or we don't know the type and wouldn't be able to
+  // correct values for it anyway.
+  absl::flat_hash_map<std::string, ValueCorrectionFunction>
+      value_correction_functions_;
 };
 
 //========================//
@@ -344,10 +372,18 @@ class DistributedPointFunction {
 //========================//
 
 template <typename T>
-void DistributedPointFunction::RegisterValueType() {
-  auto bit_size = static_cast<int>(sizeof(T)) * 8;
-  value_correction_functions_[bit_size] =
+absl::Status DistributedPointFunction::RegisterValueTypeImpl(
+    absl::flat_hash_map<std::string, ValueCorrectionFunction>&
+        value_correction_functions) {
+  ValueType value_type = dpf_internal::GetValueTypeProtoFor<T>();
+  absl::StatusOr<std::string> serialized_value_type =
+      SerializeValueTypeDeterministically(value_type);
+  if (!serialized_value_type.ok()) {
+    return serialized_value_type.status();
+  }
+  value_correction_functions[*serialized_value_type] =
       dpf_internal::ComputeValueCorrectionFor<T>;
+  return absl::OkStatus();
 }
 
 template <typename T>
@@ -364,7 +400,14 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
         "`hierarchy_level` must be non-negative and less than "
         "parameters_.size()");
   }
-  if (sizeof(T) * 8 != parameters_[hierarchy_level].element_bitsize()) {
+  if (parameters_[hierarchy_level].has_value_type()) {
+    if (!dpf_internal::ValueTypesAreEqual(
+            dpf_internal::GetValueTypeProtoFor<T>(),
+            parameters_[hierarchy_level].value_type())) {
+      return absl::InvalidArgumentError(
+          "Value type T doesn't match parameters at `hierarchy_level`");
+    }
+  } else if (sizeof(T) * 8 != parameters_[hierarchy_level].element_bitsize()) {
     return absl::InvalidArgumentError(
         "Size of template parameter T doesn't match the element size of "
         "`hierarchy_level`");
@@ -452,22 +495,24 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
 
   // Get output correction word from `ctx`.
   constexpr int elements_per_block = dpf_internal::ElementsPerBlock<T>();
-  const Block* output_correction = nullptr;
+  const ::google::protobuf::RepeatedPtrField<Value>* value_correction = nullptr;
   if (hierarchy_level < static_cast<int>(parameters_.size()) - 1) {
-    output_correction =
+    value_correction =
         &(ctx.key()
               .correction_words(hierarchy_to_tree_[hierarchy_level])
-              .output());
+              .value_correction());
   } else {
-    // Last level output correction is stored in an extra proto field, since we
+    // Last level value correction is stored in an extra proto field, since we
     // have one less correction word than tree levels.
-    output_correction = &(ctx.key().last_level_output_correction());
+    value_correction = &(ctx.key().last_level_value_correction());
   }
 
   // Split output correction into elements of type T.
-  std::array<T, elements_per_block> correction_ints =
-      dpf_internal::Uint128ToArray<T>(absl::MakeUint128(
-          output_correction->high(), output_correction->low()));
+  absl::StatusOr<std::array<T, elements_per_block>> correction_ints =
+      dpf_internal::ValuesToArray<T>(*value_correction);
+  if (!correction_ints.ok()) {
+    return correction_ints.status();
+  }
 
   // Compute output PRG value of expanded seeds using prg_ctx_value_.
   std::vector<absl::uint128> hashed_expansion(expansion->seeds.size());
@@ -483,14 +528,17 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
   const int corrected_elements_per_block =
       1 << (parameters_[hierarchy_level].log_domain_size() -
             hierarchy_to_tree_[hierarchy_level]);
+  DCHECK(corrected_elements_per_block <= elements_per_block);
   std::vector<T> corrected_expansion(hashed_expansion.size() *
                                      corrected_elements_per_block);
   for (int64_t i = 0; i < static_cast<int64_t>(hashed_expansion.size()); ++i) {
     std::array<T, elements_per_block> current_elements =
-        dpf_internal::Uint128ToArray<T>(hashed_expansion[i]);
+        dpf_internal::ConvertBytesToArrayOf<T>(absl::string_view(
+            reinterpret_cast<const char*>(&hashed_expansion[i]),
+            sizeof(absl::uint128)));
     for (int j = 0; j < corrected_elements_per_block; ++j) {
       if (expansion->control_bits[i]) {
-        current_elements[j] += correction_ints[j];
+        current_elements[j] += (*correction_ints)[j];
       }
       if (ctx.key().party() == 1) {
         current_elements[j] = -current_elements[j];

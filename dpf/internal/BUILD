@@ -9,8 +9,12 @@ licenses(["notice"])
 
 cc_library(
     name = "value_type_helpers",
+    srcs = ["value_type_helpers.cc"],
     hdrs = ["value_type_helpers.h"],
     deps = [
+        "//dpf:distributed_point_function_cc_proto",
+        "//dpf:tuple",
+        "@com_github_google_glog//:glog",
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status:statusor",
@@ -22,6 +26,7 @@ cc_test(
     name = "value_type_helpers_test",
     srcs = ["value_type_helpers_test.cc"],
     deps = [
+        ":status_matchers",
         ":value_type_helpers",
         "@com_github_google_googletest//:gtest_main",
     ],
@@ -52,6 +57,7 @@ cc_library(
         "proto_validator.h",
     ],
     deps = [
+        ":value_type_helpers",
         "//dpf:distributed_point_function_cc_proto",
         "//dpf:status_macros",
         "@com_google_absl//absl/container:flat_hash_map",
