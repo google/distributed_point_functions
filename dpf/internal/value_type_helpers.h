@@ -25,7 +25,6 @@
 #include "absl/base/casts.h"
 #include "absl/numeric/int128.h"
 #include "absl/status/statusor.h"
-#include "absl/types/any.h"
 #include "dpf/distributed_point_function.pb.h"
 #include "dpf/tuple.h"
 
@@ -38,6 +37,36 @@ namespace dpf_internal {
 // parameter to enable overloading.
 template <typename T>
 struct type_helper {};
+
+// Type trait for all integer types we support, i.e., 8 to 128 bit types.
+template <typename T>
+struct is_unsigned_integer {
+  static constexpr bool value =
+      std::is_same_v<T, uint8_t> || std::is_same_v<T, uint16_t> ||
+      std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t> ||
+      std::is_same_v<T, absl::uint128>;
+};
+template <typename T>
+inline constexpr bool is_unsigned_integer_v = is_unsigned_integer<T>::value;
+
+// Type trait for all supported types. Used to provide meaningful error messages
+// in std::enable_if template guards.
+
+// Integers: true.
+template <typename T, bool = is_unsigned_integer_v<T>>
+struct is_supported_type : std::true_type {};
+
+// Default case: false.
+template <typename T>
+struct is_supported_type<T, false> : std::false_type {};
+
+// Tuples of supported types: true.
+template <typename... ElementType>
+struct is_supported_type<Tuple<ElementType...>, false> {
+  static constexpr bool value = (is_supported_type<ElementType>::value && ...);
+};
+template <typename T>
+inline constexpr bool is_supported_type_v = is_supported_type<T>::value;
 
 // Helper function to compute the combined size of an element of type T. For
 // tuples, this is the sum of the sizes of its elements, ignoring alignment.
@@ -69,30 +98,6 @@ constexpr size_t ElementsPerBlock() {
   return sizeof(absl::uint128) / GetTotalSize<T>();
 }
 
-// Converts a given absl::any to a numerical type T. Tries converting directly
-// first. If that doesn't work, tries converting to absl::uin128 and then doing
-// a static_cast to T. Returns INVALID_ARGUMENT if both approaches fail.
-template <typename T>
-absl::StatusOr<T> ConvertAnyTo(const absl::any& in) {
-  // Try casting directly first.
-  const T* in_T = absl::any_cast<T>(&in);
-  if (in_T) {
-    return *in_T;
-  }
-  // Then try casting to absl::uint128 and then using a static_cast.
-  if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, uint16_t> ||
-                std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>) {
-    const absl::uint128* in_128 = absl::any_cast<absl::uint128>(&in);
-    if (in_128) {
-      return static_cast<T>(*in_128);
-    }
-  }
-  return absl::InvalidArgumentError(
-      absl::StrCat("Conversion of absl::any (typeid: ", in.type().name(),
-                   ") to type T (typeid: ", typeid(T).name(),
-                   ", size: ", sizeof(T), ") failed"));
-}
-
 // GetValueTypeProtoFor<T> Returns a `ValueType` message describing T.
 template <typename T>
 ValueType GetValueTypeProtoFor() {
@@ -101,11 +106,7 @@ ValueType GetValueTypeProtoFor() {
 
 // GetValueTypeProtoForImpl should be overloaded for any new types supported in
 // the `ValueType` proto.
-template <typename T,
-          typename = std::enable_if_t<
-              std::is_same_v<T, uint8_t> || std::is_same_v<T, uint16_t> ||
-              std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t> ||
-              std::is_same_v<T, absl::uint128>>>
+template <typename T, typename = std::enable_if_t<is_unsigned_integer_v<T>>>
 ValueType GetValueTypeProtoForImpl(type_helper<T>) {
   ValueType result;
   result.mutable_integer()->set_bitsize(8 * sizeof(T));
@@ -143,29 +144,33 @@ absl::StatusOr<T> ConvertValueTo(const Value& value) {
 }
 
 // Implementation of ConvertValueTo<T> for native integer types T.
-template <typename T,
-          typename = std::enable_if_t<
-              std::is_same_v<T, uint8_t> || std::is_same_v<T, uint16_t> ||
-              std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>>>
+template <typename T, typename = std::enable_if_t<is_unsigned_integer_v<T>>>
 absl::StatusOr<T> ConvertValueToImpl(const Value& value, type_helper<T>) {
   if (value.value_case() != Value::kInteger) {
     return absl::InvalidArgumentError("The given Value is not an integer");
   }
-  if (value.integer().value_case() != Value::Integer::kValueUint64) {
+  // We first parse the value into an absl::uint128, then check its range if it
+  // is supposed to be smaller than 128 bits.
+  absl::uint128 value_128;
+  if (value.integer().value_case() == Value::Integer::kValueUint64) {
+    value_128 = value.integer().value_uint64();
+  } else if (value.integer().value_case() == Value::Integer::kValueUint128) {
+    const Block& block = value.integer().value_uint128();
+    value_128 = absl::MakeUint128(block.high(), block.low());
+  } else {
     return absl::InvalidArgumentError(
-        "The given Value does not have value_uint64 set");
+        "Unknown value case for the given integer Value");
   }
-  uint64_t value_uint64 = value.integer().value_uint64();
-  if (value_uint64 > static_cast<uint64_t>(std::numeric_limits<T>::max())) {
+  // Check whether value is in range if it's smaller than 128 bits.
+  if (!std::is_same_v<T, absl::uint128> &&
+      absl::Uint128Low64(value_128) >
+          static_cast<uint64_t>(std::numeric_limits<T>::max())) {
     return absl::InvalidArgumentError(absl::StrCat(
-        "value_uint64 (= ", value_uint64, ") too large for the given type T"));
+        "value (= ", absl::Uint128Low64(value_128),
+        ") too large for the given type T (size ", sizeof(T), ")"));
   }
-  return static_cast<T>(value_uint64);
+  return static_cast<T>(value_128);
 }
-
-// Implementation of ConvertValueTo<T> for absl::uint128.
-absl::StatusOr<absl::uint128> ConvertValueToImpl(const Value& value,
-                                                 type_helper<absl::uint128>);
 
 // Implementation of ConvertValueTo<T> for Tuple<ElementType...>.
 // We need two templates here: One to select the right overload of
@@ -221,14 +226,14 @@ absl::StatusOr<TupleType> ConvertValueToImpl2(const Value& value,
 template <typename T>
 absl::StatusOr<std::array<T, ElementsPerBlock<T>()>> ValuesToArray(
     const ::google::protobuf::RepeatedPtrField<Value>& values) {
-  if (values.size() != ElementsPerBlock<T>()) {
+  if (values.size() != static_cast<int>(ElementsPerBlock<T>())) {
     return absl::InvalidArgumentError(absl::StrCat(
         "values.size() (= ", values.size(),
         ") does not match ElementsPerBlock<T>() (= ", ElementsPerBlock<T>(),
         ")"));
   }
   std::array<T, ElementsPerBlock<T>()> result;
-  for (int i = 0; i < ElementsPerBlock<T>(); ++i) {
+  for (int i = 0; i < static_cast<int>(ElementsPerBlock<T>()); ++i) {
     absl::StatusOr<T> element = ConvertValueTo<T>(values[i]);
     if (element.ok()) {
       result[i] = std::move(*element);
@@ -242,17 +247,6 @@ absl::StatusOr<std::array<T, ElementsPerBlock<T>()>> ValuesToArray(
 // ToValue Converts the argument to a Value.
 //
 // Overload for native integers.
-template <typename T,
-          typename = std::enable_if_t<
-              std::is_same_v<T, uint8_t> || std::is_same_v<T, uint16_t> ||
-              std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>>>
-Value ToValue(T input) {
-  Value result;
-  result.mutable_integer()->set_value_uint64(input);
-  return result;
-}
-
-// Overload for absl::uint128.
 Value ToValue(absl::uint128 input);
 
 // Overload for Tuple<ElementType...>.
@@ -330,7 +324,7 @@ std::array<T, ElementsPerBlock<T>()> ConvertBytesToArrayOf(
     absl::string_view bytes) {
   CHECK(bytes.size() >= ElementsPerBlock<T>() * GetTotalSize<T>());
   std::array<T, ElementsPerBlock<T>()> out;
-  for (int i = 0; i < ElementsPerBlock<T>(); ++i) {
+  for (int i = 0; i < static_cast<int>(ElementsPerBlock<T>()); ++i) {
     out[i] = ConvertBytesTo<T>(
         bytes.substr(i * GetTotalSize<T>(), GetTotalSize<T>()));
   }
@@ -345,9 +339,9 @@ std::array<T, ElementsPerBlock<T>()> ConvertBytesToArrayOf(
 // Returns multiple values in case of packing, and a single value otherwise.
 template <typename T>
 absl::StatusOr<std::vector<Value>> ComputeValueCorrectionFor(
-    absl::Span<const absl::uint128> seeds, int block_index,
-    const absl::any& beta, bool invert) {
-  absl::StatusOr<T> beta_T = ConvertAnyTo<T>(beta);
+    absl::Span<const absl::uint128> seeds, int block_index, const Value& beta,
+    bool invert) {
+  absl::StatusOr<T> beta_T = ConvertValueTo<T>(beta);
   if (!beta_T.ok()) {
     return beta_T.status();
   }

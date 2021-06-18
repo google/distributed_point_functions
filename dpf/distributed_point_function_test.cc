@@ -18,11 +18,13 @@
 #include <gtest/gtest.h>
 
 #include "absl/random/random.h"
+#include "absl/strings/str_format.h"
 #include "dpf/internal/status_matchers.h"
 
 namespace distributed_point_functions {
 namespace {
 
+using dpf_internal::IsOk;
 using dpf_internal::IsOkAndHolds;
 using dpf_internal::StatusIs;
 using ::testing::Ne;
@@ -56,6 +58,24 @@ TEST(DistributedPointFunction, TestCreateIncrementalLargeDomain) {
 
   EXPECT_THAT(DistributedPointFunction::CreateIncremental(parameters),
               IsOkAndHolds(Ne(nullptr)));
+}
+
+TEST(DistributedPointFunction, TestGenerateKeysIncrementalTemplate) {
+  std::vector<DpfParameters> parameters(2);
+
+  parameters[0].set_log_domain_size(10);
+  parameters[1].set_log_domain_size(20);
+  *(parameters[0].mutable_value_type()) =
+      dpf_internal::GetValueTypeProtoFor<uint16_t>();
+  *(parameters[1].mutable_value_type()) =
+      dpf_internal::GetValueTypeProtoFor<Tuple<uint32_t, uint64_t>>();
+  DPF_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<DistributedPointFunction> dpf,
+      DistributedPointFunction::CreateIncremental(parameters));
+
+  absl::StatusOr<std::pair<DpfKey, DpfKey>> keys = dpf->GenerateKeysIncremental(
+      23, uint16_t{42}, Tuple<uint32_t, uint64_t>{123, 456});
+  EXPECT_THAT(keys, IsOk());
 }
 
 class RegularDpfKeyGenerationTest
@@ -116,27 +136,13 @@ TEST_P(RegularDpfKeyGenerationTest, FailsIfBetaIsTooLarge) {
     return;
   }
 
+  const auto beta = absl::uint128{1} << element_bitsize_;
   EXPECT_THAT(
-      dpf_->GenerateKeys(0, (absl::uint128{1} << element_bitsize_)),
-      StatusIs(
-          absl::StatusCode::kInvalidArgument,
-          "`beta[0]` larger than `parameters[0].element_bitsize()` allows"));
-}
-
-TEST_P(RegularDpfKeyGenerationTest, FailsIfAnyIsWrongType) {
-  absl::any beta = uint64_t{23};
-
-  // We use an absl::any explicitly here to call the wrong function on purpose.
-  // Calling `GenerateKeys` with an uint64_t directly would succeed.
-  auto result = dpf_->GenerateKeys(0, beta);
-
-  if (element_bitsize_ == 64) {
-    // This should fail for all bit sizes except 64.
-    DPF_EXPECT_OK(result);
-  } else {
-    EXPECT_THAT(result, StatusIs(absl::StatusCode::kInvalidArgument,
-                                 StartsWith("Conversion of absl::any")));
-  }
+      dpf_->GenerateKeys(0, beta),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               absl::StrFormat(
+                   "Value (= %d) too large for ValueType with bitsize = %d",
+                   beta, element_bitsize_)));
 }
 
 INSTANTIATE_TEST_SUITE_P(VaryDomainAndElementSizes, RegularDpfKeyGenerationTest,
@@ -283,38 +289,6 @@ class IncrementalDpfTest : public testing::TestWithParam<
   int level_step_;
   std::unique_ptr<dpf_internal::ProtoValidator> proto_validator_;
 };
-
-TEST_P(IncrementalDpfTest, KeyGenerationWithDifferentTypesWorks) {
-  std::vector<absl::any> beta_any(parameters_.size());
-  for (int i = 0; i < static_cast<int>(parameters_.size()); ++i) {
-    switch (parameters_[i].element_bitsize()) {
-      case 8:
-        beta_any[i] = static_cast<uint8_t>(beta_[i]);
-        break;
-      case 16:
-        beta_any[i] = static_cast<uint16_t>(beta_[i]);
-        break;
-      case 32:
-        beta_any[i] = static_cast<uint32_t>(beta_[i]);
-        break;
-      case 64:
-        beta_any[i] = static_cast<uint64_t>(beta_[i]);
-        break;
-      case 128:
-        beta_any[i] = static_cast<absl::uint128>(beta_[i]);
-        break;
-      default:
-        ASSERT_TRUE(0) << "Unsupported element_bitsize";
-    }
-  }
-
-  DpfKey key_a, key_b;
-  DPF_ASSERT_OK_AND_ASSIGN(std::tie(key_a, key_b),
-                           dpf_->GenerateKeysIncremental(alpha_, beta_any));
-
-  DPF_EXPECT_OK(proto_validator_->ValidateDpfKey(key_a));
-  DPF_EXPECT_OK(proto_validator_->ValidateDpfKey(key_b));
-}
 
 TEST_P(IncrementalDpfTest, CreateEvaluationContextCreatesValidContext) {
   DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx,

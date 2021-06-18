@@ -1,5 +1,6 @@
 #include "dpf/internal/proto_validator.h"
 
+#include "absl/strings/str_format.h"
 #include "dpf/internal/value_type_helpers.h"
 #include "dpf/status_macros.h"
 
@@ -198,6 +199,40 @@ absl::Status ProtoValidator::ValidateEvaluationContext(
       ctx.partial_evaluations_level() >= ctx.previous_hierarchy_level()) {
     return absl::InvalidArgumentError(
         "ctx.previous_hierarchy_level must be less than ctx.hierarchy_level");
+  }
+  return absl::OkStatus();
+}
+
+absl::Status ProtoValidator::ValidateValue(const Value& value,
+                                           const ValueType& type) {
+  if (type.type_case() == ValueType::kInteger) {
+    // Integers.
+    if (value.value_case() != Value::kInteger) {
+      return absl::InvalidArgumentError("Expected integer value");
+    }
+    if (type.integer().bitsize() < 128) {
+      DPF_ASSIGN_OR_RETURN(auto value_128,
+                           ConvertValueTo<absl::uint128>(value));
+      if (value_128 >= absl::uint128{1} << type.integer().bitsize()) {
+        return absl::InvalidArgumentError(absl::StrFormat(
+            "Value (= %d) too large for ValueType with bitsize = %d", value_128,
+            type.integer().bitsize()));
+      }
+    }
+  } else if (type.type_case() == ValueType::kTuple) {
+    // Tuples.
+    if (value.value_case() != Value::kTuple) {
+      return absl::InvalidArgumentError("Expected tuple value");
+    }
+    if (value.tuple().elements_size() != type.tuple().elements_size()) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "Expected tuple value of size ", type.tuple().elements_size(),
+          " but got size ", value.tuple().elements_size()));
+    }
+    for (int i = 0; i < type.tuple().elements_size(); ++i) {
+      DPF_RETURN_IF_ERROR(
+          ValidateValue(value.tuple().elements(i), type.tuple().elements(i)));
+    }
   }
   return absl::OkStatus();
 }

@@ -33,6 +33,22 @@ class ProtoValidator {
   // Returns OK on success, and INVALID_ARGUMENT otherwise.
   absl::Status ValidateEvaluationContext(const EvaluationContext& ctx) const;
 
+  // Checks that `value` is valid for `type`.
+  // Returns OK on success and INVALID_ARGUMENT otherwise.
+  static absl::Status ValidateValue(const Value& value, const ValueType& type);
+
+  // Checks that `value` is valid for `parameters[i]` passed at construction.
+  // Returns OK on success and INVALID_ARGUMENT otherwise.
+  absl::Status ValidateValue(const Value& value, int i) const {
+    ValueType type;
+    if (parameters_[i].has_value_type()) {
+      type = parameters_[i].value_type();
+    } else {
+      type.mutable_integer()->set_bitsize(parameters_[i].element_bitsize());
+    }
+    return ValidateValue(value, type);
+  }
+
   // ProtoValidator is not copyable.
   ProtoValidator(const ProtoValidator&) = delete;
   ProtoValidator& operator=(const ProtoValidator&) = delete;

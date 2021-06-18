@@ -27,7 +27,6 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
-#include "absl/types/any.h"
 #include "dpf/aes_128_fixed_key_hash.h"
 #include "dpf/distributed_point_function.pb.h"
 #include "dpf/internal/proto_validator.h"
@@ -65,11 +64,21 @@ class DistributedPointFunction {
   DistributedPointFunction(const DistributedPointFunction&) = delete;
   DistributedPointFunction& operator=(const DistributedPointFunction&) = delete;
 
-  // Registers the template parameter type with this DPF. Must be called before
-  // generating any keys that use this value type. For backwards compatibility,
-  // this function is called by `Create` and `CreateIncremental` for all
-  // unsigned integer types, including absl::uint128. Aside from these, supports
-  // `std::tuple`s of values.
+  // Converts the argument to a `Value` proto. Also registers the corresponding
+  // value type with the DPF by calling `RegisterValueType<T>()`.
+  template <typename T>
+  absl::StatusOr<Value> ToValue(const T& in) {
+    if (absl::Status status = RegisterValueType<T>(); !status.ok()) {
+      return status;
+    }
+    return dpf_internal::ToValue(in);
+  }
+
+  // Registers the template parameter type with this DPF. Note that it is rarely
+  // necessary to call this function by hand: It is called by `Create` and
+  // `CreateIncremental` for all unsigned integer types, including
+  // absl::uint128, and on every call to ToValue<T>. Only call this function
+  // when passing `Value`s created by other means than ToValue<T>.
   //
   // Returns OK on success and otherwise an INTERNAL status describing the
   // failure.
@@ -82,49 +91,132 @@ class DistributedPointFunction {
   // `alpha`. The type of `beta` must match the ValueType passed in `parameters`
   // at construction.
   //
+  // This function provides three overloads: One with `absl::uint128` for
+  // `beta`, which implies the output type is a simple integer; One with a
+  // `Value` proto for `beta`, which can be used for all supported value types;
+  // And a templated version that computes the Value by calling ToValue<T> on
+  // the argument.
+  //
+  // Example Usages (assuming a std::unique_ptr<DistributedPointFunction> dpf):
+  //
+  //   // Simple integer:
+  //   dpf->GenerateKeys(23, 42);
+  //
+  //   // Explicit `Value` proto:
+  //   Value value;
+  //   value[1]->mutable_tuple->add_elements()
+  //     ->mutable_integer->set_value_uint64(12);
+  //   value[1]->mutable_tuple->add_elements()
+  //     ->mutable_integer->set_value_uint64(34);
+  //   // Must be called once before calling GenerateKeys for any type that is
+  //   // not a simple integer. The type should match the one in the
+  //   // DpfParameters passed at construction.
+  //   dpf->RegisterValueType<Tuple<uint32_t, uint64_t>>();
+  //   dpf->GenerateKeys(23, value);
+  //
+  //   // Templated version (no call to RegisterValueType needed):
+  //   dpf->GenerateKeys(23, Tuple<uint32_t, uint64_t>{12, 34});
+  //
   // Returns INVALID_ARGUMENT if used on an incremental DPF with more
   // than one set of parameters, if `alpha` is outside of the domain specified
   // at construction, or if `beta` does not match the value type passed at
   // construction.
-  absl::StatusOr<std::pair<DpfKey, DpfKey>> GenerateKeys(
-      absl::uint128 alpha, absl::uint128 beta) const {
+  // Returns FAILED_PRECONDITION if `RegisterValueType<T>` has not been called
+  // for the type in the `DpfParameters` passed at construction.
+
+  // Overload for simple integers.
+  absl::StatusOr<std::pair<DpfKey, DpfKey>> GenerateKeys(absl::uint128 alpha,
+                                                         absl::uint128 beta) {
     return GenerateKeysIncremental(alpha, absl::MakeConstSpan(&beta, 1));
   }
 
-  // Overload for types not convertible to absl::uint128.
-  template <typename T, typename = std::enable_if_t<
-                            !std::is_convertible_v<T, absl::uint128>>>
+  // Overload for explicit Value proto.
   absl::StatusOr<std::pair<DpfKey, DpfKey>> GenerateKeys(absl::uint128 alpha,
-                                                         const T& beta) const {
-    const absl::any beta_any = beta;
-    return GenerateKeysIncremental(alpha, absl::MakeConstSpan(&beta_any, 1));
+                                                         Value beta) {
+    return GenerateKeysIncremental(alpha, absl::MakeConstSpan(&beta, 1));
+  }
+
+  // Template for automatic conversion to Value proto. Disabled if the argument
+  // is convertible to `absl::uint128` or `Value` to make overloading
+  // unambiguous.
+  template <typename T, typename = std::enable_if_t<
+                            !std::is_convertible_v<T, absl::uint128> &&
+                            !std::is_convertible_v<T, Value> &&
+                            dpf_internal::is_supported_type_v<T>>>
+  absl::StatusOr<std::pair<DpfKey, DpfKey>> GenerateKeys(absl::uint128 alpha,
+                                                         const T& beta) {
+    absl::StatusOr<Value> value = ToValue<T>(beta);
+    if (!value.ok()) {
+      return value.status();
+    }
+    return GenerateKeysIncremental(alpha, absl::MakeConstSpan(&(*value), 1));
   }
 
   // Generates a pair of keys for an incremental DPF. For each parameter i
   // passed at construction, the DPF evaluates to `beta[i]` at the lowest
   // `parameters_[i].log_domain_size()` bits of `alpha`.
   //
-  // `beta` must be a span of absl::uint128 values, or a span of objects wrapped
-  // in absl::any, where `beta[i]` matches the ValueType passed in
-  // `parameters[i]` at construction.
+  // Similar to `GenerateKeys`, supports three overloads: One for simple
+  // integers, passed as an `absl::Span<const absl::uint128>`; One for a span of
+  // `Value` protos; And a variadic function template that automatically
+  // converts the passed arguments to a vector of `Value`s.
+  //
+  // Example Usages (assuming a std::unique_ptr<DistributedPointFunction> dpf):
+  //
+  //   // Simple integers:
+  //   std::vector<absl::uint128> beta{123, 456};
+  //   dpf->GenerateKeysIncremental(23, beta);
+  //
+  //   // Explicit Value protos:
+  //   std::vector<Value> beta(2);
+  //   value[0]->mutable_integer()->set_value_uint128(42);
+  //   value[1]->mutable_tuple->add_elements()
+  //   ->mutable_integer->set_value_uint64(12);
+  //   value[1]->mutable_tuple->add_elements()
+  //   ->mutable_integer->set_value_uint64(34);
+  //   // Must be called once before calling GenerateKeys for any type that is
+  //   // not a simple integer. The type should match the one in the
+  //   // DpfParameters passed at construction.
+  //   dpf->RegisterValueType<Tuple<uint32_t, uint64_t>>();
+  //   dpf->GenerateKeysIncremental(23, beta);
+  //
+  //   // Templated version (equivalent to the one above):
+  //   dpf->GenerateKeysIncremental(23, 42, Tuple<uint32_t, uint64_t>{12, 34}));
   //
   // Returns INVALID_ARGUMENT if `beta.size() != parameters_.size()`, if `alpha`
   // is outside of the domain specified at construction, or if `beta` does not
   // match the element type passed at construction.
-  absl::StatusOr<std::pair<DpfKey, DpfKey>> GenerateKeysIncremental(
-      absl::uint128 alpha, absl::Span<const absl::any> beta) const;
+  // Returns FAILED_PRECONDITION if `RegisterValueType<T>` has not been called
+  // for all types in the `DpfParameters` passed at construction.
 
-  // Overload for absl::Span<const absl::uint128>.
-  template <typename T,
-            typename = std::enable_if_t<
-                !std::is_convertible_v<T, absl::Span<const absl::any>> &&
-                std::is_convertible_v<T, absl::Span<const absl::uint128>>>>
+  // Overload for simple integers.
   absl::StatusOr<std::pair<DpfKey, DpfKey>> GenerateKeysIncremental(
-      absl::uint128 alpha, const T& beta) const {
-    absl::Span<const absl::uint128> beta_span(beta);
-    std::vector<absl::any> beta_any(beta_span.begin(), beta_span.end());
-    return GenerateKeysIncremental(alpha, beta_any);
+      absl::uint128 alpha, absl::Span<const absl::uint128> beta) {
+    std::vector<Value> values(beta.size());
+    for (int i = 0; i < static_cast<int>(beta.size()); ++i) {
+      absl::StatusOr<Value> value = ToValue(beta[i]);
+      if (!value.ok()) {
+        return value.status();
+      }
+      values[i] = std::move(*value);
+    }
+    return GenerateKeysIncremental(alpha, values);
   }
+
+  // Overload for Value protos.
+  absl::StatusOr<std::pair<DpfKey, DpfKey>> GenerateKeysIncremental(
+      absl::uint128 alpha, absl::Span<const Value> beta);
+
+  // Variadic template version. Disabled if the first argument is convertible to
+  // a span of `absl::uint128`s or `Value`s to make overloading unambiguous.
+  template <typename T0, typename... Tn,
+            typename = std::enable_if_t<
+                !std::is_convertible_v<T0, absl::Span<const Value>> &&
+                !std::is_convertible_v<T0, absl::Span<const absl::uint128>> &&
+                dpf_internal::is_supported_type_v<T0> &&
+                (dpf_internal::is_supported_type_v<Tn> && ...)>>
+  absl::StatusOr<std::pair<DpfKey, DpfKey>> GenerateKeysIncremental(
+      absl::uint128 alpha, T0&& beta_0, Tn&&... beta_n);
 
   // Returns an `EvaluationContext` for incrementally evaluating the given
   // DpfKey.
@@ -203,7 +295,7 @@ class DistributedPointFunction {
   // A function for computing value corrections. Used as return type in
   // `GetValueCorrectionFunction`.
   using ValueCorrectionFunction = absl::StatusOr<std::vector<Value>> (*)(
-      absl::Span<const absl::uint128>, int block_index, const absl::any&, bool);
+      absl::Span<const absl::uint128>, int block_index, const Value&, bool);
 
   // Private constructor, called by `CreateIncremental`.
   DistributedPointFunction(
@@ -227,14 +319,14 @@ class DistributedPointFunction {
   // `element_bitsize` is not supported.
   absl::StatusOr<std::vector<Value>> ComputeValueCorrection(
       int hierarchy_level, absl::Span<const absl::uint128> seeds,
-      absl::uint128 alpha, const absl::any& beta, bool invert) const;
+      absl::uint128 alpha, const Value& beta, bool invert) const;
 
   // Expands the PRG seeds at the next `tree_level` for an incremental DPF with
   // index `alpha` and values `beta`, updates `seeds` and `control_bits`, and
   // writes the next correction word to `keys`. Called from
   // `GenerateKeysIncremental`.
   absl::Status GenerateNext(int tree_level, absl::uint128 alpha,
-                            absl::Span<const absl::any> beta,
+                            absl::Span<const Value> beta,
                             absl::Span<absl::uint128> seeds,
                             absl::Span<bool> control_bits,
                             absl::Span<DpfKey> keys) const;
@@ -384,6 +476,38 @@ absl::Status DistributedPointFunction::RegisterValueTypeImpl(
   value_correction_functions[*serialized_value_type] =
       dpf_internal::ComputeValueCorrectionFor<T>;
   return absl::OkStatus();
+}
+
+template <typename T0, typename... Tn, typename /*= std::enable_if_t<...>*/>
+absl::StatusOr<std::pair<DpfKey, DpfKey>>
+DistributedPointFunction::GenerateKeysIncremental(absl::uint128 alpha,
+                                                  T0&& beta_0, Tn&&... beta_n) {
+  // Convert the first element of beta. We need to treat it separately to be
+  // able to check its type in the enable_if above.
+  absl::StatusOr<Value> value = ToValue(beta_0);
+  if (!value.ok()) {
+    return value.status();
+  }
+  std::vector<Value> values = {std::move(*value)};
+  values.reserve(1 + sizeof...(beta_n));
+  // Convert all values in the parameter pack, stopping at the first error.
+  absl::Status status = absl::OkStatus();
+  (([this, &status, &values, &value](auto&& beta_i) {
+     if (status.ok()) {
+       value = ToValue(beta_i);
+       if (value.ok()) {
+         values.push_back(std::move(*value));
+       } else {
+         status = value.status();
+       }
+     }
+   }(beta_n)),
+   ...);
+  // Return if there was an error during conversion, otherwise generate keys.
+  if (!status.ok()) {
+    return status;
+  }
+  return GenerateKeysIncremental(alpha, values);
 }
 
 template <typename T>

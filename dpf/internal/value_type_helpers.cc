@@ -52,19 +52,6 @@ bool ValueTypesAreEqual(const ValueType& lhs, const ValueType& rhs) {
   return false;
 }
 
-absl::StatusOr<absl::uint128> ConvertValueToImpl(const Value& value,
-                                                 type_helper<absl::uint128>) {
-  if (value.value_case() != Value::kInteger) {
-    return absl::InvalidArgumentError("The given Value is not an integer");
-  }
-  if (value.integer().value_case() != Value::Integer::kValueUint128) {
-    return absl::InvalidArgumentError(
-        "The given Value does not have value_uint128 set");
-  }
-  const Block& block = value.integer().value_uint128();
-  return absl::MakeUint128(block.high(), block.low());
-}
-
 Value ToValue(absl::uint128 input) {
   Value result;
   Block& block = *(result.mutable_integer()->mutable_value_uint128());

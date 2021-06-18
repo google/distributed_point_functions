@@ -19,6 +19,7 @@
 
 #include <limits>
 
+#include "distributed_point_function.h"
 #include "dpf/status_macros.h"
 
 namespace distributed_point_functions {
@@ -65,7 +66,7 @@ DistributedPointFunction::DistributedPointFunction(
 absl::StatusOr<std::vector<Value>>
 DistributedPointFunction::ComputeValueCorrection(
     int hierarchy_level, absl::Span<const absl::uint128> seeds,
-    absl::uint128 alpha, const absl::any& beta, bool invert) const {
+    absl::uint128 alpha, const Value& beta, bool invert) const {
   // Compute third PRG output component of current seed.
   std::array<absl::uint128, 2> value_correction_shares;
   DPF_RETURN_IF_ERROR(
@@ -84,7 +85,7 @@ DistributedPointFunction::ComputeValueCorrection(
 // Expands the PRG seeds at the next `tree_level`, updates `seeds` and
 // `control_bits`, and writes the next correction word to `keys`.
 absl::Status DistributedPointFunction::GenerateNext(
-    int tree_level, absl::uint128 alpha, absl::Span<const absl::any> beta,
+    int tree_level, absl::uint128 alpha, absl::Span<const Value> beta,
     absl::Span<absl::uint128> seeds, absl::Span<bool> control_bits,
     absl::Span<DpfKey> keys) const {
   // As in `GenerateKeysIncremental`, we annotate code with the corresponding
@@ -529,7 +530,7 @@ DistributedPointFunction::GetValueCorrectionFunction(
   }
   auto it = value_correction_functions_.find(serialized_value_type);
   if (it == value_correction_functions_.end()) {
-    return absl::UnimplementedError(absl::StrCat(
+    return absl::FailedPreconditionError(absl::StrCat(
         "No value correction function known for the following parameters:\n",
         parameters.DebugString(),
         "Did you call RegisterValueType<T>() with your value type?"));
@@ -581,7 +582,7 @@ DistributedPointFunction::CreateIncremental(
 
 absl::StatusOr<std::pair<DpfKey, DpfKey>>
 DistributedPointFunction::GenerateKeysIncremental(
-    absl::uint128 alpha, absl::Span<const absl::any> beta) const {
+    absl::uint128 alpha, absl::Span<const Value> beta) {
   // Check validity of beta.
   if (beta.size() != parameters_.size()) {
     return absl::InvalidArgumentError(
@@ -589,17 +590,9 @@ DistributedPointFunction::GenerateKeysIncremental(
         "construction");
   }
   for (int i = 0; i < static_cast<int>(parameters_.size()); ++i) {
-    // To simplify the interface, we allow absl::uint128 even for smaller
-    // element_bitsizes, as long as we're considering  single elements. If the
-    // conversion to absl::uint128 fails here, do nothing. If `beta[i]` is
-    // invalid, this will fail in `ComputeValueCorrection`.
-    absl::StatusOr<absl::uint128> beta_128 =
-        dpf_internal::ConvertAnyTo<absl::uint128>(beta[i]);
-    if (beta_128.ok() && parameters_[i].element_bitsize() < 128 &&
-        *beta_128 >= (absl::uint128{1} << (parameters_[i].element_bitsize()))) {
-      return absl::InvalidArgumentError(
-          absl::StrCat("`beta[", i, "]` larger than `parameters[", i,
-                       "].element_bitsize()` allows"));
+    absl::Status status = proto_validator_->ValidateValue(beta[i], i);
+    if (!status.ok()) {
+      return status;
     }
   }
 

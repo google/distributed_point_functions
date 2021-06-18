@@ -18,7 +18,6 @@ cc_library(
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/types:any",
     ],
 )
 
@@ -63,6 +62,7 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings:str_format",
     ],
 )
 
