@@ -166,7 +166,7 @@ absl::StatusOr<T> ConvertValueToImpl(const Value& value, type_helper<T>) {
       absl::Uint128Low64(value_128) >
           static_cast<uint64_t>(std::numeric_limits<T>::max())) {
     return absl::InvalidArgumentError(absl::StrCat(
-        "value (= ", absl::Uint128Low64(value_128),
+        "Value (= ", absl::Uint128Low64(value_128),
         ") too large for the given type T (size ", sizeof(T), ")"));
   }
   return static_cast<T>(value_128);

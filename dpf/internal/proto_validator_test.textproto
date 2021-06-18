@@ -17,15 +17,27 @@
 
 parameters {
   log_domain_size: 4
-  element_bitsize: 32
+  value_type {
+    integer {
+      bitsize: 32
+    }
+  }
 }
 parameters {
   log_domain_size: 6
-  element_bitsize: 32
+  value_type {
+    integer {
+      bitsize: 32
+    }
+  }
 }
 parameters {
   log_domain_size: 8
-  element_bitsize: 32
+  value_type {
+    integer {
+      bitsize: 32
+    }
+  }
 }
 key {
   seed {

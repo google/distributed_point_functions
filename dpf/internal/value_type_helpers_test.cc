@@ -23,8 +23,6 @@ namespace distributed_point_functions {
 namespace dpf_internal {
 namespace {
 
-using ::testing::ElementsAre;
-
 template <typename T>
 class ValueTypeIntegerTest : public testing::Test {};
 using IntegerTypes =
@@ -52,6 +50,40 @@ TYPED_TEST(ValueTypeIntegerTest, TestValueTypesAreNotEqual) {
 
   EXPECT_FALSE(ValueTypesAreEqual(value_type_1, value_type_2));
   EXPECT_FALSE(ValueTypesAreEqual(value_type_2, value_type_1));
+}
+
+TYPED_TEST(ValueTypeIntegerTest, ValueConversionFailsIfNotInteger) {
+  Value value;
+  value.mutable_tuple();
+
+  EXPECT_THAT(ConvertValueTo<TypeParam>(value),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "The given Value is not an integer"));
+}
+
+TYPED_TEST(ValueTypeIntegerTest, ValueConversionFailsIfInvalidIntegerCase) {
+  Value value;
+  value.mutable_integer();
+
+  EXPECT_THAT(ConvertValueTo<TypeParam>(value),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "Unknown value case for the given integer Value"));
+}
+
+TYPED_TEST(ValueTypeIntegerTest, ValueConversionFailsIfValueOutOfRange) {
+  Value value;
+  auto value_64 = uint64_t{1} << 32;
+  value.mutable_integer()->set_value_uint64(value_64);
+
+  if constexpr (sizeof(TypeParam) >= sizeof(uint64_t)) {
+    DPF_EXPECT_OK(ConvertValueTo<TypeParam>(value));
+  } else {
+    EXPECT_THAT(ConvertValueTo<TypeParam>(value),
+                StatusIs(absl::StatusCode::kInvalidArgument,
+                         absl::StrCat("Value (= ", value_64,
+                                      ") too large for the given type T (size ",
+                                      sizeof(TypeParam), ")")));
+  }
 }
 
 template <typename T>
@@ -91,6 +123,28 @@ TYPED_TEST(ValueTypeTupleTest, TestValueTypesSizeIsCorrect) {
                            ValidateValueTypeAndGetBitSize(value_type));
 
   EXPECT_EQ(size, 8 * GetTotalSize<TypeParam>());
+}
+
+TYPED_TEST(ValueTypeTupleTest, ValueConversionFailsIfValueIsNotATuple) {
+  Value value;
+  value.mutable_integer();
+
+  EXPECT_THAT(ConvertValueTo<Tuple<uint32_t>>(value),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "The given Value is not a tuple"));
+}
+
+TEST(ValueTypeTupleTest, ValueConversionFailsIfValueSizeDoesntMatchTupleSize) {
+  Value value;
+  value.mutable_tuple()->add_elements()->mutable_integer()->set_value_uint64(
+      1234);
+
+  using TupleType = Tuple<uint32_t, uint32_t>;
+  EXPECT_THAT(
+      ConvertValueTo<TupleType>(value),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          "The tuple in the given Value has the wrong number of elements"));
 }
 
 TEST(ValueTypeTupleTest, TestValueTypesAreEqual) {

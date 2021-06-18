@@ -198,7 +198,8 @@ absl::Status ProtoValidator::ValidateEvaluationContext(
   if (!ctx.partial_evaluations().empty() &&
       ctx.partial_evaluations_level() >= ctx.previous_hierarchy_level()) {
     return absl::InvalidArgumentError(
-        "ctx.previous_hierarchy_level must be less than ctx.hierarchy_level");
+        "ctx.previous_hierarchy_level must be less than "
+        "ctx.partial_evaluations_level");
   }
   return absl::OkStatus();
 }

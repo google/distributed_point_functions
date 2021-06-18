@@ -88,7 +88,10 @@ cc_test(
         ":proto_validator",
         ":proto_validator_test_textproto_embed",
         ":status_matchers",
+        ":value_type_helpers",
+        "//dpf:tuple",
         "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/strings:str_format",
         "@com_google_protobuf//:protobuf",
     ],
 )

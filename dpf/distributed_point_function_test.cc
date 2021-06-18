@@ -37,7 +37,8 @@ TEST(DistributedPointFunction, TestCreate) {
       DpfParameters parameters;
 
       parameters.set_log_domain_size(log_domain_size);
-      parameters.set_element_bitsize(element_bitsize);
+      parameters.mutable_value_type()->mutable_integer()->set_bitsize(
+          element_bitsize);
 
       EXPECT_THAT(DistributedPointFunction::Create(parameters),
                   IsOkAndHolds(Ne(nullptr)))
@@ -49,8 +50,8 @@ TEST(DistributedPointFunction, TestCreate) {
 
 TEST(DistributedPointFunction, TestCreateIncrementalLargeDomain) {
   std::vector<DpfParameters> parameters(2);
-  parameters[0].set_element_bitsize(128);
-  parameters[1].set_element_bitsize(128);
+  parameters[0].mutable_value_type()->mutable_integer()->set_bitsize(128);
+  parameters[1].mutable_value_type()->mutable_integer()->set_bitsize(128);
 
   // Test that creating an incremental DPF with a large total domain size works.
   parameters[0].set_log_domain_size(50);
@@ -78,6 +79,48 @@ TEST(DistributedPointFunction, TestGenerateKeysIncrementalTemplate) {
   EXPECT_THAT(keys, IsOk());
 }
 
+TEST(DistributedPointFunction, KeyGenerationFailsIfValueTypeNotRegistered) {
+  DpfParameters parameters;
+  parameters.set_log_domain_size(10);
+  parameters.mutable_value_type()
+      ->mutable_tuple()
+      ->add_elements()
+      ->mutable_integer()
+      ->set_bitsize(32);
+  DPF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<DistributedPointFunction> dpf,
+                           DistributedPointFunction::Create(parameters));
+
+  // Tuple<uint32_t> should not be registered by default.
+  absl::uint128 alpha = 23;
+  Value beta;
+  beta.mutable_tuple()->add_elements()->mutable_integer()->set_value_uint64(42);
+
+  EXPECT_THAT(dpf->GenerateKeys(alpha, beta),
+              StatusIs(absl::StatusCode::kFailedPrecondition,
+                       StartsWith("No value correction function known")));
+}
+
+TEST(DistributedPointFunction, EvaluationFailsIfOutputSizeTooLarge) {
+  std::vector<DpfParameters> parameters(2);
+  parameters[0].mutable_value_type()->mutable_integer()->set_bitsize(128);
+  parameters[1].mutable_value_type()->mutable_integer()->set_bitsize(128);
+  parameters[0].set_log_domain_size(50);
+  parameters[1].set_log_domain_size(100);
+  DPF_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<DistributedPointFunction> dpf,
+      DistributedPointFunction::CreateIncremental(parameters));
+
+  std::pair<DpfKey, DpfKey> keys;
+  DPF_ASSERT_OK_AND_ASSIGN(keys, dpf->GenerateKeysIncremental(123, 456u, 789u));
+  DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx,
+                           dpf->CreateEvaluationContext(keys.first));
+
+  EXPECT_THAT(dpf->EvaluateUntil<absl::uint128>(1, {}, ctx),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "Output size would be larger than 2**62. Please "
+                       "evaluate fewer hierarchy levels at once."));
+}
+
 class RegularDpfKeyGenerationTest
     : public testing::TestWithParam<std::tuple<int, int>> {
  public:
@@ -85,7 +128,8 @@ class RegularDpfKeyGenerationTest
     std::tie(log_domain_size_, element_bitsize_) = GetParam();
     DpfParameters parameters;
     parameters.set_log_domain_size(log_domain_size_);
-    parameters.set_element_bitsize(element_bitsize_);
+    parameters.mutable_value_type()->mutable_integer()->set_bitsize(
+        element_bitsize_);
     DPF_ASSERT_OK_AND_ASSIGN(dpf_,
                              DistributedPointFunction::Create(parameters));
     DPF_ASSERT_OK_AND_ASSIGN(
@@ -137,12 +181,11 @@ TEST_P(RegularDpfKeyGenerationTest, FailsIfBetaIsTooLarge) {
   }
 
   const auto beta = absl::uint128{1} << element_bitsize_;
-  EXPECT_THAT(
-      dpf_->GenerateKeys(0, beta),
-      StatusIs(absl::StatusCode::kInvalidArgument,
-               absl::StrFormat(
-                   "Value (= %d) too large for ValueType with bitsize = %d",
-                   beta, element_bitsize_)));
+
+  // Not testing error message, as it's an implementation detail of
+  // ProtoValidator.
+  EXPECT_THAT(dpf_->GenerateKeys(0, beta),
+              StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 INSTANTIATE_TEST_SUITE_P(VaryDomainAndElementSizes, RegularDpfKeyGenerationTest,
@@ -173,7 +216,8 @@ class IncrementalDpfTest : public testing::TestWithParam<
     parameters_.resize(parameters.size());
     for (int i = 0; i < static_cast<int>(parameters.size()); ++i) {
       parameters_[i].set_log_domain_size(parameters[i].log_domain_size);
-      parameters_[i].set_element_bitsize(parameters[i].element_bitsize);
+      parameters_[i].mutable_value_type()->mutable_integer()->set_bitsize(
+          parameters[i].element_bitsize);
     }
     DPF_ASSERT_OK_AND_ASSIGN(
         dpf_, DistributedPointFunction::CreateIncremental(parameters_));
@@ -297,9 +341,10 @@ TEST_P(IncrementalDpfTest, CreateEvaluationContextCreatesValidContext) {
 }
 
 TEST_P(IncrementalDpfTest, FailsIfPrefixNotPresentInCtx) {
-  if (parameters_.size() < 3 || parameters_[0].element_bitsize() != 128 ||
-      parameters_[1].element_bitsize() != 128 ||
-      parameters_[2].element_bitsize() != 128) {
+  if (parameters_.size() < 3 || parameters_[0].log_domain_size() < 1 ||
+      parameters_[0].value_type().integer().bitsize() != 128 ||
+      parameters_[1].value_type().integer().bitsize() != 128 ||
+      parameters_[2].value_type().integer().bitsize() != 128) {
     return;
   }
   DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx,
@@ -316,6 +361,126 @@ TEST_P(IncrementalDpfTest, FailsIfPrefixNotPresentInCtx) {
               StatusIs(absl::StatusCode::kInvalidArgument,
                        "Prefix not present in ctx.partial_evaluations at "
                        "hierarchy level 1"));
+}
+
+TEST_P(IncrementalDpfTest, FailsIfDuplicatePrefixInCtx) {
+  if (parameters_.size() < 3 || parameters_[0].log_domain_size() < 1 ||
+      parameters_[0].value_type().integer().bitsize() != 128 ||
+      parameters_[1].value_type().integer().bitsize() != 128 ||
+      parameters_[2].value_type().integer().bitsize() != 128) {
+    return;
+  }
+  DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx,
+                           dpf_->CreateEvaluationContext(keys_.first));
+
+  // Evaluate on prefixes 0 and 1, then delete partial evaluations for prefix 0.
+  DPF_ASSERT_OK(dpf_->EvaluateNext<absl::uint128>({}, ctx));
+  DPF_ASSERT_OK(dpf_->EvaluateNext<absl::uint128>({0, 1}, ctx));
+  *(ctx.add_partial_evaluations()) = ctx.partial_evaluations(0);
+
+  // The missing prefix corresponds to hierarchy level 1, even though we
+  // evaluate at level 2.
+  EXPECT_THAT(dpf_->EvaluateNext<absl::uint128>({0}, ctx),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "Duplicate prefix in `ctx.partial_evaluations()`"));
+}
+
+TEST_P(IncrementalDpfTest, EvaluationFailsOnEmptyContext) {
+  if (parameters_[0].value_type().integer().bitsize() != 128) {
+    return;
+  }
+  EvaluationContext ctx;
+
+  // We don't check the error message, since it depends on the ProtoValidator
+  // implementation which is tested in the corresponding unit test.
+  EXPECT_THAT(dpf_->EvaluateNext<absl::uint128>({}, ctx),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST_P(IncrementalDpfTest, EvaluationFailsIfHierarchyLevelNegative) {
+  if (parameters_[0].value_type().integer().bitsize() != 128) {
+    return;
+  }
+  DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx,
+                           dpf_->CreateEvaluationContext(keys_.first));
+
+  EXPECT_THAT(dpf_->EvaluateUntil<absl::uint128>(-1, {}, ctx),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "`hierarchy_level` must be non-negative and less than "
+                       "parameters_.size()"));
+}
+
+TEST_P(IncrementalDpfTest, EvaluationFailsIfHierarchyLevelTooLarge) {
+  if (parameters_[0].value_type().integer().bitsize() != 128) {
+    return;
+  }
+  DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx,
+                           dpf_->CreateEvaluationContext(keys_.first));
+
+  EXPECT_THAT(dpf_->EvaluateUntil<absl::uint128>(parameters_.size(), {}, ctx),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "`hierarchy_level` must be non-negative and less than "
+                       "parameters_.size()"));
+}
+
+TEST_P(IncrementalDpfTest, EvaluationFailsIfValueTypeDoesntMatch) {
+  using SomeStrangeType = Tuple<uint8_t, uint32_t, uint8_t, uint16_t, uint8_t>;
+  DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx,
+                           dpf_->CreateEvaluationContext(keys_.first));
+
+  EXPECT_THAT(
+      dpf_->EvaluateUntil<SomeStrangeType>(0, {}, ctx),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               "Value type T doesn't match parameters at `hierarchy_level`"));
+}
+
+TEST_P(IncrementalDpfTest, EvaluationFailsIfLevelAlreadyEvaluated) {
+  if (parameters_.size() < 2 ||
+      parameters_[0].value_type().integer().bitsize() != 128) {
+    return;
+  }
+  DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx,
+                           dpf_->CreateEvaluationContext(keys_.first));
+
+  DPF_ASSERT_OK(dpf_->EvaluateUntil<absl::uint128>(0, {}, ctx));
+
+  EXPECT_THAT(dpf_->EvaluateUntil<absl::uint128>(0, {}, ctx),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "`hierarchy_level` must be greater than "
+                       "`ctx.previous_hierarchy_level`"));
+}
+
+TEST_P(IncrementalDpfTest, EvaluationFailsIfPrefixesNotEmptyOnFirstCall) {
+  if (parameters_[0].value_type().integer().bitsize() != 128) {
+    return;
+  }
+  DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx,
+                           dpf_->CreateEvaluationContext(keys_.first));
+
+  EXPECT_THAT(
+      dpf_->EvaluateUntil<absl::uint128>(0, {0}, ctx),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          "`prefixes` must be empty if and only if this is the first call with "
+          "`ctx`."));
+}
+
+TEST_P(IncrementalDpfTest, EvaluationFailsIfPrefixOutOfRange) {
+  if (parameters_.size() < 2 ||
+      parameters_[0].value_type().integer().bitsize() != 128 ||
+      parameters_[1].value_type().integer().bitsize() != 128) {
+    return;
+  }
+  DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx,
+                           dpf_->CreateEvaluationContext(keys_.first));
+
+  DPF_ASSERT_OK(dpf_->EvaluateUntil<absl::uint128>(0, {}, ctx));
+  auto invalid_prefix = absl::uint128{1} << parameters_[0].log_domain_size();
+
+  EXPECT_THAT(dpf_->EvaluateUntil<absl::uint128>(1, {invalid_prefix}, ctx),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       StrFormat("Index %d out of range for hierarchy level 0",
+                                 invalid_prefix)));
 }
 
 TEST_P(IncrementalDpfTest, TestCorrectness) {
@@ -342,7 +507,7 @@ TEST_P(IncrementalDpfTest, TestCorrectness) {
 
   int num_levels = static_cast<int>(parameters_.size());
   for (int i = level_step_ - 1; i < num_levels; i += level_step_) {
-    switch (parameters_[i].element_bitsize()) {
+    switch (parameters_[i].value_type().integer().bitsize()) {
       case 8:
         EvaluateAndCheckLevel<uint8_t>(i, evaluation_points, ctx0, ctx1);
         break;

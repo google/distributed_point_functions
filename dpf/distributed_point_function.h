@@ -555,7 +555,7 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
         parameters_[previous_hierarchy_level].log_domain_size();
     for (absl::uint128 prefix : prefixes) {
       if (previous_log_domain_size < 128 &&
-          prefix > (absl::uint128{1} << previous_log_domain_size)) {
+          prefix >= (absl::uint128{1} << previous_log_domain_size)) {
         return absl::InvalidArgumentError(
             absl::StrFormat("Index %d out of range for hierarchy level %d",
                             prefix, previous_hierarchy_level));
@@ -563,6 +563,13 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
     }
   }
   int64_t prefixes_size = static_cast<int64_t>(prefixes.size());
+
+  int log_domain_size = parameters_[hierarchy_level].log_domain_size();
+  if (log_domain_size - previous_log_domain_size > 62) {
+    return absl::InvalidArgumentError(
+        "Output size would be larger than 2**62. Please evaluate fewer "
+        "hierarchy levels at once.");
+  }
 
   // The `prefixes` passed in by the caller refer to the domain of the previous
   // hierarchy level. However, because we batch multiple elements of type T in a
@@ -675,7 +682,6 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
   // Compute the number of outputs we will have. For each prefix, we will have a
   // full expansion from the previous heirarchy level to the current heirarchy
   // level.
-  int log_domain_size = parameters_[hierarchy_level].log_domain_size();
   DCHECK(log_domain_size - previous_log_domain_size < 63);
   int64_t outputs_per_prefix = int64_t{1}
                                << (log_domain_size - previous_log_domain_size);
