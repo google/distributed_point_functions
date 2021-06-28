@@ -9,6 +9,30 @@ package(
 licenses(["notice"])
 
 cc_library(
+    name = "int_mod_n",
+    hdrs = ["int_mod_n.h"],
+    deps = [
+        "//dpf/internal:value_type_helpers",
+        "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "int_mod_n_test",
+    srcs = ["int_mod_n_test.cc"],
+    deps = [
+        ":int_mod_n",
+        "//dpf/internal:status_matchers",
+        "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+cc_library(
     name = "distributed_point_function",
     srcs = ["distributed_point_function.cc"],
     hdrs = ["distributed_point_function.h"],
