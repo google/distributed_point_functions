@@ -32,6 +32,17 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "int_mod_n_benchmark",
+    srcs = ["int_mod_n_benchmark.cc"],
+    deps = [
+        ":int_mod_n",
+        "@com_github_google_benchmark//:benchmark_main",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
 cc_library(
     name = "distributed_point_function",
     srcs = ["distributed_point_function.cc"],
