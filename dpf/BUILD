@@ -10,12 +10,15 @@ licenses(["notice"])
 
 cc_library(
     name = "int_mod_n",
+    srcs = ["int_mod_n.cc"],
     hdrs = ["int_mod_n.h"],
     deps = [
-        "//dpf/internal:value_type_helpers",
+        "@com_github_google_glog//:glog",
+        "@com_google_absl//absl/container:inlined_vector",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
     ],
 )
 

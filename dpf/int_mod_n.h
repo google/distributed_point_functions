@@ -17,58 +17,151 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_DPF_INTERNAL_INT_MOD_N_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_DPF_INTERNAL_INT_MOD_N_H_
 
+#include <glog/logging.h>
+
+#include "absl/container/inlined_vector.h"
 #include "absl/numeric/int128.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
-#include "dpf/internal/value_type_helpers.h"
+#include "absl/strings/str_format.h"
 
 namespace distributed_point_functions {
 
-template <typename BaseInteger, BaseInteger modulus>
-class IntModN {
+// Base class holding common functions of IntModN that are independent of the
+// template parameter.
+class IntModNBase {
  public:
-  IntModN() : value_(0) {}
-  explicit IntModN(BaseInteger value) { value_ = value % modulus; }
+  // Computes the security level achievable when sampling `num_samples` elements
+  // with the given `kModulus`.
+  //
+  static double GetSecurityLevel(int num_samples, absl::uint128 modulus);
 
-  BaseInteger value() { return value_; }
+  // Checks if the given parameters are consistent and valid for an IntModN.
+  //
+  // Returns OK for valid parameters, and INVALID_ARGUMENT otherwise.
+  static absl::Status CheckParameters(int num_samples, int base_integer_bitsize,
+                                      absl::uint128 modulus,
+                                      double security_parameter);
 
-  void sub(const IntModN& a) { sub(a.value_); }
+  // Computes the number of bytes required to sample `num_samples` integers
+  // modulo `kModulus` with an underlying integer type of
+  // `base_integer_bitsize`.
+  //
+  // Returns INVALID_ARGUMENT if the achievable security level with the given
+  // parameters is less than `security_parameter`, or if the parameters are
+  // invalid.
+  static absl::StatusOr<int> GetNumBytesRequired(int num_samples,
+                                                 int base_integer_bitsize,
+                                                 absl::uint128 modulus,
+                                                 double security_parameter);
 
-  void add(const IntModN& a) { sub(modulus - a.value_); }
+  // Creates a value of type T from the given `bytes`, using little-endian
+  // encoding. Called by SampleFromBytes. Crashes if bytes.size() != sizeof(T).
+  //
+  // This is a reimplementation of dpf_internal::ConvertBytesTo for integers,
+  // to avoid depending on value_type_helpers here.
+  template <typename T>
+  static T ConvertBytesTo(absl::string_view bytes) {
+    CHECK(bytes.size() == sizeof(T));
+    T out{0};
+#ifdef ABSL_IS_LITTLE_ENDIAN
+    std::copy_n(bytes.begin(), sizeof(T), reinterpret_cast<char*>(&out));
+#else
+    for (int i = sizeof(T) - 1; i >= 0; --i) {
+      out |= absl::bit_cast<uint8_t>(bytes[i]);
+      out <<= 8;
+    }
+#endif
+    return out;
+  }
+};
 
-  //  Returns the number of (pseudo)random bytes required to extract
+template <typename BaseInteger, BaseInteger kModulus>
+class IntModN : public IntModNBase {
+  static_assert(sizeof(BaseInteger) <= sizeof(absl::uint128),
+                "BaseInteger may be at most 128 bits large");
+
+ public:
+  constexpr IntModN() : value_(0) {}
+  explicit constexpr IntModN(BaseInteger value) : value_(value % kModulus) {}
+
+  // Copyable.
+  constexpr IntModN(const IntModN& a) = default;
+
+  constexpr IntModN& operator=(const IntModN& a) = default;
+
+  // Assignment operators.
+  constexpr IntModN& operator=(const BaseInteger& a) {
+    value_ = a % kModulus;
+    return *this;
+  }
+
+  constexpr IntModN& operator+=(const IntModN& a) {
+    AddBaseInteger(a.value_);
+    return *this;
+  }
+
+  constexpr IntModN& operator-=(const IntModN& a) {
+    SubtractBaseInteger(a.value_);
+    return *this;
+  }
+
+  // Returns the underlying representation as a BaseInteger.
+  constexpr BaseInteger value() const { return value_; }
+
+  // Returns the number of (pseudo)random bytes required to extract
   // `num_samples` samples r1, ..., rn
-  //  so that the stream r1, ..., rn is close to a truly (pseudo) random
-  //  sequence up to total variation distance < 2^(-`security_parameter`)
+  // so that the stream r1, ..., rn is close to a truly (pseudo) random
+  // sequence up to total variation distance < 2^(-`security_parameter`)
   static absl::StatusOr<int> GetNumBytesRequired(int num_samples,
                                                  double security_parameter) {
-    // Compute the level of security that we will get, and fail if it is
-    // insufficient.
-    double sigma = 128 + 3 -
-                   (std::log2(static_cast<double>(modulus)) +
-                    std::log2(static_cast<double>(num_samples)) +
-                    std::log2(static_cast<double>(num_samples + 1)));
-    if (security_parameter > sigma) {
-      return absl::InvalidArgumentError(absl::StrCat(
-          "For num_samples = ", num_samples, " and modulus = ", modulus,
-          " this approach can only provide ", sigma,
-          " bits of statistical security. You can try calling this function "
-          "several times with smaller values of num_samples."));
-    }
-    // We start the sampling by requiring a 128-bit (16 bytes) block, see
-    // function `sample`.
-    return 16 + sizeof(BaseInteger) * (num_samples - 1);
+    return IntModNBase::GetNumBytesRequired(
+        num_samples, 8 * sizeof(BaseInteger), kModulus, security_parameter);
   }
+
+  // Extracts `samples.size()` samples r1, ..., rn so that the stream r1, ...,
+  // rn is close to a truly (pseudo) random sequence up to total variation
+  // distance < 2^(-`security_parameter`). Returns r1, ..., rn in `samples`.
+  //
+  // The optional template argument allows users to specify the number of
+  // samples at compile time, which can save heap allocations.
+  //
+  // Caution: For performance reasons, this function does not check whether
+  // `bytes` is long enough for the required number of samples and security
+  // parameter. Use `GetNumBytesRequired` or `SampleFromBytes` if such checks
+  // are needed.
+  template <int kCompiledNumSamples = 1>
+  static void UnsafeSampleFromBytes(absl::string_view bytes,
+                                    double security_parameter,
+                                    absl::Span<IntModN> samples) {
+    static_assert(kCompiledNumSamples >= 1);
+    absl::uint128 r = ConvertBytesTo<absl::uint128>(bytes.substr(0, 16));
+    absl::InlinedVector<BaseInteger, std::max(1, kCompiledNumSamples - 1)>
+        randomness(samples.size() - 1);
+    for (int i = 0; i < static_cast<int>(randomness.size()); ++i) {
+      randomness[i] = ConvertBytesTo<BaseInteger>(
+          bytes.substr(16 + i * sizeof(BaseInteger), sizeof(BaseInteger)));
+    }
+    for (int i = 0; i < static_cast<int>(samples.size()); ++i) {
+      samples[i] = IntModN(static_cast<BaseInteger>(r % kModulus));
+      if (i < static_cast<int>(randomness.size())) {
+        r /= kModulus;
+        r <<= (sizeof(BaseInteger) * 8);
+        r |= randomness[i];
+      }
+    }
+  }
+
   //  Checks that length(`bytes`) is enough to extract
   // `samples.size()` samples r1, ..., rn
   //  so that the stream r1, ..., rn is close to a truly (pseudo) random
   //  sequence up to total variation distance < 2^(-`security_parameter`) and
   //  fails if that is not the case.
   //  Otherwise returns r1, ..., rn in `samples`.
-  static absl::Status SampleFromBytes(
-      absl::string_view bytes, double security_parameter,
-      absl::Span<IntModN<BaseInteger, modulus>> samples) {
+  static absl::Status SampleFromBytes(absl::string_view bytes,
+                                      double security_parameter,
+                                      absl::Span<IntModN> samples) {
     if (samples.empty()) {
       return absl::InvalidArgumentError(
           "The number of samples required must be > 0");
@@ -84,58 +177,21 @@ class IntModN {
                        ") is insufficient for the required "
                        "statistical security and number of samples."));
     }
-    absl::uint128 r =
-        dpf_internal::ConvertBytesTo<absl::uint128>(bytes.substr(0, 16));
-    std::vector<BaseInteger> randomness =
-        std::vector<BaseInteger>(samples.size() - 1);
-    for (int i = 0; i < randomness.size(); ++i) {
-      randomness[i] = dpf_internal::ConvertBytesTo<BaseInteger>(
-          bytes.substr(16 + i * sizeof(BaseInteger), sizeof(BaseInteger)));
-    }
-    int index = 0;
-    for (int i = 0; i < samples.size(); ++i) {
-      samples[i] =
-          IntModN<BaseInteger, modulus>(static_cast<BaseInteger>(r % modulus));
-      absl::uint128 r_div = r / modulus;
-      if (i < samples.size() - 1) {
-        r = r_div << (sizeof(BaseInteger) * 8);
-        r |= randomness[index];
-        index++;
-      }
-    }
+    UnsafeSampleFromBytes(bytes, security_parameter, samples);
     return absl::OkStatus();
   }
 
-  // Copyable.
-  constexpr IntModN<BaseInteger, modulus>(
-      const IntModN<BaseInteger, modulus>& a) = default;
-
-  IntModN<BaseInteger, modulus>& operator=(
-      const IntModN<BaseInteger, modulus>& a) = default;
-
-  // Assignment operators.
-  IntModN<BaseInteger, modulus>& operator=(BaseInteger a) {
-    value_ = a % modulus;
-    return *this;
-  }
-
-  IntModN<BaseInteger, modulus>& operator+=(IntModN<BaseInteger, modulus> a) {
-    add(a);
-    return *this;
-  }
-
-  IntModN<BaseInteger, modulus>& operator-=(IntModN<BaseInteger, modulus> a) {
-    sub(a);
-    return *this;
-  }
-
  private:
-  void sub(BaseInteger a) {
+  constexpr void SubtractBaseInteger(const BaseInteger& a) {
     if (value_ >= a) {
       value_ -= a;
     } else {
-      value_ = modulus - a + value_;
+      value_ = kModulus - a + value_;
     }
+  }
+
+  constexpr void AddBaseInteger(const BaseInteger& a) {
+    SubtractBaseInteger(kModulus - a);
   }
 
   BaseInteger value_;

@@ -32,10 +32,9 @@ void BM_Sample(benchmark::State& state) {
   std::vector<MyInt> output(num_iterations * kNumSamples);
   for (auto s : state) {
     for (int i = 0; i < num_iterations; ++i) {
-      absl::Status status = MyInt::SampleFromBytes(
+      MyInt::UnsafeSampleFromBytes<kNumSamples>(
           bytes, security_parameter,
           absl::MakeSpan(&output[i * kNumSamples], kNumSamples));
-      benchmark::DoNotOptimize(status);
     }
     benchmark::DoNotOptimize(output);
   }
