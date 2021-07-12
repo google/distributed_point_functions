@@ -295,13 +295,14 @@ class DistributedPointFunction {
   // A function for computing value corrections. Used as return type in
   // `GetValueCorrectionFunction`.
   using ValueCorrectionFunction = absl::StatusOr<std::vector<Value>> (*)(
-      absl::Span<const absl::uint128>, int block_index, const Value&, bool);
+      absl::string_view, absl::string_view, int block_index, const Value&,
+      bool);
 
   // Private constructor, called by `CreateIncremental`.
   DistributedPointFunction(
       std::unique_ptr<dpf_internal::ProtoValidator> proto_validator,
-      Aes128FixedKeyHash prg_left, Aes128FixedKeyHash prg_right,
-      Aes128FixedKeyHash prg_value,
+      std::vector<int> blocks_needed, Aes128FixedKeyHash prg_left,
+      Aes128FixedKeyHash prg_right, Aes128FixedKeyHash prg_value,
       absl::flat_hash_map<std::string, ValueCorrectionFunction>
           value_correction_functions);
 
@@ -439,9 +440,18 @@ class DistributedPointFunction {
   // The inverse of tree_to_hierarchy_.
   const std::vector<int>& hierarchy_to_tree_;
 
+  // Cached numbers of AES blocks needed for value correction at each hierarchy
+  // level.
+  const std::vector<int> blocks_needed_;
+
   // Pseudorandom generator used for seed expansion (left and right), and value
-  // correction. The PRG is defined by the concatenation of the following three
-  // fixed-key hash functions
+  // correction. The PRG G(x) for hierarchy level i is defined as the
+  // concatenation of
+  //
+  //   H_left(x), H_right(x), H_value(x + 0), ..., H_value(x + k-1)
+  //
+  // where k is equal to blocks_needed_[i], and H_*(x) is the evaluation of
+  // prg_*_ on input x.
   const Aes128FixedKeyHash prg_left_;
   const Aes128FixedKeyHash prg_right_;
   const Aes128FixedKeyHash prg_value_;
@@ -467,7 +477,7 @@ template <typename T>
 absl::Status DistributedPointFunction::RegisterValueTypeImpl(
     absl::flat_hash_map<std::string, ValueCorrectionFunction>&
         value_correction_functions) {
-  ValueType value_type = dpf_internal::GetValueTypeProtoFor<T>();
+  ValueType value_type = dpf_internal::ToValueType<T>();
   absl::StatusOr<std::string> serialized_value_type =
       SerializeValueTypeDeterministically(value_type);
   if (!serialized_value_type.ok()) {
@@ -526,7 +536,7 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
   }
   if (parameters_[hierarchy_level].has_value_type()) {
     if (!dpf_internal::ValueTypesAreEqual(
-            dpf_internal::GetValueTypeProtoFor<T>(),
+            dpf_internal::ToValueType<T>(),
             parameters_[hierarchy_level].value_type())) {
       return absl::InvalidArgumentError(
           "Value type T doesn't match parameters at `hierarchy_level`");
@@ -646,9 +656,22 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
   }
 
   // Compute output PRG value of expanded seeds using prg_ctx_value_.
-  std::vector<absl::uint128> hashed_expansion(expansion->seeds.size());
+  // For each block, we first expand to a vector of absl::uint128, and then
+  // append to the strings in hashed_expansion.
+  const auto expansion_size = static_cast<int64_t>(expansion->seeds.size());
+  const int blocks_needed = blocks_needed_[hierarchy_level];
+  std::vector<absl::uint128> hashed_expansion_128;
+  hashed_expansion_128.reserve(expansion_size * blocks_needed);
+  for (int64_t i = 0; i < expansion_size; ++i) {
+    for (int j = 0; j < blocks_needed; ++j) {
+      hashed_expansion_128.push_back(expansion->seeds[i] + j);
+    }
+  }
+
+  // Evaluate PRG in place (this is safe as `Evaluate` creates a copy of the
+  // input).
   if (absl::Status status = prg_value_.Evaluate(
-          expansion->seeds, absl::MakeSpan(hashed_expansion));
+          hashed_expansion_128, absl::MakeSpan(hashed_expansion_128));
       !status.ok()) {
     return status;
   }
@@ -660,13 +683,14 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
       1 << (parameters_[hierarchy_level].log_domain_size() -
             hierarchy_to_tree_[hierarchy_level]);
   DCHECK(corrected_elements_per_block <= elements_per_block);
-  std::vector<T> corrected_expansion(hashed_expansion.size() *
+  std::vector<T> corrected_expansion(expansion_size *
                                      corrected_elements_per_block);
-  for (int64_t i = 0; i < static_cast<int64_t>(hashed_expansion.size()); ++i) {
+  for (int64_t i = 0; i < expansion_size; ++i) {
     std::array<T, elements_per_block> current_elements =
-        dpf_internal::ConvertBytesToArrayOf<T>(absl::string_view(
-            reinterpret_cast<const char*>(&hashed_expansion[i]),
-            sizeof(absl::uint128)));
+        dpf_internal::ConvertBytesToArrayOf<T>(
+            absl::string_view(reinterpret_cast<const char*>(
+                                  &hashed_expansion_128[i * blocks_needed]),
+                              blocks_needed * sizeof(absl::uint128)));
     for (int j = 0; j < corrected_elements_per_block; ++j) {
       if (expansion->control_bits[i]) {
         current_elements[j] += (*correction_ints)[j];

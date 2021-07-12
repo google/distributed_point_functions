@@ -66,10 +66,9 @@ TEST(DistributedPointFunction, TestGenerateKeysIncrementalTemplate) {
 
   parameters[0].set_log_domain_size(10);
   parameters[1].set_log_domain_size(20);
-  *(parameters[0].mutable_value_type()) =
-      dpf_internal::GetValueTypeProtoFor<uint16_t>();
+  *(parameters[0].mutable_value_type()) = dpf_internal::ToValueType<uint16_t>();
   *(parameters[1].mutable_value_type()) =
-      dpf_internal::GetValueTypeProtoFor<Tuple<uint32_t, uint64_t>>();
+      dpf_internal::ToValueType<Tuple<uint32_t, uint64_t>>();
   DPF_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<DistributedPointFunction> dpf,
       DistributedPointFunction::CreateIncremental(parameters));
@@ -759,12 +758,27 @@ class DpfTupleTest : public ::testing::Test {
   void SetUp() override {
     log_domain_size_ = 10;
     alpha_ = 23;
-    std::get<0>(beta_) = 42;
+    SetTo42(beta_);
+    ASSERT_EQ(std::get<0>(beta_), 42);
     parameters_.set_log_domain_size(log_domain_size_);
-    *(parameters_.mutable_value_type()) =
-        dpf_internal::GetValueTypeProtoFor<T>();
+    *(parameters_.mutable_value_type()) = dpf_internal::ToValueType<T>();
     DPF_ASSERT_OK_AND_ASSIGN(dpf_,
                              DistributedPointFunction::Create(parameters_));
+  }
+
+  // Helper function that recursively sets all elements of a tuple to 42.
+  template <typename T0>
+  static void SetTo42(T0& x) {
+    x = 42;
+  }
+  template <typename T0, typename... Tn>
+  static void SetTo42(T0& x0, Tn&... xn) {
+    SetTo42(x0);
+    SetTo42(xn...);
+  }
+  template <typename... Tn>
+  static void SetTo42(Tuple<Tn...>& x) {
+    std::apply([](auto&... in) { SetTo42(in...); }, x);
   }
 
   int log_domain_size_;
@@ -780,7 +794,8 @@ using TupleTypes =
                      Tuple<uint64_t, uint64_t>,
                      Tuple<uint8_t, uint16_t, uint32_t, uint64_t>,
                      Tuple<uint32_t, uint32_t, uint32_t, uint32_t>,
-                     Tuple<uint32_t, Tuple<uint32_t, uint32_t>, uint32_t>>;
+                     Tuple<uint32_t, Tuple<uint32_t, uint32_t>, uint32_t>,
+                     Tuple<uint32_t, absl::uint128>>;
 TYPED_TEST_SUITE(DpfTupleTest, TupleTypes);
 TYPED_TEST(DpfTupleTest, TestRegularDpf) {
   DPF_ASSERT_OK(this->dpf_->template RegisterValueType<TypeParam>());

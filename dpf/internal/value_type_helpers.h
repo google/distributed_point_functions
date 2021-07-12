@@ -71,43 +71,82 @@ inline constexpr bool is_supported_type_v = is_supported_type<T>::value;
 // Helper function to compute the combined size of an element of type T. For
 // tuples, this is the sum of the sizes of its elements, ignoring alignment.
 template <typename T>
-constexpr size_t GetTotalSize() {
-  return GetTotalSizeImpl(type_helper<T>());
+constexpr int GetTotalBitsize() {
+  return GetTotalBitsizeImpl(type_helper<T>());
 }
 
+// Overload for ValueType protos.
+//
+// Returns INVALID_ARGUMENT if `value_type` does not correspond to a known value
+// type.
+absl::StatusOr<int> GetTotalBitsize(const ValueType& value_type);
+
 // Overload for integers.
-template <typename T>
-constexpr size_t GetTotalSizeImpl(type_helper<T>) {
-  return sizeof(T);
+template <typename T, typename = std::enable_if_t<is_unsigned_integer_v<T>>>
+constexpr int GetTotalBitsizeImpl(type_helper<T>) {
+  return static_cast<int>(8 * sizeof(T));
 }
 
 // Overload for tuples.
 template <typename... T>
-constexpr size_t GetTotalSizeImpl(type_helper<Tuple<T...>>) {
-  size_t total_size = 0;
-  ((total_size += GetTotalSizeImpl(type_helper<T>())), ...);
-  return total_size;
+constexpr int GetTotalBitsizeImpl(type_helper<Tuple<T...>>) {
+  int bitsize = 0;
+  ((bitsize += GetTotalBitsize<T>()), ...);
+  return bitsize;
 }
 
-// Computes the number of values of type T that fit into an absl::uint128. For
-// all types except unsigned integers, this returns 1.
+// Type trait to test if a type supports batching. True if T is an integer or
+// a Tuple of integers with a total size of at most 128 bits.
+
+// Integers: true. Assumes the largest integer is 128 bits.
+template <typename T, bool = is_unsigned_integer_v<T>>
+struct supports_batching : std::true_type {};
+
+// Default case: false.
 template <typename T>
-constexpr size_t ElementsPerBlock() {
-  //  return ElementsPerBlockImpl(type_helper<T>{})
-  static_assert(GetTotalSize<T>() <= sizeof(T));
-  return sizeof(absl::uint128) / GetTotalSize<T>();
+struct supports_batching<T, false> : std::false_type {};
+
+// Tuples: True if all elements support batching and the total size is at most
+// 128 bits.
+template <typename... ElementType>
+struct supports_batching<Tuple<ElementType...>, false> {
+  static constexpr bool value =
+      GetTotalBitsize<Tuple<ElementType...>>() <= 8 * sizeof(absl::uint128) &&
+      (supports_batching<ElementType>::value && ...);
+};
+template <typename T>
+inline constexpr bool supports_batching_v = supports_batching<T>::value;
+
+// Computes the number of values of type T that fit into an absl::uint128.
+// Returns a value >= 1 if supports_batching_v<T> is true, and 1 otherwise.
+template <typename T>
+constexpr int ElementsPerBlock() {
+  if constexpr (supports_batching_v<T>) {
+    return static_cast<int>(8 * sizeof(absl::uint128)) / GetTotalBitsize<T>();
+  } else {
+    return 1;
+  }
 }
 
-// GetValueTypeProtoFor<T> Returns a `ValueType` message describing T.
+// Computes the number of pseudorandom 128-bit AES blocks needed to get a
+// uniform element of the given `ValueType`. For types whose elements can be
+// bijectively mapped to strings (e.g., unsigned integers and tuples of
+// integers), this is equivalent to `GetTotalBitsize(value_type) / 128`, rounded
+// up.
+//
+// Returns INVALID_ARGUMENT in case value_type does not represent a known type.
+absl::StatusOr<int> BlocksNeeded(const ValueType& value_type);
+
+// ToValueType<T> Returns a `ValueType` message describing T.
 template <typename T>
-ValueType GetValueTypeProtoFor() {
-  return GetValueTypeProtoForImpl(type_helper<T>());
+ValueType ToValueType() {
+  return ToValueTypeImpl(type_helper<T>());
 }
 
 // GetValueTypeProtoForImpl should be overloaded for any new types supported in
 // the `ValueType` proto.
 template <typename T, typename = std::enable_if_t<is_unsigned_integer_v<T>>>
-ValueType GetValueTypeProtoForImpl(type_helper<T>) {
+ValueType ToValueTypeImpl(type_helper<T>) {
   ValueType result;
   result.mutable_integer()->set_bitsize(8 * sizeof(T));
   return result;
@@ -115,21 +154,15 @@ ValueType GetValueTypeProtoForImpl(type_helper<T>) {
 
 // Overload for tuples.
 template <typename... ElementType>
-ValueType GetValueTypeProtoForImpl(type_helper<Tuple<ElementType...>>) {
+ValueType ToValueTypeImpl(type_helper<Tuple<ElementType...>>) {
   ValueType result;
   ValueType::Tuple* tuple = result.mutable_tuple();
   // Append the type of each ElementType. We use a C++17 fold expression to
   // guarantee the order is well-defined. See
   // https://stackoverflow.com/a/54053084.
-  ((*(tuple->add_elements()) = GetValueTypeProtoFor<ElementType>()), ...);
+  ((*(tuple->add_elements()) = ToValueType<ElementType>()), ...);
   return result;
 }
-
-// Checks that `value_type` is well-formed.
-//
-// Returns the total bit size of types with `value_type` if it is valid, and
-// INVALID_ARGUMENT otherwise.
-absl::StatusOr<int> ValidateValueTypeAndGetBitSize(const ValueType& value_type);
 
 // Returns `true` if `lhs` and `rhs` describe the same types, and `false`
 // otherwise.
@@ -223,17 +256,17 @@ absl::StatusOr<TupleType> ConvertValueToImpl2(const Value& value,
 //
 // Returns INVALID_ARGUMENT in case the input has the wrong size, or if the
 // conversion fails.
-template <typename T>
+template <typename T, typename = std::enable_if_t<is_supported_type_v<T>>>
 absl::StatusOr<std::array<T, ElementsPerBlock<T>()>> ValuesToArray(
     const ::google::protobuf::RepeatedPtrField<Value>& values) {
-  if (values.size() != static_cast<int>(ElementsPerBlock<T>())) {
+  if (values.size() != ElementsPerBlock<T>()) {
     return absl::InvalidArgumentError(absl::StrCat(
         "values.size() (= ", values.size(),
         ") does not match ElementsPerBlock<T>() (= ", ElementsPerBlock<T>(),
         ")"));
   }
   std::array<T, ElementsPerBlock<T>()> result;
-  for (int i = 0; i < static_cast<int>(ElementsPerBlock<T>()); ++i) {
+  for (int i = 0; i < ElementsPerBlock<T>(); ++i) {
     absl::StatusOr<T> element = ConvertValueTo<T>(values[i]);
     if (element.ok()) {
       result[i] = std::move(*element);
@@ -283,11 +316,7 @@ T ConvertBytesTo(absl::string_view bytes) {
 }
 
 // Overload for integer types.
-template <typename T,
-          typename = std::enable_if_t<
-              std::is_same_v<T, uint8_t> || std::is_same_v<T, uint16_t> ||
-              std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t> ||
-              std::is_same_v<T, absl::uint128>>>
+template <typename T, typename = std::enable_if_t<is_unsigned_integer_v<T>>>
 T ConvertBytesToImpl(absl::string_view bytes, type_helper<T>) {
   CHECK(ABSL_PREDICT_FALSE(bytes.size() == sizeof(T)));
   T out{0};
@@ -307,26 +336,31 @@ template <typename... ElementType>
 Tuple<ElementType...> ConvertBytesToImpl(absl::string_view bytes,
                                          type_helper<Tuple<ElementType...>>) {
   using TupleType = Tuple<ElementType...>;
-  CHECK(bytes.size() >= GetTotalSize<TupleType>());
+  CHECK(8 * bytes.size() >= GetTotalBitsize<TupleType>());
   int offset = 0;
   absl::Status status = absl::OkStatus();
   return TupleType{[&bytes, &offset, &status] {
-    ElementType element = ConvertBytesTo<ElementType>(
-        bytes.substr(offset, GetTotalSize<ElementType>()));
-    offset += GetTotalSize<ElementType>();
+    const int element_size_bytes = (GetTotalBitsize<ElementType>() + 7) / 8;
+    ElementType element =
+        ConvertBytesTo<ElementType>(bytes.substr(offset, element_size_bytes));
+    offset += element_size_bytes;
     return element;
   }()...};
 }
 
-// Converts a given string to an array of elements of type T.
+// Converts a given string to an array of exactly ElementsPerBlock<T>() elements
+// of type T.
+//
+// Crashes if `bytes.size()` is too small for the output type.
 template <typename T>
 std::array<T, ElementsPerBlock<T>()> ConvertBytesToArrayOf(
     absl::string_view bytes) {
-  CHECK(bytes.size() >= ElementsPerBlock<T>() * GetTotalSize<T>());
+  const int element_size_bytes = (GetTotalBitsize<T>() + 7) / 8;
+  CHECK(bytes.size() >= ElementsPerBlock<T>() * element_size_bytes);
   std::array<T, ElementsPerBlock<T>()> out;
-  for (int i = 0; i < static_cast<int>(ElementsPerBlock<T>()); ++i) {
+  for (int i = 0; i < ElementsPerBlock<T>(); ++i) {
     out[i] = ConvertBytesTo<T>(
-        bytes.substr(i * GetTotalSize<T>(), GetTotalSize<T>()));
+        bytes.substr(i * element_size_bytes, element_size_bytes));
   }
   return out;
 }
@@ -339,8 +373,8 @@ std::array<T, ElementsPerBlock<T>()> ConvertBytesToArrayOf(
 // Returns multiple values in case of packing, and a single value otherwise.
 template <typename T>
 absl::StatusOr<std::vector<Value>> ComputeValueCorrectionFor(
-    absl::Span<const absl::uint128> seeds, int block_index, const Value& beta,
-    bool invert) {
+    absl::string_view seed_a, absl::string_view seed_b, int block_index,
+    const Value& beta, bool invert) {
   absl::StatusOr<T> beta_T = ConvertValueTo<T>(beta);
   if (!beta_T.ok()) {
     return beta_T.status();
@@ -348,12 +382,14 @@ absl::StatusOr<std::vector<Value>> ComputeValueCorrectionFor(
 
   constexpr int elements_per_block = ElementsPerBlock<T>();
 
-  // Split up seeds into individual integers.
-  std::array<T, elements_per_block>
-      ints_a = dpf_internal::ConvertBytesToArrayOf<T>(absl::string_view(
-          reinterpret_cast<const char*>(&seeds[0]), sizeof(absl::uint128))),
-      ints_b = dpf_internal::ConvertBytesToArrayOf<T>(absl::string_view(
-          reinterpret_cast<const char*>(&seeds[1]), sizeof(absl::uint128)));
+  // Compute values from seeds. Both arrays will have multiple elements if T
+  // supports batching, and a single one otherwise.
+  std::array<T, elements_per_block> ints_a =
+                                        dpf_internal::ConvertBytesToArrayOf<T>(
+                                            seed_a),
+                                    ints_b =
+                                        dpf_internal::ConvertBytesToArrayOf<T>(
+                                            seed_b);
 
   // Add beta to the right position.
   ints_b[block_index] += *beta_T;

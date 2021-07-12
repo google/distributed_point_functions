@@ -14,32 +14,19 @@
 
 #include "dpf/internal/value_type_helpers.h"
 
+#include "dpf/status_macros.h"
+
 namespace distributed_point_functions {
 namespace dpf_internal {
 
-absl::StatusOr<int> ValidateValueTypeAndGetBitSize(
-    const ValueType& value_type) {
+absl::StatusOr<int> GetTotalBitsize(const ValueType& value_type) {
   if (value_type.type_case() == ValueType::kInteger) {
-    int bitsize = value_type.integer().bitsize();
-    if (bitsize < 1) {
-      return absl::InvalidArgumentError("`bitsize` must be positive");
-    }
-    if (bitsize > 128) {
-      return absl::InvalidArgumentError(
-          "`bitsize` must be less than or equal to 128");
-    }
-    if ((bitsize & (bitsize - 1)) != 0) {
-      return absl::InvalidArgumentError("`bitsize` must be a power of 2");
-    }
-    return bitsize;
+    return value_type.integer().bitsize();
   } else if (value_type.type_case() == ValueType::kTuple) {
     int bitsize = 0;
     for (const ValueType& el : value_type.tuple().elements()) {
-      absl::StatusOr<int> el_bitsize = ValidateValueTypeAndGetBitSize(el);
-      if (!el_bitsize.ok()) {
-        return el_bitsize.status();
-      }
-      bitsize += *el_bitsize;
+      DPF_ASSIGN_OR_RETURN(int el_bitsize, GetTotalBitsize(el));
+      bitsize += el_bitsize;
     }
     return bitsize;
   } else {
@@ -71,6 +58,11 @@ Value ToValue(absl::uint128 input) {
   block.set_high(absl::Uint128High64(input));
   block.set_low(absl::Uint128Low64(input));
   return result;
+}
+
+absl::StatusOr<int> BlocksNeeded(const ValueType& value_type) {
+  DPF_ASSIGN_OR_RETURN(int value_type_bitsize, GetTotalBitsize(value_type));
+  return (value_type_bitsize + 127) / 128;
 }
 
 }  // namespace dpf_internal

@@ -29,15 +29,15 @@ using IntegerTypes =
     ::testing::Types<uint8_t, uint16_t, uint32_t, uint64_t, absl::uint128>;
 TYPED_TEST_SUITE(ValueTypeIntegerTest, IntegerTypes);
 
-TYPED_TEST(ValueTypeIntegerTest, GetValueTypeProtoForIntegers) {
-  ValueType value_type = GetValueTypeProtoFor<TypeParam>();
+TYPED_TEST(ValueTypeIntegerTest, ToValueTypeIntegers) {
+  ValueType value_type = ToValueType<TypeParam>();
 
   EXPECT_TRUE(value_type.has_integer());
   EXPECT_EQ(value_type.integer().bitsize(), sizeof(TypeParam) * 8);
 }
 
 TYPED_TEST(ValueTypeIntegerTest, TestValueTypesAreEqual) {
-  ValueType value_type_1 = GetValueTypeProtoFor<TypeParam>(), value_type_2;
+  ValueType value_type_1 = ToValueType<TypeParam>(), value_type_2;
   value_type_2.mutable_integer()->set_bitsize(sizeof(TypeParam) * 8);
 
   EXPECT_TRUE(ValueTypesAreEqual(value_type_1, value_type_2));
@@ -45,7 +45,7 @@ TYPED_TEST(ValueTypeIntegerTest, TestValueTypesAreEqual) {
 }
 
 TYPED_TEST(ValueTypeIntegerTest, TestValueTypesAreNotEqual) {
-  ValueType value_type_1 = GetValueTypeProtoFor<TypeParam>(), value_type_2;
+  ValueType value_type_1 = ToValueType<TypeParam>(), value_type_2;
   value_type_2.mutable_integer()->set_bitsize(sizeof(TypeParam) * 8 * 2);
 
   EXPECT_FALSE(ValueTypesAreEqual(value_type_1, value_type_2));
@@ -93,8 +93,8 @@ using TupleTypes = ::testing::Types<Tuple<uint64_t>, Tuple<uint64_t, uint64_t>,
                                     Tuple<uint8_t, uint8_t, uint8_t, uint8_t>>;
 TYPED_TEST_SUITE(ValueTypeTupleTest, TupleTypes);
 
-TYPED_TEST(ValueTypeTupleTest, GetValueTypeProtoForTuples) {
-  ValueType value_type = GetValueTypeProtoFor<TypeParam>();
+TYPED_TEST(ValueTypeTupleTest, ToValueTypeTuples) {
+  ValueType value_type = ToValueType<TypeParam>();
 
   EXPECT_TRUE(value_type.has_tuple());
   EXPECT_EQ(value_type.tuple().elements_size(), std::tuple_size<TypeParam>());
@@ -116,13 +116,12 @@ TYPED_TEST(ValueTypeTupleTest, GetValueTypeProtoForTuples) {
       TypeParam());
 }
 
-TYPED_TEST(ValueTypeTupleTest, TestValueTypesSizeIsCorrect) {
-  ValueType value_type = GetValueTypeProtoFor<TypeParam>();
+TYPED_TEST(ValueTypeTupleTest, ValueTypesSizeEqualsCompileTimeTypeSize) {
+  ValueType value_type = ToValueType<TypeParam>();
 
-  DPF_ASSERT_OK_AND_ASSIGN(int size,
-                           ValidateValueTypeAndGetBitSize(value_type));
+  DPF_ASSERT_OK_AND_ASSIGN(int bitsize, GetTotalBitsize(value_type));
 
-  EXPECT_EQ(size, 8 * GetTotalSize<TypeParam>());
+  EXPECT_EQ(bitsize, GetTotalBitsize<TypeParam>());
 }
 
 TYPED_TEST(ValueTypeTupleTest, ValueConversionFailsIfValueIsNotATuple) {
@@ -151,8 +150,8 @@ TEST(ValueTypeTupleTest, TestValueTypesAreEqual) {
   using T1 = Tuple<uint32_t, absl::uint128, uint8_t>;
   using T2 = Tuple<uint32_t, absl::uint128, uint8_t>;
 
-  ValueType value_type_1 = GetValueTypeProtoFor<T1>();
-  ValueType value_type_2 = GetValueTypeProtoFor<T2>();
+  ValueType value_type_1 = ToValueType<T1>();
+  ValueType value_type_2 = ToValueType<T2>();
 
   EXPECT_TRUE(ValueTypesAreEqual(value_type_1, value_type_2));
   EXPECT_TRUE(ValueTypesAreEqual(value_type_2, value_type_1));
@@ -162,11 +161,19 @@ TEST(ValueTypeTupleTest, TestValueTypesAreNotEqual) {
   using T1 = Tuple<uint32_t, absl::uint128, uint8_t>;
   using T2 = Tuple<uint32_t, absl::uint128, uint16_t>;
 
-  ValueType value_type_1 = GetValueTypeProtoFor<T1>();
-  ValueType value_type_2 = GetValueTypeProtoFor<T2>();
+  ValueType value_type_1 = ToValueType<T1>();
+  ValueType value_type_2 = ToValueType<T2>();
 
   EXPECT_FALSE(ValueTypesAreEqual(value_type_1, value_type_2));
   EXPECT_FALSE(ValueTypesAreEqual(value_type_2, value_type_1));
+}
+
+TEST(ValueTypeTupleTest, TestSerializationWithConcreteExample) {
+  std::string bytes = "A 128 bit string";
+
+  auto tuple = ConvertBytesTo<Tuple<uint64_t, uint64_t>>(bytes);
+  EXPECT_EQ(std::get<0>(tuple), ConvertBytesTo<uint64_t>("A 128 bi"));
+  EXPECT_EQ(std::get<1>(tuple), ConvertBytesTo<uint64_t>("t string"));
 }
 
 }  // namespace

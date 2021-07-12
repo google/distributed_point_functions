@@ -214,7 +214,7 @@ TEST_F(ProtoValidatorTest, FailsIfPreviousHierarchyLevelEqualsHierarchyLevel) {
 }
 
 TEST_F(ProtoValidatorTest, FailsIfTypeNotInteger) {
-  ValueType type = GetValueTypeProtoFor<uint32_t>();
+  ValueType type = ToValueType<uint32_t>();
   Value value = ToValue(Tuple<uint32_t>{23});
 
   EXPECT_THAT(
@@ -240,7 +240,7 @@ TEST_F(ProtoValidatorTest, FailsIfIntegerTooLarge) {
 }
 
 TEST_F(ProtoValidatorTest, FailsIfTypeNotTuple) {
-  ValueType type = GetValueTypeProtoFor<Tuple<uint32_t>>();
+  ValueType type = ToValueType<Tuple<uint32_t>>();
   Value value = ToValue(uint32_t{23});
 
   EXPECT_THAT(
@@ -249,12 +249,50 @@ TEST_F(ProtoValidatorTest, FailsIfTypeNotTuple) {
 }
 
 TEST_F(ProtoValidatorTest, FailsIfTupleSizeDoesntMatch) {
-  ValueType type = GetValueTypeProtoFor<Tuple<uint32_t>>();
+  ValueType type = ToValueType<Tuple<uint32_t>>();
   Value value = ToValue(Tuple<uint32_t, uint32_t>{23, 42});
 
   EXPECT_THAT(proto_validator_->ValidateValue(value, type),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        "Expected tuple value of size 1 but got size 2"));
+}
+
+TEST(ProtoValidator, ValidateValueTypeFailsIfBitsizeNotPositive) {
+  ValueType type;
+
+  type.mutable_integer()->set_bitsize(0);
+
+  EXPECT_THAT(ProtoValidator::ValidateValueType(type),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "`bitsize` must be positive"));
+}
+
+TEST(ProtoValidator, ValidateValueTypeFailsIfBitsizeTooLarge) {
+  ValueType type;
+
+  type.mutable_integer()->set_bitsize(256);
+
+  EXPECT_THAT(ProtoValidator::ValidateValueType(type),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "`bitsize` must be less than or equal to 128"));
+}
+
+TEST(ProtoValidator, ValidateValueTypeFailsIfBitsizeNotPowerOfTwo) {
+  ValueType type;
+
+  type.mutable_integer()->set_bitsize(17);
+
+  EXPECT_THAT(ProtoValidator::ValidateValueType(type),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "`bitsize` must be a power of 2"));
+}
+
+TEST(ProtoValidator, ValidateValueTypeFailsIfNoTypeChosen) {
+  ValueType type;
+
+  EXPECT_THAT(ProtoValidator::ValidateValueType(type),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       StartsWith("Unsupported value_type")));
 }
 
 }  // namespace

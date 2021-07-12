@@ -68,28 +68,25 @@ absl::StatusOr<std::unique_ptr<ProtoValidator>> ProtoValidator::Create(
   for (int i = 0; i < static_cast<int>(parameters.size()); ++i) {
     int log_element_size;
     if (parameters[i].has_value_type()) {
-      DPF_ASSIGN_OR_RETURN(int element_size, ValidateValueTypeAndGetBitSize(
-                                                 parameters[i].value_type()));
-      log_element_size = static_cast<int>(std::ceil(std::log2(element_size)));
+      DPF_ASSIGN_OR_RETURN(int element_bitsize,
+                           GetTotalBitsize(parameters[i].value_type()));
+      log_element_size =
+          static_cast<int>(std::ceil(std::log2(element_bitsize)));
     } else {
       log_element_size =
           static_cast<int>(std::log2(parameters[i].element_bitsize()));
     }
-    if (log_element_size > 7) {
-      return absl::InvalidArgumentError(
-          "ValueTypes of size more than 128 bits are not supported");
-    }
 
     // The tree level depends on the domain size and the element size. A single
     // AES block can fit 128 = 2^7 bits, so usually tree_level ==
-    // log_domain_size iff log_element_size == 7. For smaller element sizes, we
+    // log_domain_size iff log_element_size >= 7. For smaller element sizes, we
     // can reduce the tree_level (and thus the height of the tree) by the
     // difference between log_element_size and 7. However, since the minimum
     // tree level is 0, we have to ensure that no two hierarchy levels map to
     // the same tree_level, hence the std::max.
     int tree_level =
-        std::max(tree_levels_needed,
-                 parameters[i].log_domain_size() - 7 + log_element_size);
+        std::max(tree_levels_needed, parameters[i].log_domain_size() - 7 +
+                                         std::min(log_element_size, 7));
     tree_to_hierarchy[tree_level] = i;
     hierarchy_to_tree[i] = tree_level;
     tree_levels_needed = std::max(tree_levels_needed, tree_level + 1);
@@ -110,7 +107,7 @@ absl::Status ProtoValidator::ValidateParameters(
   // Sentinel values for checking that domain sizes are increasing and not too
   // far apart, and element sizes are non-decreasing.
   int previous_log_domain_size = 0;
-  int previous_value_type_size = 1;
+  int previous_value_type_bitsize = 1;
   for (int i = 0; i < static_cast<int>(parameters.size()); ++i) {
     // Check log_domain_size.
     int log_domain_size = parameters[i].log_domain_size();
@@ -135,24 +132,24 @@ absl::Status ProtoValidator::ValidateParameters(
     }
     previous_log_domain_size = log_domain_size;
 
-    int value_type_size;
-    if (!parameters[i].has_value_type()) {
+    int value_type_bitsize;
+    if (parameters[i].has_value_type()) {
+      DPF_RETURN_IF_ERROR(ValidateValueType(parameters[i].value_type()));
+      DPF_ASSIGN_OR_RETURN(value_type_bitsize,
+                           GetTotalBitsize(parameters[i].value_type()));
+    } else {
       ValueType value_type;
       value_type.mutable_integer()->set_bitsize(
           parameters[i].element_bitsize());
-      DPF_ASSIGN_OR_RETURN(value_type_size,
-                           ValidateValueTypeAndGetBitSize(value_type));
-    } else {
-      DPF_ASSIGN_OR_RETURN(value_type_size, ValidateValueTypeAndGetBitSize(
-                                                parameters[i].value_type()));
+      DPF_ASSIGN_OR_RETURN(value_type_bitsize, GetTotalBitsize(value_type));
     }
 
-    if (value_type_size < previous_value_type_size) {
+    if (value_type_bitsize < previous_value_type_bitsize) {
       return absl::InvalidArgumentError(
           "`value_type` fields must be of non-decreasing size in "
           "`parameters`");
     }
-    previous_value_type_size = value_type_size;
+    previous_value_type_bitsize = value_type_bitsize;
   }
   return absl::OkStatus();
 }
@@ -216,6 +213,31 @@ absl::Status ProtoValidator::ValidateEvaluationContext(
         "ctx.partial_evaluations_level");
   }
   return absl::OkStatus();
+}
+
+absl::Status ProtoValidator::ValidateValueType(const ValueType& value_type) {
+  if (value_type.type_case() == ValueType::kInteger) {
+    int bitsize = value_type.integer().bitsize();
+    if (bitsize < 1) {
+      return absl::InvalidArgumentError("`bitsize` must be positive");
+    }
+    if (bitsize > 128) {
+      return absl::InvalidArgumentError(
+          "`bitsize` must be less than or equal to 128");
+    }
+    if ((bitsize & (bitsize - 1)) != 0) {
+      return absl::InvalidArgumentError("`bitsize` must be a power of 2");
+    }
+    return absl::OkStatus();
+  } else if (value_type.type_case() == ValueType::kTuple) {
+    for (const ValueType& el : value_type.tuple().elements()) {
+      DPF_RETURN_IF_ERROR(ValidateValueType(el));
+    }
+    return absl::OkStatus();
+  } else {
+    return absl::InvalidArgumentError(
+        absl::StrCat("Unsupported value_type:\n", value_type.DebugString()));
+  }
 }
 
 absl::Status ProtoValidator::ValidateValue(const Value& value,

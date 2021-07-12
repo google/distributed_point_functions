@@ -49,8 +49,8 @@ bool ExtractAndClearLowestBit(absl::uint128& x) {
 
 DistributedPointFunction::DistributedPointFunction(
     std::unique_ptr<dpf_internal::ProtoValidator> proto_validator,
-    Aes128FixedKeyHash prg_left, Aes128FixedKeyHash prg_right,
-    Aes128FixedKeyHash prg_value,
+    std::vector<int> blocks_needed, Aes128FixedKeyHash prg_left,
+    Aes128FixedKeyHash prg_right, Aes128FixedKeyHash prg_value,
     absl::flat_hash_map<std::string, ValueCorrectionFunction>
         value_correction_functions)
     : proto_validator_(std::move(proto_validator)),
@@ -58,6 +58,7 @@ DistributedPointFunction::DistributedPointFunction(
       tree_levels_needed_(proto_validator_->tree_levels_needed()),
       tree_to_hierarchy_(proto_validator_->tree_to_hierarchy()),
       hierarchy_to_tree_(proto_validator_->hierarchy_to_tree()),
+      blocks_needed_(std::move(blocks_needed)),
       prg_left_(std::move(prg_left)),
       prg_right_(std::move(prg_right)),
       prg_value_(std::move(prg_value)),
@@ -67,10 +68,24 @@ absl::StatusOr<std::vector<Value>>
 DistributedPointFunction::ComputeValueCorrection(
     int hierarchy_level, absl::Span<const absl::uint128> seeds,
     absl::uint128 alpha, const Value& beta, bool invert) const {
-  // Compute third PRG output component of current seed.
-  std::array<absl::uint128, 2> value_correction_shares;
+  // Compute value output component of the PRG on current seeds. To that end, we
+  // Compute x_0+0, ..., x_0+k-1, and x_1+0, ..., x_1+k-1, where x_i is the seed
+  // for helper i, and k is the number of blocks needed at the current hierarchy
+  // level. We use a single contiguous vector for both helpers, which allows us
+  // to use a single call to prg_value_.Evaluate.
+  int blocks_needed = blocks_needed_[hierarchy_level];
+  std::vector<absl::uint128> expanded_seeds(2 * blocks_needed);
+  absl::Span<absl::uint128> expanded_seed_a(&expanded_seeds[0], blocks_needed);
+  absl::Span<absl::uint128> expanded_seed_b(&expanded_seeds[blocks_needed],
+                                            blocks_needed);
+  DCHECK(seeds.size() == 2);
+  std::iota(expanded_seed_a.begin(), expanded_seed_a.end(), seeds[0]);
+  std::iota(expanded_seed_b.begin(), expanded_seed_b.end(), seeds[1]);
+
+  // Evaluate PRG in place (this is safe as `Evaluate` creates a copy of the
+  // input).
   DPF_RETURN_IF_ERROR(
-      prg_value_.Evaluate(seeds, absl::MakeSpan(value_correction_shares)));
+      prg_value_.Evaluate(expanded_seeds, absl::MakeSpan(expanded_seeds)));
 
   // Compute index in block for alpha at the current hierarchy level.
   int index_in_block = DomainToBlockIndex(alpha, hierarchy_level);
@@ -79,7 +94,12 @@ DistributedPointFunction::ComputeValueCorrection(
   DPF_ASSIGN_OR_RETURN(
       ValueCorrectionFunction func,
       GetValueCorrectionFunction(parameters_[hierarchy_level]));
-  return func(value_correction_shares, index_in_block, beta, invert);
+  return func(
+      absl::string_view(reinterpret_cast<const char*>(expanded_seed_a.data()),
+                        blocks_needed * sizeof(absl::uint128)),
+      absl::string_view(reinterpret_cast<const char*>(expanded_seed_b.data()),
+                        blocks_needed * sizeof(absl::uint128)),
+      index_in_block, beta, invert);
 }
 
 // Expands the PRG seeds at the next `tree_level`, updates `seeds` and
@@ -258,7 +278,8 @@ DistributedPointFunction::EvaluateSeeds(
         }
       }
 
-      // Compute PRG.
+      // Evaluate PRG in place (this is safe as `Evaluate` creates a copy of the
+      // input).
       DPF_RETURN_IF_ERROR(
           prg_left_.Evaluate(buffer_left, absl::MakeSpan(buffer_left)));
       DPF_RETURN_IF_ERROR(
@@ -551,7 +572,23 @@ DistributedPointFunction::CreateIncremental(
       std::unique_ptr<dpf_internal::ProtoValidator> proto_validator,
       dpf_internal::ProtoValidator::Create(parameters));
 
-  // Set up PRGs.
+  // Compute the number of value correction blocks needed for each hierarchy
+  // level.
+  std::vector<int> blocks_needed(parameters.size());
+  for (int i = 0; i < static_cast<int>(parameters.size()); ++i) {
+    if (parameters[i].has_value_type()) {
+      DPF_ASSIGN_OR_RETURN(blocks_needed[i], dpf_internal::BlocksNeeded(
+                                                 parameters[i].value_type()));
+    } else {
+      ValueType value_type;
+      value_type.mutable_integer()->set_bitsize(
+          parameters[i].element_bitsize());
+      DPF_ASSIGN_OR_RETURN(blocks_needed[i],
+                           dpf_internal::BlocksNeeded(value_type));
+    }
+  }
+
+  // Set up hash functions for PRG.
   DPF_ASSIGN_OR_RETURN(Aes128FixedKeyHash prg_left,
                        Aes128FixedKeyHash::Create(kPrgKeyLeft));
   DPF_ASSIGN_OR_RETURN(Aes128FixedKeyHash prg_right,
@@ -576,8 +613,9 @@ DistributedPointFunction::CreateIncremental(
 
   // Copy parameters and return new DPF.
   return absl::WrapUnique(new DistributedPointFunction(
-      std::move(proto_validator), std::move(prg_left), std::move(prg_right),
-      std::move(prg_value), std::move(value_correction_functions)));
+      std::move(proto_validator), std::move(blocks_needed), std::move(prg_left),
+      std::move(prg_right), std::move(prg_value),
+      std::move(value_correction_functions)));
 }
 
 absl::StatusOr<std::pair<DpfKey, DpfKey>>

@@ -49,6 +49,10 @@ class ProtoValidator {
   // Returns OK on success, and INVALID_ARGUMENT otherwise.
   absl::Status ValidateEvaluationContext(const EvaluationContext& ctx) const;
 
+  // Checks that the given ValueType is valid.
+  // Returns OK on success and INVALID_ARGUMENT otherwise.
+  static absl::Status ValidateValueType(const ValueType& value_type);
+
   // Checks that `value` is valid for `type`.
   // Returns OK on success and INVALID_ARGUMENT otherwise.
   static absl::Status ValidateValue(const Value& value, const ValueType& type);

@@ -13,6 +13,7 @@ cc_library(
     hdrs = ["value_type_helpers.h"],
     deps = [
         "//dpf:distributed_point_function_cc_proto",
+        "//dpf:status_macros",
         "//dpf:tuple",
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/base",

@@ -28,7 +28,7 @@ template <typename T>
 void BM_EvaluateRegularDpf(benchmark::State& state) {
   DpfParameters parameters;
   parameters.set_log_domain_size(state.range(0));
-  *(parameters.mutable_value_type()) = dpf_internal::GetValueTypeProtoFor<T>();
+  *(parameters.mutable_value_type()) = dpf_internal::ToValueType<T>();
   std::unique_ptr<DistributedPointFunction> dpf =
       DistributedPointFunction::Create(parameters).value();
   absl::uint128 alpha = 0;
@@ -58,6 +58,13 @@ BENCHMARK_TEMPLATE(BM_EvaluateRegularDpf, Tuple<uint64_t, uint64_t>)
     ->DenseRange(12, 24, 2);
 BENCHMARK_TEMPLATE(BM_EvaluateRegularDpf,
                    Tuple<uint32_t, uint32_t, uint32_t, uint32_t>)
+    ->DenseRange(12, 24, 2);
+BENCHMARK_TEMPLATE(BM_EvaluateRegularDpf,
+                   Tuple<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t>)
+    ->DenseRange(12, 24, 2);
+BENCHMARK_TEMPLATE(
+    BM_EvaluateRegularDpf,
+    Tuple<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t>)
     ->DenseRange(12, 24, 2);
 
 // Benchmarks full evaluation of all hierarchy levels. Expects the first range
