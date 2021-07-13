@@ -214,7 +214,8 @@ absl::StatusOr<Tuple<ElementType...>> ConvertValueToImpl(
     const Value& value, type_helper<Tuple<ElementType...>> helper) {
   return ConvertValueToImpl2(
       value, helper,
-      std::make_index_sequence<std::tuple_size_v<Tuple<ElementType...>>>());
+      std::make_index_sequence<
+          std::tuple_size_v<std::tuple<ElementType...>>>());
 }
 template <typename TupleType, size_t... Index>
 absl::StatusOr<TupleType> ConvertValueToImpl2(const Value& value,
@@ -223,7 +224,8 @@ absl::StatusOr<TupleType> ConvertValueToImpl2(const Value& value,
   if (value.value_case() != Value::kTuple) {
     return absl::InvalidArgumentError("The given Value is not a tuple");
   }
-  constexpr auto tuple_size = static_cast<int>(std::tuple_size_v<TupleType>);
+  constexpr auto tuple_size =
+      static_cast<int>(std::tuple_size_v<typename TupleType::Base>);
   if (value.tuple().elements_size() != tuple_size) {
     return absl::InvalidArgumentError(
         "The tuple in the given Value has the wrong number of elements");
@@ -233,7 +235,8 @@ absl::StatusOr<TupleType> ConvertValueToImpl2(const Value& value,
   // error, return it at the end.
   absl::Status status = absl::OkStatus();
   TupleType result = {[&value, &status] {
-    using CurrentElementType = std::tuple_element_t<Index, TupleType>;
+    using CurrentElementType =
+        std::tuple_element_t<Index, typename TupleType::Base>;
     if (status.ok()) {
       absl::StatusOr<CurrentElementType> element =
           ConvertValueTo<CurrentElementType>(value.tuple().elements(Index));
@@ -284,13 +287,13 @@ Value ToValue(absl::uint128 input);
 
 // Overload for Tuple<ElementType...>.
 template <typename... ElementType>
-Value ToValue(Tuple<ElementType...> input) {
+Value ToValue(const Tuple<ElementType...>& input) {
   Value result;
   std::apply(
       [&result](const ElementType&... element) {
         ((*(result.mutable_tuple()->add_elements()) = ToValue(element)), ...);
       },
-      input);
+      input.value());
   return result;
 }
 

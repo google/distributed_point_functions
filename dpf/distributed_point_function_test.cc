@@ -759,7 +759,7 @@ class DpfTupleTest : public ::testing::Test {
     log_domain_size_ = 10;
     alpha_ = 23;
     SetTo42(beta_);
-    ASSERT_EQ(std::get<0>(beta_), 42);
+    ASSERT_EQ(std::get<0>(beta_.value()), 42);
     parameters_.set_log_domain_size(log_domain_size_);
     *(parameters_.mutable_value_type()) = dpf_internal::ToValueType<T>();
     DPF_ASSERT_OK_AND_ASSIGN(dpf_,
@@ -778,7 +778,7 @@ class DpfTupleTest : public ::testing::Test {
   }
   template <typename... Tn>
   static void SetTo42(Tuple<Tn...>& x) {
-    std::apply([](auto&... in) { SetTo42(in...); }, x);
+    std::apply([](auto&... in) { SetTo42(in...); }, x.value());
   }
 
   int log_domain_size_;

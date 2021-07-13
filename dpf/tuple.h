@@ -21,10 +21,28 @@
 
 namespace distributed_point_functions {
 
-// A Tuple alias with added element-wise addition, subtraction, and negation
+// A Tuple class with added element-wise addition, subtraction, and negation
 // operators.
 template <typename... T>
-using Tuple = std::tuple<T...>;
+class Tuple {
+ public:
+  using Base = std::tuple<T...>;
+
+  Tuple(){};
+  Tuple(T... elements) : value_(elements...){};
+  explicit Tuple(Base t) : value_(std::move(t)){};
+
+  // Copy constructor.
+  Tuple(const Tuple& t) = default;
+  Tuple& operator=(const Tuple& t) = default;
+
+  // Getters for the base tuple type.
+  Base& value() { return value_; }
+  const Base& value() const { return value_; }
+
+ private:
+  Base value_;
+};
 
 namespace dpf_internal {
 
@@ -70,16 +88,27 @@ constexpr Tuple<T...>& operator-=(Tuple<T...>& lhs, const Tuple<T...>& rhs) {
   return lhs;
 }
 
+// Equality and inequality operators.
+template <typename... T>
+constexpr bool operator==(const Tuple<T...>& lhs, const Tuple<T...>& rhs) {
+  return lhs.value() == rhs.value();
+}
+
+template <typename... T>
+constexpr bool operator!=(const Tuple<T...>& lhs, const Tuple<T...>& rhs) {
+  return lhs.value() != rhs.value();
+}
+
 namespace dpf_internal {
 template <typename... T, std::size_t... I>
 constexpr Tuple<T...> add(const Tuple<T...>& lhs, const Tuple<T...>& rhs,
                           std::index_sequence<I...>) {
-  return Tuple<T...>{std::get<I>(lhs) + std::get<I>(rhs)...};
+  return Tuple<T...>{std::get<I>(lhs.value()) + std::get<I>(rhs.value())...};
 }
 
 template <typename... T, std::size_t... I>
 constexpr Tuple<T...> negate(const Tuple<T...>& t, std::index_sequence<I...>) {
-  return Tuple<T...>{-std::get<I>(t)...};
+  return Tuple<T...>{-std::get<I>(t.value())...};
 }
 }  // namespace dpf_internal
 

@@ -97,7 +97,8 @@ TYPED_TEST(ValueTypeTupleTest, ToValueTypeTuples) {
   ValueType value_type = ToValueType<TypeParam>();
 
   EXPECT_TRUE(value_type.has_tuple());
-  EXPECT_EQ(value_type.tuple().elements_size(), std::tuple_size<TypeParam>());
+  EXPECT_EQ(value_type.tuple().elements_size(),
+            std::tuple_size<typename TypeParam::Base>());
   // Fold expression to iterate over tuple elements. See
   // https://stackoverflow.com/a/54053084.
   auto it = value_type.tuple().elements().begin();
@@ -113,7 +114,7 @@ TYPED_TEST(ValueTypeTupleTest, ToValueTypeTuples) {
              }()),
          ...);
       },
-      TypeParam());
+      typename TypeParam::Base());
 }
 
 TYPED_TEST(ValueTypeTupleTest, ValueTypesSizeEqualsCompileTimeTypeSize) {
@@ -172,8 +173,8 @@ TEST(ValueTypeTupleTest, TestSerializationWithConcreteExample) {
   std::string bytes = "A 128 bit string";
 
   auto tuple = ConvertBytesTo<Tuple<uint64_t, uint64_t>>(bytes);
-  EXPECT_EQ(std::get<0>(tuple), ConvertBytesTo<uint64_t>("A 128 bi"));
-  EXPECT_EQ(std::get<1>(tuple), ConvertBytesTo<uint64_t>("t string"));
+  EXPECT_EQ(std::get<0>(tuple.value()), ConvertBytesTo<uint64_t>("A 128 bi"));
+  EXPECT_EQ(std::get<1>(tuple.value()), ConvertBytesTo<uint64_t>("t string"));
 }
 
 }  // namespace
