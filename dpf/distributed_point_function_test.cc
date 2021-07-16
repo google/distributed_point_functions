@@ -61,6 +61,28 @@ TEST(DistributedPointFunction, TestCreateIncrementalLargeDomain) {
               IsOkAndHolds(Ne(nullptr)));
 }
 
+TEST(DistributedPointFunction, CreateFailsForTupleTypesWithDifferentIntModN) {
+  DpfParameters parameters;
+  parameters.set_log_domain_size(10);
+  *(parameters.mutable_value_type()) = dpf_internal::ToValueType<
+      Tuple<IntModN<uint32_t, 3>, IntModN<uint64_t, 4>>>();
+
+  EXPECT_THAT(
+      DistributedPointFunction::Create(parameters),
+      StatusIs(absl::StatusCode::kUnimplemented,
+               "All elements of type IntModN in a tuple must be the same"));
+}
+
+TEST(DistributedPointFunction, CreateFailsForInvalidValueType) {
+  DpfParameters parameters;
+  parameters.set_log_domain_size(10);
+  *(parameters.mutable_value_type()) = ValueType{};
+
+  EXPECT_THAT(DistributedPointFunction::Create(parameters),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       StartsWith("Unsupported ValueType")));
+}
+
 TEST(DistributedPointFunction, TestGenerateKeysIncrementalTemplate) {
   std::vector<DpfParameters> parameters(2);
 
@@ -753,13 +775,12 @@ INSTANTIATE_TEST_SUITE_P(
         testing::Values(1, 2, 3, 5, 7)));  // level_step
 
 template <typename T>
-class DpfTupleTest : public ::testing::Test {
+class DpfEvaluationTest : public ::testing::Test {
  protected:
   void SetUp() override {
     log_domain_size_ = 10;
     alpha_ = 23;
     SetTo42(beta_);
-    ASSERT_EQ(std::get<0>(beta_.value()), 42);
     parameters_.set_log_domain_size(log_domain_size_);
     *(parameters_.mutable_value_type()) = dpf_internal::ToValueType<T>();
     DPF_ASSERT_OK_AND_ASSIGN(dpf_,
@@ -788,16 +809,20 @@ class DpfTupleTest : public ::testing::Test {
   std::unique_ptr<DistributedPointFunction> dpf_;
 };
 
-using TupleTypes =
-    ::testing::Types<Tuple<uint8_t>, Tuple<uint32_t>, Tuple<absl::uint128>,
-                     Tuple<uint32_t, uint32_t>, Tuple<uint32_t, uint64_t>,
-                     Tuple<uint64_t, uint64_t>,
-                     Tuple<uint8_t, uint16_t, uint32_t, uint64_t>,
-                     Tuple<uint32_t, uint32_t, uint32_t, uint32_t>,
-                     Tuple<uint32_t, Tuple<uint32_t, uint32_t>, uint32_t>,
-                     Tuple<uint32_t, absl::uint128>>;
-TYPED_TEST_SUITE(DpfTupleTest, TupleTypes);
-TYPED_TEST(DpfTupleTest, TestRegularDpf) {
+using MyIntModN = IntModN<uint32_t, 4294967291u>;                // 2**32 - 5.
+using MyIntModN64 = IntModN<uint64_t, 18446744073709551557ull>;  // 2**64 - 59.
+using DpfEvaluationTypes = ::testing::Types<
+    Tuple<uint8_t>, Tuple<uint32_t>, Tuple<absl::uint128>,
+    Tuple<uint32_t, uint32_t>, Tuple<uint32_t, uint64_t>,
+    Tuple<uint64_t, uint64_t>, Tuple<uint8_t, uint16_t, uint32_t, uint64_t>,
+    Tuple<uint32_t, uint32_t, uint32_t, uint32_t>,
+    Tuple<uint32_t, Tuple<uint32_t, uint32_t>, uint32_t>,
+    Tuple<uint32_t, absl::uint128>, MyIntModN, Tuple<MyIntModN>,
+    Tuple<uint32_t, MyIntModN>, Tuple<absl::uint128, MyIntModN>,
+    Tuple<MyIntModN, Tuple<MyIntModN>>,
+    Tuple<MyIntModN, MyIntModN, MyIntModN, MyIntModN, MyIntModN>>;
+TYPED_TEST_SUITE(DpfEvaluationTest, DpfEvaluationTypes);
+TYPED_TEST(DpfEvaluationTest, TestRegularDpf) {
   DPF_ASSERT_OK(this->dpf_->template RegisterValueType<TypeParam>());
   std::pair<DpfKey, DpfKey> keys;
   DPF_ASSERT_OK_AND_ASSIGN(keys,

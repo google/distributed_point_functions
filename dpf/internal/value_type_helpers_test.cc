@@ -23,6 +23,22 @@ namespace distributed_point_functions {
 namespace dpf_internal {
 namespace {
 
+constexpr int kDefaultSecurityParameter = 40;
+
+TEST(ValueTypeHelperTest, ValueTypesAreEqualFailsOnInvalidValueTypes) {
+  ValueType type1, type2;
+
+  EXPECT_THAT(ValueTypesAreEqual(type1, type2),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "Both arguments must be valid ValueTypes"));
+}
+
+TEST(ValueTypeHelperTest, BitsNeededFailsOnInvalidValueType) {
+  EXPECT_THAT(BitsNeeded(ValueType{}, kDefaultSecurityParameter),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::StartsWith("Unsupported ValueType")));
+}
+
 template <typename T>
 class ValueTypeIntegerTest : public testing::Test {};
 using IntegerTypes =
@@ -40,16 +56,24 @@ TYPED_TEST(ValueTypeIntegerTest, TestValueTypesAreEqual) {
   ValueType value_type_1 = ToValueType<TypeParam>(), value_type_2;
   value_type_2.mutable_integer()->set_bitsize(sizeof(TypeParam) * 8);
 
-  EXPECT_TRUE(ValueTypesAreEqual(value_type_1, value_type_2));
-  EXPECT_TRUE(ValueTypesAreEqual(value_type_2, value_type_1));
+  DPF_ASSERT_OK_AND_ASSIGN(bool equal,
+                           ValueTypesAreEqual(value_type_1, value_type_2));
+  EXPECT_TRUE(equal);
+  DPF_ASSERT_OK_AND_ASSIGN(equal,
+                           ValueTypesAreEqual(value_type_2, value_type_1));
+  EXPECT_TRUE(equal);
 }
 
 TYPED_TEST(ValueTypeIntegerTest, TestValueTypesAreNotEqual) {
   ValueType value_type_1 = ToValueType<TypeParam>(), value_type_2;
   value_type_2.mutable_integer()->set_bitsize(sizeof(TypeParam) * 8 * 2);
 
-  EXPECT_FALSE(ValueTypesAreEqual(value_type_1, value_type_2));
-  EXPECT_FALSE(ValueTypesAreEqual(value_type_2, value_type_1));
+  DPF_ASSERT_OK_AND_ASSIGN(bool equal,
+                           ValueTypesAreEqual(value_type_1, value_type_2));
+  EXPECT_FALSE(equal);
+  DPF_ASSERT_OK_AND_ASSIGN(equal,
+                           ValueTypesAreEqual(value_type_2, value_type_1));
+  EXPECT_FALSE(equal);
 }
 
 TYPED_TEST(ValueTypeIntegerTest, ValueConversionFailsIfNotInteger) {
@@ -114,13 +138,14 @@ TYPED_TEST(ValueTypeTupleTest, ToValueTypeTuples) {
              }()),
          ...);
       },
-      typename TypeParam::Base());
+      TypeParam().value());
 }
 
-TYPED_TEST(ValueTypeTupleTest, ValueTypesSizeEqualsCompileTimeTypeSize) {
+TYPED_TEST(ValueTypeTupleTest, BitsNeededEqualsCompileTimeTypeSize) {
   ValueType value_type = ToValueType<TypeParam>();
 
-  DPF_ASSERT_OK_AND_ASSIGN(int bitsize, GetTotalBitsize(value_type));
+  DPF_ASSERT_OK_AND_ASSIGN(int bitsize,
+                           BitsNeeded(value_type, kDefaultSecurityParameter));
 
   EXPECT_EQ(bitsize, GetTotalBitsize<TypeParam>());
 }
@@ -154,8 +179,12 @@ TEST(ValueTypeTupleTest, TestValueTypesAreEqual) {
   ValueType value_type_1 = ToValueType<T1>();
   ValueType value_type_2 = ToValueType<T2>();
 
-  EXPECT_TRUE(ValueTypesAreEqual(value_type_1, value_type_2));
-  EXPECT_TRUE(ValueTypesAreEqual(value_type_2, value_type_1));
+  DPF_ASSERT_OK_AND_ASSIGN(bool equal,
+                           ValueTypesAreEqual(value_type_1, value_type_2));
+  EXPECT_TRUE(equal);
+  DPF_ASSERT_OK_AND_ASSIGN(equal,
+                           ValueTypesAreEqual(value_type_2, value_type_1));
+  EXPECT_TRUE(equal);
 }
 
 TEST(ValueTypeTupleTest, TestValueTypesAreNotEqual) {
@@ -165,8 +194,12 @@ TEST(ValueTypeTupleTest, TestValueTypesAreNotEqual) {
   ValueType value_type_1 = ToValueType<T1>();
   ValueType value_type_2 = ToValueType<T2>();
 
-  EXPECT_FALSE(ValueTypesAreEqual(value_type_1, value_type_2));
-  EXPECT_FALSE(ValueTypesAreEqual(value_type_2, value_type_1));
+  DPF_ASSERT_OK_AND_ASSIGN(bool equal,
+                           ValueTypesAreEqual(value_type_1, value_type_2));
+  EXPECT_FALSE(equal);
+  DPF_ASSERT_OK_AND_ASSIGN(equal,
+                           ValueTypesAreEqual(value_type_2, value_type_1));
+  EXPECT_FALSE(equal);
 }
 
 TEST(ValueTypeTupleTest, TestSerializationWithConcreteExample) {
@@ -175,6 +208,101 @@ TEST(ValueTypeTupleTest, TestSerializationWithConcreteExample) {
   auto tuple = ConvertBytesTo<Tuple<uint64_t, uint64_t>>(bytes);
   EXPECT_EQ(std::get<0>(tuple.value()), ConvertBytesTo<uint64_t>("A 128 bi"));
   EXPECT_EQ(std::get<1>(tuple.value()), ConvertBytesTo<uint64_t>("t string"));
+}
+
+template <typename T>
+class ValueTypeIntModNTest : public testing::Test {};
+using IntModNTypes =
+    ::testing::Types<IntModN<uint32_t, 4>, IntModN<uint32_t, 4294967291u>,
+                     IntModN<uint64_t, 4294967291ull>,
+                     IntModN<uint64_t, 1000000000000ull>>;
+TYPED_TEST_SUITE(ValueTypeIntModNTest, IntModNTypes);
+
+TYPED_TEST(ValueTypeIntModNTest, ToValueType) {
+  ValueType value_type = ToValueType<TypeParam>();
+
+  EXPECT_TRUE(value_type.type_case() == ValueType::kIntModN);
+  EXPECT_EQ(value_type.int_mod_n().base_integer().bitsize(),
+            sizeof(typename TypeParam::Base) * 8);
+  DPF_ASSERT_OK_AND_ASSIGN(
+      absl::uint128 modulus,
+      ValueIntegerToUint128(value_type.int_mod_n().modulus()));
+  EXPECT_EQ(modulus, absl::uint128{TypeParam::modulus()});
+}
+
+TYPED_TEST(ValueTypeIntModNTest, TestValueTypesAreEqual) {
+  ValueType value_type_1 = ToValueType<TypeParam>(), value_type_2;
+
+  value_type_2.mutable_int_mod_n()->mutable_base_integer()->set_bitsize(
+      sizeof(TypeParam) * 8);
+  value_type_2.mutable_int_mod_n()->mutable_modulus()->set_value_uint64(
+      TypeParam::modulus());
+
+  DPF_ASSERT_OK_AND_ASSIGN(bool equal,
+                           ValueTypesAreEqual(value_type_1, value_type_2));
+  EXPECT_TRUE(equal);
+  DPF_ASSERT_OK_AND_ASSIGN(equal,
+                           ValueTypesAreEqual(value_type_2, value_type_1));
+  EXPECT_TRUE(equal);
+}
+
+TYPED_TEST(ValueTypeIntModNTest, TestValueTypesAreDifferentBase) {
+  ValueType value_type_1 = ToValueType<TypeParam>(),
+            value_type_2 = value_type_1;
+
+  value_type_2.mutable_int_mod_n()->mutable_base_integer()->set_bitsize(
+      sizeof(TypeParam) * 8 * 2);
+
+  DPF_ASSERT_OK_AND_ASSIGN(bool equal,
+                           ValueTypesAreEqual(value_type_1, value_type_2));
+  EXPECT_FALSE(equal);
+  DPF_ASSERT_OK_AND_ASSIGN(equal,
+                           ValueTypesAreEqual(value_type_2, value_type_1));
+  EXPECT_FALSE(equal);
+};
+
+TYPED_TEST(ValueTypeIntModNTest, TestValueTypesAreDifferentModulus) {
+  ValueType value_type_1 = ToValueType<TypeParam>(),
+            value_type_2 = value_type_1;
+
+  value_type_2.mutable_int_mod_n()->mutable_modulus()->set_value_uint64(
+      TypeParam::modulus() - 1);
+
+  DPF_ASSERT_OK_AND_ASSIGN(bool equal,
+                           ValueTypesAreEqual(value_type_1, value_type_2));
+  EXPECT_FALSE(equal);
+  DPF_ASSERT_OK_AND_ASSIGN(equal,
+                           ValueTypesAreEqual(value_type_2, value_type_1));
+  EXPECT_FALSE(equal);
+}
+
+TYPED_TEST(ValueTypeIntModNTest, ValueTypesAreEqualFailsWhenModulusInvalid) {
+  ValueType value_type_1 = ToValueType<TypeParam>(),
+            value_type_2 = value_type_1;
+
+  value_type_2.mutable_int_mod_n()->clear_modulus();
+
+  EXPECT_THAT(ValueTypesAreEqual(value_type_1, value_type_2),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "Unknown value case for the given integer Value"));
+}
+
+TYPED_TEST(ValueTypeIntModNTest, ValueConversionFailsIfNotInteger) {
+  Value value;
+  value.mutable_tuple();
+
+  EXPECT_THAT(ConvertValueTo<TypeParam>(value),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "The given Value is not an IntModN"));
+}
+
+TYPED_TEST(ValueTypeIntModNTest, ValueConversionFailsIfTooLargeForModulus) {
+  Value value;
+  *(value.mutable_int_mod_n()) = Uint128ToValueInteger(TypeParam::modulus());
+
+  EXPECT_THAT(ConvertValueTo<TypeParam>(value),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr("is larger than kModulus")));
 }
 
 }  // namespace

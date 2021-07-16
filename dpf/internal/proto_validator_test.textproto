@@ -22,6 +22,7 @@ parameters {
       bitsize: 32
     }
   }
+  security_parameter: 44
 }
 parameters {
   log_domain_size: 6
@@ -30,6 +31,7 @@ parameters {
       bitsize: 32
     }
   }
+  security_parameter: 46
 }
 parameters {
   log_domain_size: 8
@@ -38,6 +40,7 @@ parameters {
       bitsize: 32
     }
   }
+  security_parameter: 48
 }
 key {
   seed {

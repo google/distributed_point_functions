@@ -535,9 +535,12 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
         "parameters_.size()");
   }
   if (parameters_[hierarchy_level].has_value_type()) {
-    if (!dpf_internal::ValueTypesAreEqual(
-            dpf_internal::ToValueType<T>(),
-            parameters_[hierarchy_level].value_type())) {
+    absl::StatusOr<bool> types_are_equal = dpf_internal::ValueTypesAreEqual(
+        dpf_internal::ToValueType<T>(),
+        parameters_[hierarchy_level].value_type());
+    if (!types_are_equal.ok()) {
+      return types_are_equal.status();
+    } else if (!*types_are_equal) {
       return absl::InvalidArgumentError(
           "Value type T doesn't match parameters at `hierarchy_level`");
     }

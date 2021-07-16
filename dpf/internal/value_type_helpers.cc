@@ -19,50 +19,135 @@
 namespace distributed_point_functions {
 namespace dpf_internal {
 
-absl::StatusOr<int> GetTotalBitsize(const ValueType& value_type) {
-  if (value_type.type_case() == ValueType::kInteger) {
-    return value_type.integer().bitsize();
-  } else if (value_type.type_case() == ValueType::kTuple) {
-    int bitsize = 0;
-    for (const ValueType& el : value_type.tuple().elements()) {
-      DPF_ASSIGN_OR_RETURN(int el_bitsize, GetTotalBitsize(el));
-      bitsize += el_bitsize;
-    }
-    return bitsize;
-  } else {
+absl::StatusOr<bool> ValueTypesAreEqual(const ValueType& lhs,
+                                        const ValueType& rhs) {
+  if (lhs.type_case() == ValueType::TypeCase::TYPE_NOT_SET ||
+      rhs.type_case() == ValueType::TypeCase::TYPE_NOT_SET) {
     return absl::InvalidArgumentError(
-        absl::StrCat("Unsupported value_type:\n", value_type.DebugString()));
-  }
-}
-
-bool ValueTypesAreEqual(const ValueType& lhs, const ValueType& rhs) {
-  if (lhs.type_case() == ValueType::kInteger &&
-      rhs.type_case() == ValueType::kInteger) {
+        "Both arguments must be valid ValueTypes");
+  } else if (lhs.type_case() == ValueType::kInteger &&
+             rhs.type_case() == ValueType::kInteger) {
     return lhs.integer().bitsize() == rhs.integer().bitsize();
   } else if (lhs.type_case() == ValueType::kTuple &&
              rhs.type_case() == ValueType::kTuple &&
              lhs.tuple().elements_size() == rhs.tuple().elements_size()) {
     bool result = true;
     for (int i = 0; i < static_cast<int>(lhs.tuple().elements_size()); ++i) {
-      result &=
-          ValueTypesAreEqual(lhs.tuple().elements(i), rhs.tuple().elements(i));
+      DPF_ASSIGN_OR_RETURN(
+          bool element_result,
+          ValueTypesAreEqual(lhs.tuple().elements(i), rhs.tuple().elements(i)));
+      result &= element_result;
     }
     return result;
+  } else if (lhs.type_case() == ValueType::kIntModN &&
+             rhs.type_case() == ValueType::kIntModN) {
+    const Value::Integer &lhs_modulus = lhs.int_mod_n().modulus(),
+                         &rhs_modulus = rhs.int_mod_n().modulus();
+    DPF_ASSIGN_OR_RETURN(absl::uint128 lhs_modulus_128,
+                         ValueIntegerToUint128(lhs_modulus));
+    DPF_ASSIGN_OR_RETURN(absl::uint128 rhs_modulus_128,
+                         ValueIntegerToUint128(rhs_modulus));
+    return lhs.int_mod_n().base_integer().bitsize() ==
+               rhs.int_mod_n().base_integer().bitsize() &&
+           lhs_modulus_128 == rhs_modulus_128;
   }
   return false;
 }
 
-Value ToValue(absl::uint128 input) {
-  Value result;
-  Block& block = *(result.mutable_integer()->mutable_value_uint128());
-  block.set_high(absl::Uint128High64(input));
-  block.set_low(absl::Uint128Low64(input));
+Value::Integer Uint128ToValueInteger(absl::uint128 input) {
+  Value::Integer result;
+  if (absl::Uint128High64(input) == 0) {
+    result.set_value_uint64(absl::Uint128Low64(input));
+  } else {
+    Block& block = *(result.mutable_value_uint128());
+    block.set_high(absl::Uint128High64(input));
+    block.set_low(absl::Uint128Low64(input));
+  }
   return result;
 }
 
-absl::StatusOr<int> BlocksNeeded(const ValueType& value_type) {
-  DPF_ASSIGN_OR_RETURN(int value_type_bitsize, GetTotalBitsize(value_type));
-  return (value_type_bitsize + 127) / 128;
+Value ToValue(absl::uint128 input) {
+  Value result;
+  *(result.mutable_integer()) = Uint128ToValueInteger(input);
+  return result;
+}
+
+absl::StatusOr<int> BitsNeeded(const ValueType& value_type,
+                               double security_parameter) {
+  if (value_type.type_case() == ValueType::kInteger) {
+    return value_type.integer().bitsize();
+  } else if (value_type.type_case() == ValueType::kTuple) {
+    // We handle elements of type IntModN separately, since we can sample them
+    // together.
+    int num_ints_mod_n = 0;
+    int num_other = 0;
+    const ValueType* int_mod_n = nullptr;
+    int bitsize_ints_mod_n = 0;
+    int bitsize_other = 0;
+    for (const ValueType& el : value_type.tuple().elements()) {
+      if (el.type_case() == ValueType::kIntModN) {
+        // Element is integer mod N -> check if it is the same as the others in
+        // this tuple and increase counter.
+        if (!int_mod_n) {
+          int_mod_n = &el;
+        } else if (absl::StatusOr<bool> types_are_equal =
+                       ValueTypesAreEqual(el, *int_mod_n);
+                   !types_are_equal.ok()) {
+          return types_are_equal.status();
+        } else if (!*types_are_equal) {
+          return absl::UnimplementedError(
+              "All elements of type IntModN in a tuple must be the same");
+        }
+        ++num_ints_mod_n;
+      } else {
+        ++num_other;
+      }
+    }
+    if (num_other > 0) {
+      for (int i = 0; i < num_other; ++i) {
+        double per_element_security_parameter =
+            security_parameter + std::log2(static_cast<double>(num_other));
+        DPF_ASSIGN_OR_RETURN(int el_bitsize,
+                             BitsNeeded(value_type.tuple().elements(i),
+                                        per_element_security_parameter));
+        bitsize_other += el_bitsize;
+      }
+    }
+    if (num_ints_mod_n > 0) {
+      DPF_ASSIGN_OR_RETURN(
+          absl::uint128 modulus,
+          ValueIntegerToUint128(int_mod_n->int_mod_n().modulus()));
+      DPF_ASSIGN_OR_RETURN(
+          int64_t bytes_needed_ints_mod_n,
+          IntModNBase::GetNumBytesRequired(
+              num_ints_mod_n, int_mod_n->int_mod_n().base_integer().bitsize(),
+              modulus, security_parameter));
+      bitsize_ints_mod_n = bytes_needed_ints_mod_n * 8;
+    }
+    return bitsize_ints_mod_n + bitsize_other;
+  } else if (value_type.type_case() == ValueType::kIntModN) {
+    DPF_ASSIGN_OR_RETURN(
+        absl::uint128 modulus,
+        ValueIntegerToUint128(value_type.int_mod_n().modulus()));
+    DPF_ASSIGN_OR_RETURN(int64_t bytes_needed_ints_mod_n,
+                         IntModNBase::GetNumBytesRequired(
+                             1, value_type.int_mod_n().base_integer().bitsize(),
+                             modulus, security_parameter));
+    return 8 * bytes_needed_ints_mod_n;
+  }
+  return absl::InvalidArgumentError(
+      absl::StrCat("Unsupported ValueType:\n", value_type.DebugString()));
+}
+
+absl::StatusOr<absl::uint128> ValueIntegerToUint128(const Value::Integer& in) {
+  if (in.value_case() == Value::Integer::kValueUint128) {
+    return absl::MakeUint128(in.value_uint128().high(),
+                             in.value_uint128().low());
+  } else if (in.value_case() == Value::Integer::kValueUint64) {
+    return in.value_uint64();
+  }
+  return absl::InvalidArgumentError(
+      "Unknown value case for the given integer Value");
 }
 
 }  // namespace dpf_internal

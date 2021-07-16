@@ -28,6 +28,7 @@ namespace distributed_point_functions {
 namespace dpf_internal {
 namespace {
 
+using ::testing::Ne;
 using ::testing::StartsWith;
 
 class ProtoValidatorTest : public testing::Test {
@@ -49,13 +50,13 @@ class ProtoValidatorTest : public testing::Test {
   std::unique_ptr<dpf_internal::ProtoValidator> proto_validator_;
 };
 
-TEST_F(ProtoValidatorTest, FailsWithoutParameters) {
+TEST_F(ProtoValidatorTest, CreateFailsWithoutParameters) {
   EXPECT_THAT(ProtoValidator::Create({}),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        "`parameters` must not be empty"));
 }
 
-TEST_F(ProtoValidatorTest, FailsWhenParametersNotSorted) {
+TEST_F(ProtoValidatorTest, CreateFailsWhenParametersNotSorted) {
   parameters_.resize(2);
   parameters_[0].set_log_domain_size(10);
   parameters_[1].set_log_domain_size(8);
@@ -66,7 +67,7 @@ TEST_F(ProtoValidatorTest, FailsWhenParametersNotSorted) {
                        "`parameters`"));
 }
 
-TEST_F(ProtoValidatorTest, FailsWhenDomainSizeNegative) {
+TEST_F(ProtoValidatorTest, CreateFailsWhenDomainSizeNegative) {
   parameters_.resize(1);
   parameters_[0].set_log_domain_size(-1);
 
@@ -75,7 +76,7 @@ TEST_F(ProtoValidatorTest, FailsWhenDomainSizeNegative) {
                        "`log_domain_size` must be non-negative"));
 }
 
-TEST_F(ProtoValidatorTest, FailsWhenElementBitsizeNegative) {
+TEST_F(ProtoValidatorTest, CreateFailsWhenElementBitsizeNegative) {
   parameters_.resize(1);
   parameters_[0].mutable_value_type()->mutable_integer()->set_bitsize(-1);
 
@@ -84,7 +85,7 @@ TEST_F(ProtoValidatorTest, FailsWhenElementBitsizeNegative) {
                        "`bitsize` must be positive"));
 }
 
-TEST_F(ProtoValidatorTest, FailsWhenElementBitsizeZero) {
+TEST_F(ProtoValidatorTest, CreateFailsWhenElementBitsizeZero) {
   parameters_.resize(1);
   parameters_[0].mutable_value_type()->mutable_integer()->set_bitsize(0);
 
@@ -93,7 +94,7 @@ TEST_F(ProtoValidatorTest, FailsWhenElementBitsizeZero) {
                        "`bitsize` must be positive"));
 }
 
-TEST_F(ProtoValidatorTest, FailsWhenElementBitsizeTooLarge) {
+TEST_F(ProtoValidatorTest, CreateFailsWhenElementBitsizeTooLarge) {
   parameters_.resize(1);
   parameters_[0].mutable_value_type()->mutable_integer()->set_bitsize(256);
 
@@ -102,7 +103,7 @@ TEST_F(ProtoValidatorTest, FailsWhenElementBitsizeTooLarge) {
                        "`bitsize` must be less than or equal to 128"));
 }
 
-TEST_F(ProtoValidatorTest, FailsWhenElementBitsizeNotAPowerOfTwo) {
+TEST_F(ProtoValidatorTest, CreateFailsWhenElementBitsizeNotAPowerOfTwo) {
   parameters_.resize(1);
   parameters_[0].mutable_value_type()->mutable_integer()->set_bitsize(23);
 
@@ -111,18 +112,42 @@ TEST_F(ProtoValidatorTest, FailsWhenElementBitsizeNotAPowerOfTwo) {
                        "`bitsize` must be a power of 2"));
 }
 
-TEST_F(ProtoValidatorTest, FailsWhenElementBitsizesDecrease) {
+TEST_F(ProtoValidatorTest, CreateFailsIfSecurityParameterIsNaN) {
+  parameters_.resize(1);
+  parameters_[0].set_security_parameter(std::nan(""));
+
+  EXPECT_THAT(ProtoValidator::Create(parameters_),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "`security_parameter` must not be NaN"));
+}
+
+TEST_F(ProtoValidatorTest, CreateFailsIfSecurityParameterIsNegative) {
+  parameters_.resize(1);
+  parameters_[0].set_security_parameter(-0.01);
+
+  EXPECT_THAT(ProtoValidator::Create(parameters_),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "`security_parameter` must be in [0, 128]"));
+}
+
+TEST_F(ProtoValidatorTest, CreateFailsIfSecurityParameterIsTooLarge) {
+  parameters_.resize(1);
+  parameters_[0].set_security_parameter(128.01);
+
+  EXPECT_THAT(ProtoValidator::Create(parameters_),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "`security_parameter` must be in [0, 128]"));
+}
+
+TEST_F(ProtoValidatorTest, CreateWorksWhenElementBitsizesDecrease) {
   parameters_.resize(2);
   parameters_[0].mutable_value_type()->mutable_integer()->set_bitsize(64);
   parameters_[1].mutable_value_type()->mutable_integer()->set_bitsize(32);
 
-  EXPECT_THAT(ProtoValidator::Create(parameters_),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       "`value_type` fields must be of non-decreasing size in "
-                       "`parameters`"));
+  EXPECT_THAT(ProtoValidator::Create(parameters_), IsOkAndHolds(Ne(nullptr)));
 }
 
-TEST_F(ProtoValidatorTest, FailsWhenHierarchiesAreTooFarApart) {
+TEST_F(ProtoValidatorTest, CreateFailsWhenHierarchiesAreTooFarApart) {
   parameters_.resize(2);
   parameters_[0].set_log_domain_size(10);
   parameters_[1].set_log_domain_size(73);
@@ -132,7 +157,8 @@ TEST_F(ProtoValidatorTest, FailsWhenHierarchiesAreTooFarApart) {
                        "Hierarchies may be at most 62 levels apart"));
 }
 
-TEST_F(ProtoValidatorTest, FailsIfNumberOfCorrectionWordsDoesntMatch) {
+TEST_F(ProtoValidatorTest,
+       ValidateDpfKeyFailsIfNumberOfCorrectionWordsDoesntMatch) {
   dpf_key_.add_correction_words();
 
   EXPECT_THAT(proto_validator_->ValidateDpfKey(dpf_key_),
@@ -143,7 +169,7 @@ TEST_F(ProtoValidatorTest, FailsIfNumberOfCorrectionWordsDoesntMatch) {
                                     dpf_key_.correction_words_size())));
 }
 
-TEST_F(ProtoValidatorTest, FailsIfSeedIsMissing) {
+TEST_F(ProtoValidatorTest, ValidateDpfKeyFailsIfSeedIsMissing) {
   dpf_key_.clear_seed();
 
   EXPECT_THAT(
@@ -151,7 +177,8 @@ TEST_F(ProtoValidatorTest, FailsIfSeedIsMissing) {
       StatusIs(absl::StatusCode::kInvalidArgument, "key.seed must be present"));
 }
 
-TEST_F(ProtoValidatorTest, FailsIfLastLevelOutputCorrectionIsMissing) {
+TEST_F(ProtoValidatorTest,
+       ValidateDpfKeyFailsIfLastLevelOutputCorrectionIsMissing) {
   dpf_key_.clear_last_level_value_correction();
 
   EXPECT_THAT(proto_validator_->ValidateDpfKey(dpf_key_),
@@ -159,7 +186,7 @@ TEST_F(ProtoValidatorTest, FailsIfLastLevelOutputCorrectionIsMissing) {
                        "key.last_level_value_correction must be present"));
 }
 
-TEST_F(ProtoValidatorTest, FailsIfOutputCorrectionIsMissing) {
+TEST_F(ProtoValidatorTest, ValidateDpfKeyFailsIfOutputCorrectionIsMissing) {
   for (CorrectionWord& cw : *(dpf_key_.mutable_correction_words())) {
     cw.clear_value_correction();
   }
@@ -170,7 +197,7 @@ TEST_F(ProtoValidatorTest, FailsIfOutputCorrectionIsMissing) {
                StartsWith("Malformed DpfKey: expected correction_words")));
 }
 
-TEST_F(ProtoValidatorTest, FailsIfKeyIsMissing) {
+TEST_F(ProtoValidatorTest, ValidateEvaluationContextFailsIfKeyIsMissing) {
   ctx_.clear_key();
 
   EXPECT_THAT(
@@ -178,7 +205,8 @@ TEST_F(ProtoValidatorTest, FailsIfKeyIsMissing) {
       StatusIs(absl::StatusCode::kInvalidArgument, "ctx.key must be present"));
 }
 
-TEST_F(ProtoValidatorTest, FailsIfParameterSizeDoesntMatch) {
+TEST_F(ProtoValidatorTest,
+       ValidateEvaluationContextFailsIfParameterSizeDoesntMatch) {
   ctx_.mutable_parameters()->erase(ctx_.parameters().end() - 1);
 
   EXPECT_THAT(proto_validator_->ValidateEvaluationContext(ctx_),
@@ -186,7 +214,8 @@ TEST_F(ProtoValidatorTest, FailsIfParameterSizeDoesntMatch) {
                        "Number of parameters in `ctx` doesn't match"));
 }
 
-TEST_F(ProtoValidatorTest, FailsIfParameterDoesntMatch) {
+TEST_F(ProtoValidatorTest,
+       ValidateEvaluationContextFailsIfLogDomainSizeDoesntMatch) {
   ctx_.mutable_parameters(0)->set_log_domain_size(
       ctx_.parameters(0).log_domain_size() + 1);
 
@@ -195,7 +224,18 @@ TEST_F(ProtoValidatorTest, FailsIfParameterDoesntMatch) {
                        "Parameter 0 in `ctx` doesn't match"));
 }
 
-TEST_F(ProtoValidatorTest, FailsIfContextFullyEvaluated) {
+TEST_F(ProtoValidatorTest,
+       ValidateEvaluationContextFailsIfSecurityParameterDoesntMatch) {
+  ctx_.mutable_parameters(0)->set_security_parameter(
+      ctx_.parameters(0).security_parameter() + 1);
+
+  EXPECT_THAT(proto_validator_->ValidateEvaluationContext(ctx_),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "Parameter 0 in `ctx` doesn't match"));
+}
+
+TEST_F(ProtoValidatorTest,
+       ValidateEvaluationContextFailsIfContextFullyEvaluated) {
   ctx_.set_previous_hierarchy_level(parameters_.size() - 1);
 
   EXPECT_THAT(proto_validator_->ValidateEvaluationContext(ctx_),
@@ -203,7 +243,9 @@ TEST_F(ProtoValidatorTest, FailsIfContextFullyEvaluated) {
                        "This context has already been fully evaluated"));
 }
 
-TEST_F(ProtoValidatorTest, FailsIfPreviousHierarchyLevelEqualsHierarchyLevel) {
+TEST_F(
+    ProtoValidatorTest,
+    ValidateEvaluationContextFailsIfPreviousHierarchyLevelEqualsHierarchyLevel) {
   ctx_.set_previous_hierarchy_level(ctx_.partial_evaluations_level());
   ctx_.add_partial_evaluations();
 
@@ -213,7 +255,7 @@ TEST_F(ProtoValidatorTest, FailsIfPreviousHierarchyLevelEqualsHierarchyLevel) {
                        "ctx.partial_evaluations_level"));
 }
 
-TEST_F(ProtoValidatorTest, FailsIfTypeNotInteger) {
+TEST_F(ProtoValidatorTest, ValidateValueFailsIfTypeNotInteger) {
   ValueType type = ToValueType<uint32_t>();
   Value value = ToValue(Tuple<uint32_t>{23});
 
@@ -222,7 +264,7 @@ TEST_F(ProtoValidatorTest, FailsIfTypeNotInteger) {
       StatusIs(absl::StatusCode::kInvalidArgument, "Expected integer value"));
 }
 
-TEST_F(ProtoValidatorTest, FailsIfIntegerTooLarge) {
+TEST_F(ProtoValidatorTest, ValidateValueFailsIfIntegerTooLarge) {
   ValueType type;
   Value value;
 
@@ -239,7 +281,7 @@ TEST_F(ProtoValidatorTest, FailsIfIntegerTooLarge) {
                    value_64, element_bitsize)));
 }
 
-TEST_F(ProtoValidatorTest, FailsIfTypeNotTuple) {
+TEST_F(ProtoValidatorTest, ValidateValueFailsIfTypeNotTuple) {
   ValueType type = ToValueType<Tuple<uint32_t>>();
   Value value = ToValue(uint32_t{23});
 
@@ -248,13 +290,34 @@ TEST_F(ProtoValidatorTest, FailsIfTypeNotTuple) {
       StatusIs(absl::StatusCode::kInvalidArgument, "Expected tuple value"));
 }
 
-TEST_F(ProtoValidatorTest, FailsIfTupleSizeDoesntMatch) {
+TEST_F(ProtoValidatorTest, ValidateValueFailsIfTupleSizeDoesntMatch) {
   ValueType type = ToValueType<Tuple<uint32_t>>();
   Value value = ToValue(Tuple<uint32_t, uint32_t>{23, 42});
 
   EXPECT_THAT(proto_validator_->ValidateValue(value, type),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        "Expected tuple value of size 1 but got size 2"));
+}
+
+TEST_F(ProtoValidatorTest, ValidateValueFailsIfValueLargerThanModulus) {
+  constexpr uint64_t kModulus = 3;
+  ValueType type = ToValueType<IntModN<uint64_t, kModulus>>();
+  Value value;
+
+  value.mutable_int_mod_n()->set_value_uint64(kModulus);
+
+  EXPECT_THAT(proto_validator_->ValidateValue(value, type),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "Value (= 3) is too large for modulus (= 3)"));
+}
+
+TEST_F(ProtoValidatorTest, ValidateValueFailsIfValueIsUnknown) {
+  ValueType type;
+  Value value;
+
+  EXPECT_THAT(proto_validator_->ValidateValue(value, type),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::StartsWith("Unsupported ValueType:")));
 }
 
 TEST(ProtoValidator, ValidateValueTypeFailsIfBitsizeNotPositive) {
@@ -292,7 +355,7 @@ TEST(ProtoValidator, ValidateValueTypeFailsIfNoTypeChosen) {
 
   EXPECT_THAT(ProtoValidator::ValidateValueType(type),
               StatusIs(absl::StatusCode::kInvalidArgument,
-                       StartsWith("Unsupported value_type")));
+                       StartsWith("Unsupported ValueType")));
 }
 
 }  // namespace

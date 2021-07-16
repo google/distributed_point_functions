@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <openssl/rand.h>
+
 #include "absl/status/status.h"
 #include "absl/types/span.h"
 #include "benchmark/benchmark.h"
@@ -29,6 +31,7 @@ void BM_Sample(benchmark::State& state) {
   std::string bytes(
       MyInt::GetNumBytesRequired(kNumSamples, security_parameter).value(),
       '\0');
+  RAND_bytes(reinterpret_cast<uint8_t*>(bytes.data()), bytes.size());
   std::vector<MyInt> output(num_iterations * kNumSamples);
   for (auto s : state) {
     for (int i = 0; i < num_iterations; ++i) {

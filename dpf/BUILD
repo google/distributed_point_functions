@@ -40,6 +40,7 @@ cc_test(
     srcs = ["int_mod_n_benchmark.cc"],
     deps = [
         ":int_mod_n",
+        "@boringssl//:crypto",
         "@com_github_google_benchmark//:benchmark_main",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/types:span",

@@ -69,6 +69,12 @@ TEST(IntModNTest, AdditionWithWrapAroundWorks) {
   EXPECT_EQ(a.value(), 13);
 }
 
+TEST(IntModNTest, NegationWorks) {
+  MyIntModN a(10);
+  MyIntModN b = -a;
+  EXPECT_EQ(a + b, MyIntModN(0));
+}
+
 TEST(IntModNTest, GetNumBytesRequiredFailsIfUnfeasible) {
   absl::StatusOr<int> result = MyIntModN::GetNumBytesRequired(5, 95);
   EXPECT_THAT(result,

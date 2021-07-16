@@ -26,9 +26,11 @@
 #include "absl/numeric/int128.h"
 #include "absl/status/statusor.h"
 #include "dpf/distributed_point_function.pb.h"
+#include "dpf/int_mod_n.h"
 #include "dpf/tuple.h"
 
 namespace distributed_point_functions {
+
 namespace dpf_internal {
 
 // Helper type for overloading by T. C++ only allows overloading by input types,
@@ -65,21 +67,47 @@ template <typename... ElementType>
 struct is_supported_type<Tuple<ElementType...>, false> {
   static constexpr bool value = (is_supported_type<ElementType>::value && ...);
 };
+
+// Modular integers with supported base types: true.
+template <typename BaseInteger, BaseInteger modulus>
+struct is_supported_type<IntModN<BaseInteger, modulus>, false> {
+  static constexpr bool value = is_unsigned_integer_v<BaseInteger>;
+};
+
 template <typename T>
 inline constexpr bool is_supported_type_v = is_supported_type<T>::value;
 
+// Checks if the template parameter can be converted directly from a string of
+// bytes.
+
+// Default case: True.
+template <typename T, typename = void>
+struct can_be_converted_directly : std::true_type {};
+
+// Tuples: True, if all elements can be converted directly.
+template <typename... ElementType>
+struct can_be_converted_directly<Tuple<ElementType...>, void> {
+  static constexpr bool value =
+      (can_be_converted_directly<ElementType>::value && ...);
+};
+
+// IntModN: False.
+template <typename BaseInteger, BaseInteger modulus>
+struct can_be_converted_directly<IntModN<BaseInteger, modulus>, void> {
+  static constexpr bool value = false;
+};
+
+template <typename T>
+inline constexpr bool can_be_converted_directly_v =
+    can_be_converted_directly<T>::value;
+
 // Helper function to compute the combined size of an element of type T. For
 // tuples, this is the sum of the sizes of its elements, ignoring alignment.
+// Used to convert strings to elements of type T.
 template <typename T>
 constexpr int GetTotalBitsize() {
   return GetTotalBitsizeImpl(type_helper<T>());
 }
-
-// Overload for ValueType protos.
-//
-// Returns INVALID_ARGUMENT if `value_type` does not correspond to a known value
-// type.
-absl::StatusOr<int> GetTotalBitsize(const ValueType& value_type);
 
 // Overload for integers.
 template <typename T, typename = std::enable_if_t<is_unsigned_integer_v<T>>>
@@ -95,25 +123,19 @@ constexpr int GetTotalBitsizeImpl(type_helper<Tuple<T...>>) {
   return bitsize;
 }
 
-// Type trait to test if a type supports batching. True if T is an integer or
-// a Tuple of integers with a total size of at most 128 bits.
+// Type trait to test if a type supports batching. True if T can be converted
+// directly from bytes and has a size of at most 128 bits.
 
-// Integers: true. Assumes the largest integer is 128 bits.
-template <typename T, bool = is_unsigned_integer_v<T>>
-struct supports_batching : std::true_type {};
+// Directly convertible types.
+template <typename T, bool = can_be_converted_directly_v<T>>
+struct supports_batching {
+  static constexpr bool value = GetTotalBitsize<T>() <= 128;
+};
 
-// Default case: false.
+// Default: false.
 template <typename T>
 struct supports_batching<T, false> : std::false_type {};
 
-// Tuples: True if all elements support batching and the total size is at most
-// 128 bits.
-template <typename... ElementType>
-struct supports_batching<Tuple<ElementType...>, false> {
-  static constexpr bool value =
-      GetTotalBitsize<Tuple<ElementType...>>() <= 8 * sizeof(absl::uint128) &&
-      (supports_batching<ElementType>::value && ...);
-};
 template <typename T>
 inline constexpr bool supports_batching_v = supports_batching<T>::value;
 
@@ -128,45 +150,30 @@ constexpr int ElementsPerBlock() {
   }
 }
 
-// Computes the number of pseudorandom 128-bit AES blocks needed to get a
-// uniform element of the given `ValueType`. For types whose elements can be
-// bijectively mapped to strings (e.g., unsigned integers and tuples of
-// integers), this is equivalent to `GetTotalBitsize(value_type) / 128`, rounded
-// up.
+// Computes the number of pseudorandom bits needed to get a uniform element of
+// the given `ValueType`. For types whose elements can be bijectively mapped to
+// strings (e.g., unsigned integers and tuples of integers), this is equivalent
+// to the bit size of the value type. For all other types, returns the number of
+// bits needed so that converting a uniform string with the given number of bits
+// to an element of `value_type` results in a distribution with total variation
+// distance < 2^(-`security_parameter`) from uniform.
 //
 // Returns INVALID_ARGUMENT in case value_type does not represent a known type.
-absl::StatusOr<int> BlocksNeeded(const ValueType& value_type);
+absl::StatusOr<int> BitsNeeded(const ValueType& value_type,
+                               double security_parameter);
 
-// ToValueType<T> Returns a `ValueType` message describing T.
-template <typename T>
-ValueType ToValueType() {
-  return ToValueTypeImpl(type_helper<T>());
-}
-
-// GetValueTypeProtoForImpl should be overloaded for any new types supported in
-// the `ValueType` proto.
-template <typename T, typename = std::enable_if_t<is_unsigned_integer_v<T>>>
-ValueType ToValueTypeImpl(type_helper<T>) {
-  ValueType result;
-  result.mutable_integer()->set_bitsize(8 * sizeof(T));
-  return result;
-}
-
-// Overload for tuples.
-template <typename... ElementType>
-ValueType ToValueTypeImpl(type_helper<Tuple<ElementType...>>) {
-  ValueType result;
-  ValueType::Tuple* tuple = result.mutable_tuple();
-  // Append the type of each ElementType. We use a C++17 fold expression to
-  // guarantee the order is well-defined. See
-  // https://stackoverflow.com/a/54053084.
-  ((*(tuple->add_elements()) = ToValueType<ElementType>()), ...);
-  return result;
-}
+// Converts the given Value::Integer to an absl::uint128. Used as a helper
+// function in `ConvertValueTo` and `ValueTypesAreEqual`.
+//
+// Returns INVALID_ARGUMENT if `in` is not a simple integer or IntModN.
+absl::StatusOr<absl::uint128> ValueIntegerToUint128(const Value::Integer& in);
 
 // Returns `true` if `lhs` and `rhs` describe the same types, and `false`
 // otherwise.
-bool ValueTypesAreEqual(const ValueType& lhs, const ValueType& rhs);
+//
+// Returns INVALID_ARGUMENT if an error occurs while parsing either argument.
+absl::StatusOr<bool> ValueTypesAreEqual(const ValueType& lhs,
+                                        const ValueType& rhs);
 
 // Converts a given Value to the template parameter T.
 //
@@ -184,25 +191,20 @@ absl::StatusOr<T> ConvertValueToImpl(const Value& value, type_helper<T>) {
   }
   // We first parse the value into an absl::uint128, then check its range if it
   // is supposed to be smaller than 128 bits.
-  absl::uint128 value_128;
-  if (value.integer().value_case() == Value::Integer::kValueUint64) {
-    value_128 = value.integer().value_uint64();
-  } else if (value.integer().value_case() == Value::Integer::kValueUint128) {
-    const Block& block = value.integer().value_uint128();
-    value_128 = absl::MakeUint128(block.high(), block.low());
-  } else {
-    return absl::InvalidArgumentError(
-        "Unknown value case for the given integer Value");
+  absl::StatusOr<absl::uint128> value_128 =
+      ValueIntegerToUint128(value.integer());
+  if (!value_128.ok()) {
+    return value_128.status();
   }
   // Check whether value is in range if it's smaller than 128 bits.
   if (!std::is_same_v<T, absl::uint128> &&
-      absl::Uint128Low64(value_128) >
+      absl::Uint128Low64(*value_128) >
           static_cast<uint64_t>(std::numeric_limits<T>::max())) {
     return absl::InvalidArgumentError(absl::StrCat(
-        "Value (= ", absl::Uint128Low64(value_128),
+        "Value (= ", absl::Uint128Low64(*value_128),
         ") too large for the given type T (size ", sizeof(T), ")"));
   }
-  return static_cast<T>(value_128);
+  return static_cast<T>(*value_128);
 }
 
 // Implementation of ConvertValueTo<T> for Tuple<ElementType...>.
@@ -255,6 +257,26 @@ absl::StatusOr<TupleType> ConvertValueToImpl2(const Value& value,
   }
 }
 
+// Overload for IntModN.
+template <typename BaseInteger, BaseInteger kModulus>
+absl::StatusOr<IntModN<BaseInteger, kModulus>> ConvertValueToImpl(
+    const Value& value, type_helper<IntModN<BaseInteger, kModulus>>) {
+  if (value.value_case() != Value::kIntModN) {
+    return absl::InvalidArgumentError("The given Value is not an IntModN");
+  }
+  absl::StatusOr<absl::uint128> value_128 =
+      ValueIntegerToUint128(value.int_mod_n());
+  if (!value_128.ok()) {
+    return value_128.status();
+  }
+  if (*value_128 >= absl::uint128{kModulus}) {
+    return absl::InvalidArgumentError(
+        absl::StrFormat("The given value (= %d) is larger than kModulus (= %d)",
+                        *value_128, kModulus));
+  }
+  return IntModN<BaseInteger, kModulus>(static_cast<BaseInteger>(*value_128));
+}
+
 // Converts a `repeated Value` proto field to a std::array with element type T.
 //
 // Returns INVALID_ARGUMENT in case the input has the wrong size, or if the
@@ -280,10 +302,22 @@ absl::StatusOr<std::array<T, ElementsPerBlock<T>()>> ValuesToArray(
   return result;
 }
 
+// Converts an absl::uint128 to a Value::Integer. Used as a helper function in
+// ToValue.
+Value::Integer Uint128ToValueInteger(absl::uint128 input);
+
 // ToValue Converts the argument to a Value.
 //
 // Overload for native integers.
 Value ToValue(absl::uint128 input);
+
+// Overload for IntModN.
+template <typename BaseInteger, BaseInteger kModulus>
+Value ToValue(const IntModN<BaseInteger, kModulus>& input) {
+  Value result;
+  *(result.mutable_int_mod_n()) = Uint128ToValueInteger(input.value());
+  return result;
+}
 
 // Overload for Tuple<ElementType...>.
 template <typename... ElementType>
@@ -310,18 +344,61 @@ std::vector<Value> ToValues(absl::Span<const T> inputs) {
   return result;
 }
 
-// Creates a value of type T from the given `bytes`.
+// ToValueType<T> Returns a `ValueType` message describing T.
+template <typename T>
+ValueType ToValueType() {
+  return ToValueTypeImpl(type_helper<T>());
+}
+
+// ToValueTypeImpl should be overloaded for any new types supported in the
+// `ValueType` proto.
+template <typename T, typename = std::enable_if_t<is_unsigned_integer_v<T>>>
+ValueType ToValueTypeImpl(type_helper<T>) {
+  ValueType result;
+  result.mutable_integer()->set_bitsize(8 * sizeof(T));
+  return result;
+}
+
+// Overload for tuples.
+template <typename... ElementType>
+ValueType ToValueTypeImpl(type_helper<Tuple<ElementType...>>) {
+  ValueType result;
+  ValueType::Tuple* tuple = result.mutable_tuple();
+  // Append the type of each ElementType. We use a C++17 fold expression to
+  // guarantee the order is well-defined. See
+  // https://stackoverflow.com/a/54053084.
+  ((*(tuple->add_elements()) = ToValueType<ElementType>()), ...);
+  return result;
+}
+
+// Overload for IntModN.
+template <typename BaseInteger, BaseInteger kModulus>
+ValueType ToValueTypeImpl(type_helper<IntModN<BaseInteger, kModulus>>) {
+  ValueType result;
+  *(result.mutable_int_mod_n()->mutable_base_integer()) =
+      ToValueType<BaseInteger>().integer();
+  *(result.mutable_int_mod_n()->mutable_modulus()) =
+      ToValue(kModulus).integer();
+  return result;
+}
+
+// Creates a value of type T from the given `bytes`. If possible, converts bytes
+// directly using ConvertBytesDirectlyTo. Otherwise, uses SampleFromBytes.
 //
 // Crashes if `bytes.size()` is too small for the output type.
 template <typename T>
 T ConvertBytesTo(absl::string_view bytes) {
-  return ConvertBytesToImpl(bytes, type_helper<T>{});
+  if constexpr (can_be_converted_directly_v<T>) {
+    return ConvertBytesDirectlyTo(bytes, type_helper<T>{});
+  } else {
+    return SampleFromBytes(bytes, type_helper<T>{});
+  }
 }
 
 // Overload for integer types.
 template <typename T, typename = std::enable_if_t<is_unsigned_integer_v<T>>>
-T ConvertBytesToImpl(absl::string_view bytes, type_helper<T>) {
-  CHECK(ABSL_PREDICT_FALSE(bytes.size() == sizeof(T)));
+T ConvertBytesDirectlyTo(absl::string_view bytes, type_helper<T>) {
+  CHECK(bytes.size() == sizeof(T));
   T out{0};
 #ifdef ABSL_IS_LITTLE_ENDIAN
   std::copy_n(bytes.begin(), sizeof(T), reinterpret_cast<char*>(&out));
@@ -334,14 +411,16 @@ T ConvertBytesToImpl(absl::string_view bytes, type_helper<T>) {
   return out;
 }
 
-// Overload for tuples.
+// Overload of ConvertBytesDirectlyTo for tuples.
+// TOOD(b/193007723): Move this to tuple.h.
 template <typename... ElementType>
-Tuple<ElementType...> ConvertBytesToImpl(absl::string_view bytes,
-                                         type_helper<Tuple<ElementType...>>) {
+Tuple<ElementType...> ConvertBytesDirectlyTo(
+    absl::string_view bytes, type_helper<Tuple<ElementType...>>) {
   using TupleType = Tuple<ElementType...>;
   CHECK(8 * bytes.size() >= GetTotalBitsize<TupleType>());
   int offset = 0;
   absl::Status status = absl::OkStatus();
+  // Braced-init-list ensures the elements are constructed in-order.
   return TupleType{[&bytes, &offset, &status] {
     const int element_size_bytes = (GetTotalBitsize<ElementType>() + 7) / 8;
     ElementType element =
@@ -351,6 +430,108 @@ Tuple<ElementType...> ConvertBytesToImpl(absl::string_view bytes,
   }()...};
 }
 
+// Converts `block` to type T. Then, if `update == true`, fills up `block` from
+// `bytes` and advances `bytes` by the amount of bytes read.
+template <typename T>
+T SampleAndUpdateBytes(bool update, absl::uint128& block,
+                       absl::string_view& bytes) {
+  return SampleAndUpdateBytesImpl(update, block, bytes, type_helper<T>{});
+}
+
+// Overload for simple integers.
+template <typename T, typename = std::enable_if_t<is_unsigned_integer_v<T>>>
+T SampleAndUpdateBytesImpl(bool update, absl::uint128& block,
+                           absl::string_view& bytes, type_helper<T>) {
+  T result = static_cast<T>(block);
+
+  if (update) {
+    // Set sizeof(T) least significant bytes to 0.
+    if constexpr (std::is_same_v<T, absl::uint128>) {
+      block = 0;
+    } else {
+      constexpr absl::uint128 mask =
+          ~absl::uint128{std::numeric_limits<T>::max()};
+      block &= mask;
+    }
+
+    // Fill up with `bytes` and advance `bytes` by sizeof(T).
+    DCHECK(bytes.size() >= sizeof(T));
+    block |= ConvertBytesTo<T>(bytes.substr(0, sizeof(T)));
+    bytes = bytes.substr(sizeof(T));
+  }
+
+  return result;
+}
+
+// Overload for IntModN.
+template <typename BaseInteger, BaseInteger kModulus>
+IntModN<BaseInteger, kModulus> SampleAndUpdateBytesImpl(
+    bool update, absl::uint128& block, absl::string_view& bytes,
+    type_helper<IntModN<BaseInteger, kModulus>>) {
+  // Optimization for native uint128. This is equivalent to what's done in
+  // int128.cc, but since division is not defined in the header, the compiler
+  // cannot optimize the division and modulus into a single operation.
+#ifdef ABSL_HAVE_INTRINSIC_INT128
+  absl::uint128 quotient = static_cast<unsigned __int128>(block) / kModulus,
+                remainder = static_cast<unsigned __int128>(block) / kModulus;
+#else
+  absl::uint128 quotient = block / kModulus, remainder = block % kModulus;
+#endif
+  IntModN<BaseInteger, kModulus> result(static_cast<BaseInteger>(remainder));
+
+  if (update) {
+    block = quotient << (sizeof(BaseInteger) * 8);
+    block |= ConvertBytesTo<BaseInteger>(bytes.substr(0, sizeof(BaseInteger)));
+    bytes = bytes.substr(sizeof(BaseInteger));
+  }
+
+  return result;
+}
+
+template <typename... ElementType>
+Tuple<ElementType...> SampleAndUpdateBytesImpl(
+    bool update, absl::uint128& block, absl::string_view& bytes,
+    type_helper<Tuple<ElementType...>>) {
+  using TupleType = Tuple<ElementType...>;
+
+  int element_counter = 0;
+  // Braced-init-list ensures the elements are constructed in-order.
+  return TupleType{[update, &element_counter, &block, &bytes]() -> ElementType {
+    // If `update` is true, update after all elements. Otherwise, don't update
+    // after the last one.
+    constexpr int num_elements = std::tuple_size_v<typename TupleType::Base>;
+    bool update2 = update || (++element_counter < num_elements);
+    return SampleAndUpdateBytes<ElementType>(update2, block, bytes);
+  }()...};
+}
+
+// Implementation of SampleFromBytes for single IntModNs.
+template <typename BaseInteger, BaseInteger kModulus>
+IntModN<BaseInteger, kModulus> SampleFromBytes(
+    absl::string_view bytes, type_helper<IntModN<BaseInteger, kModulus>>) {
+  DCHECK(bytes.size() >= sizeof(absl::uint128));
+  absl::uint128 block =
+      ConvertBytesTo<absl::uint128>(bytes.substr(0, sizeof(absl::uint128)));
+  return SampleAndUpdateBytes<IntModN<BaseInteger, kModulus>>(false, block,
+                                                              bytes);
+}
+
+// Implementation of SampleFromBytes for tuples.
+template <typename... ElementType>
+Tuple<ElementType...> SampleFromBytes(absl::string_view bytes,
+                                      type_helper<Tuple<ElementType...>>) {
+  using TupleType = Tuple<ElementType...>;
+  using FirstElementType = std::tuple_element_t<0, typename TupleType::Base>;
+  static_assert(sizeof(FirstElementType) <= sizeof(absl::uint128));
+  DCHECK(bytes.size() >= sizeof(absl::uint128) - sizeof(FirstElementType) +
+                             (sizeof(ElementType) + ...));
+  absl::uint128 block =
+      ConvertBytesTo<absl::uint128>(bytes.substr(0, sizeof(absl::uint128)));
+  bytes = bytes.substr(sizeof(absl::uint128));
+
+  return SampleAndUpdateBytes<TupleType>(false, block, bytes);
+}
+
 // Converts a given string to an array of exactly ElementsPerBlock<T>() elements
 // of type T.
 //
@@ -358,12 +539,18 @@ Tuple<ElementType...> ConvertBytesToImpl(absl::string_view bytes,
 template <typename T>
 std::array<T, ElementsPerBlock<T>()> ConvertBytesToArrayOf(
     absl::string_view bytes) {
-  const int element_size_bytes = (GetTotalBitsize<T>() + 7) / 8;
-  CHECK(bytes.size() >= ElementsPerBlock<T>() * element_size_bytes);
   std::array<T, ElementsPerBlock<T>()> out;
-  for (int i = 0; i < ElementsPerBlock<T>(); ++i) {
-    out[i] = ConvertBytesTo<T>(
-        bytes.substr(i * element_size_bytes, element_size_bytes));
+  if constexpr (supports_batching_v<T>) {
+    const int element_size_bytes = (GetTotalBitsize<T>() + 7) / 8;
+    CHECK(bytes.size() >= ElementsPerBlock<T>() * element_size_bytes);
+    for (int i = 0; i < ElementsPerBlock<T>(); ++i) {
+      out[i] = ConvertBytesTo<T>(
+          bytes.substr(i * element_size_bytes, element_size_bytes));
+    }
+  } else {
+    static_assert(out.size() == 1,
+                  "T does not support batching, but ElementsPerBlock<T> != 1");
+    out[0] = ConvertBytesTo<T>(bytes);
   }
   return out;
 }

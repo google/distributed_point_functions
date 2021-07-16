@@ -83,6 +83,8 @@ class IntModN : public IntModNBase {
                 "BaseInteger may be at most 128 bits large");
 
  public:
+  using Base = BaseInteger;
+
   constexpr IntModN() : value_(0) {}
   explicit constexpr IntModN(BaseInteger value) : value_(value % kModulus) {}
 
@@ -110,6 +112,9 @@ class IntModN : public IntModNBase {
   // Returns the underlying representation as a BaseInteger.
   constexpr BaseInteger value() const { return value_; }
 
+  // Returns the modulus of this IntModN type.
+  static constexpr BaseInteger modulus() { return kModulus; }
+
   // Returns the number of (pseudo)random bytes required to extract
   // `num_samples` samples r1, ..., rn
   // so that the stream r1, ..., rn is close to a truly (pseudo) random
@@ -131,6 +136,7 @@ class IntModN : public IntModNBase {
   // `bytes` is long enough for the required number of samples and security
   // parameter. Use `GetNumBytesRequired` or `SampleFromBytes` if such checks
   // are needed.
+  //
   template <int kCompiledNumSamples = 1>
   static void UnsafeSampleFromBytes(absl::string_view bytes,
                                     double security_parameter,
@@ -209,6 +215,26 @@ constexpr IntModN<BaseInteger, modulus> operator-(
     IntModN<BaseInteger, modulus> a, const IntModN<BaseInteger, modulus>& b) {
   a -= b;
   return a;
+}
+
+template <typename BaseInteger, BaseInteger modulus>
+constexpr IntModN<BaseInteger, modulus> operator-(
+    IntModN<BaseInteger, modulus> a) {
+  IntModN<BaseInteger, modulus> result(BaseInteger{0});
+  result -= a;
+  return result;
+}
+
+template <typename BaseInteger, BaseInteger modulus>
+constexpr bool operator==(const IntModN<BaseInteger, modulus>& a,
+                          const IntModN<BaseInteger, modulus>& b) {
+  return a.value() == b.value();
+}
+
+template <typename BaseInteger, BaseInteger modulus>
+constexpr bool operator!=(const IntModN<BaseInteger, modulus>& a,
+                          const IntModN<BaseInteger, modulus>& b) {
+  return !(a == b);
 }
 
 }  // namespace distributed_point_functions

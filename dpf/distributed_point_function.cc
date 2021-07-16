@@ -19,7 +19,6 @@
 
 #include <limits>
 
-#include "distributed_point_function.h"
 #include "dpf/status_macros.h"
 
 namespace distributed_point_functions {
@@ -577,14 +576,19 @@ DistributedPointFunction::CreateIncremental(
   std::vector<int> blocks_needed(parameters.size());
   for (int i = 0; i < static_cast<int>(parameters.size()); ++i) {
     if (parameters[i].has_value_type()) {
-      DPF_ASSIGN_OR_RETURN(blocks_needed[i], dpf_internal::BlocksNeeded(
-                                                 parameters[i].value_type()));
+      DPF_ASSIGN_OR_RETURN(
+          int bits_needed,
+          dpf_internal::BitsNeeded(parameters[i].value_type(),
+                                   parameters[i].security_parameter()));
+      blocks_needed[i] = (bits_needed + 127) / 128;
     } else {
       ValueType value_type;
       value_type.mutable_integer()->set_bitsize(
           parameters[i].element_bitsize());
-      DPF_ASSIGN_OR_RETURN(blocks_needed[i],
-                           dpf_internal::BlocksNeeded(value_type));
+      DPF_ASSIGN_OR_RETURN(int bits_needed,
+                           dpf_internal::BitsNeeded(
+                               value_type, parameters[i].security_parameter()));
+      blocks_needed[i] = (bits_needed + 127) / 128;
     }
   }
 

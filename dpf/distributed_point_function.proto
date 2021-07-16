@@ -35,11 +35,21 @@ message ValueType {
     repeated ValueType elements = 1;
   }
 
+  // Describes an integer ring modulo `modulus`.
+  message IntModN {
+    // The underlying integer type used to represent elements in the ring.
+    Integer base_integer = 1;
+    // The modulus.
+    Value.Integer modulus = 2;
+  }
+
   oneof type {
     // A single integer modulo 2^l.
     Integer integer = 1;
     // A tuple of values.
     Tuple tuple = 2;
+    // A integer with custom modulus.
+    IntModN int_mod_n = 3;
   }
   // Do not add fields outside of the `oneof` above, to ensure that messages
   // with known ValueTypes are serialized deterministically. See the
@@ -66,6 +76,8 @@ message Value {
   oneof value {
     Integer integer = 1;
     Tuple tuple = 2;
+    Integer int_mod_n =
+        3;  // The value of an IntModN is represented by its base_integer type.
   }
 }
 // LINT.ThenChange(
@@ -83,6 +95,13 @@ message DpfParameters {
   int32 element_bitsize = 2 [deprecated = true];
   // Describes the type of output values at this hierarchy level.
   ValueType value_type = 3;
+  // The negative logarithm of the total variation distance from uniform that an
+  // evaluation at a *single point* at this hierarchy level is allowed to have.
+  // The correct value for this parameter depends on the maximum number of
+  // points at which this hierarchy level is evaluated. It should be at least 40
+  // + log2(number_of_evaluation_points). Defaults to
+  // ProtoValidator::kDefaultSecurityParameter + log_domain_size.
+  double security_parameter = 4;
 }
 
 // A single 128-bit AES block.

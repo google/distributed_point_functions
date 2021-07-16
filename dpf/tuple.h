@@ -108,7 +108,9 @@ constexpr Tuple<T...> add(const Tuple<T...>& lhs, const Tuple<T...>& rhs,
 
 template <typename... T, std::size_t... I>
 constexpr Tuple<T...> negate(const Tuple<T...>& t, std::index_sequence<I...>) {
-  return Tuple<T...>{-std::get<I>(t.value())...};
+  return Tuple<T...>{
+      // Explicitly cast to T to avoid -Wnarrowing warnings for small integers.
+      T(-std::get<I>(t.value()))...};
 }
 }  // namespace dpf_internal
 

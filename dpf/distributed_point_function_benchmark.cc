@@ -67,6 +67,11 @@ BENCHMARK_TEMPLATE(
     Tuple<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t>)
     ->DenseRange(12, 24, 2);
 
+using MyIntModN = IntModN<uint32_t, 4294967291u>;  // 2**32 - 5.
+BENCHMARK_TEMPLATE(BM_EvaluateRegularDpf,
+                   Tuple<MyIntModN, MyIntModN, MyIntModN, MyIntModN, MyIntModN>)
+    ->DenseRange(12, 24, 2);
+
 // Benchmarks full evaluation of all hierarchy levels. Expects the first range
 // argument to specify the number of iterations. The output domain size is fixed
 // to 2**20.

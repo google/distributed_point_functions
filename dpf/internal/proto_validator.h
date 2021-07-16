@@ -23,12 +23,20 @@
 
 namespace distributed_point_functions {
 namespace dpf_internal {
-
 // ProtoValidator is used to validate protos for DPF parameters, keys, and
 // evaluation contexts. Also holds information computed from the DPF parameters,
 // such as the mappings between hierarchy and tree levels.
 class ProtoValidator {
  public:
+  // The negative logarithm of the total variation distance from uniform that a
+  // *full* evaluation of a hierarchy level is allowed to have. Used as the
+  // default value for DpfParameters that don't have an explicit per-element
+  // security parameter set.
+  static constexpr double kDefaultSecurityParameter = 40;
+
+  // Security parameters that differ by less than this are considered equal.
+  static constexpr double kSecurityParameterEpsilon = 0.0001;
+
   // Checks the validity of `parameters` and returns a ProtoValidator, which
   // will be used to validate DPF keys and evaluation contexts afterwards.
   //

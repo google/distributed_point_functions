@@ -22,8 +22,13 @@ namespace distributed_point_functions::dpf_internal {
 
 namespace {
 
-bool ParametersAreEqual(const DpfParameters& lhs, const DpfParameters& rhs) {
+absl::StatusOr<bool> ParametersAreEqual(const DpfParameters& lhs,
+                                        const DpfParameters& rhs) {
   if (lhs.log_domain_size() != rhs.log_domain_size()) {
+    return false;
+  }
+  if (std::abs(lhs.security_parameter() - rhs.security_parameter()) >
+      ProtoValidator::kSecurityParameterEpsilon) {
     return false;
   }
   if (lhs.has_value_type() && rhs.has_value_type()) {
@@ -44,6 +49,34 @@ bool ParametersAreEqual(const DpfParameters& lhs, const DpfParameters& rhs) {
   return lhs.element_bitsize() == rhs.element_bitsize();
 }
 
+absl::Status ValidateIntegerType(const ValueType::Integer& type) {
+  int bitsize = type.bitsize();
+  if (bitsize < 1) {
+    return absl::InvalidArgumentError("`bitsize` must be positive");
+  }
+  if (bitsize > 128) {
+    return absl::InvalidArgumentError(
+        "`bitsize` must be less than or equal to 128");
+  }
+  if ((bitsize & (bitsize - 1)) != 0) {
+    return absl::InvalidArgumentError("`bitsize` must be a power of 2");
+  }
+  return absl::OkStatus();
+}
+
+absl::Status ValidateIntegerValue(const Value::Integer& value,
+                                  const ValueType::Integer& type) {
+  if (type.bitsize() < 128) {
+    DPF_ASSIGN_OR_RETURN(absl::uint128 value_128, ValueIntegerToUint128(value));
+    if (value_128 >= absl::uint128{1} << type.bitsize()) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Value (= %d) too large for ValueType with bitsize = %d", value_128,
+          type.bitsize()));
+    }
+  }
+  return absl::OkStatus();
+}
+
 }  // namespace
 
 ProtoValidator::ProtoValidator(std::vector<DpfParameters> parameters,
@@ -56,8 +89,18 @@ ProtoValidator::ProtoValidator(std::vector<DpfParameters> parameters,
       hierarchy_to_tree_(std::move(hierarchy_to_tree)) {}
 
 absl::StatusOr<std::unique_ptr<ProtoValidator>> ProtoValidator::Create(
-    absl::Span<const DpfParameters> parameters) {
-  DPF_RETURN_IF_ERROR(ValidateParameters(parameters));
+    absl::Span<const DpfParameters> parameters_in) {
+  DPF_RETURN_IF_ERROR(ValidateParameters(parameters_in));
+
+  // Set default values of security_parameter for all parameters.
+  std::vector<DpfParameters> parameters(parameters_in.begin(),
+                                        parameters_in.end());
+  for (int i = 0; i < static_cast<int>(parameters.size()); ++i) {
+    if (parameters[i].security_parameter() == 0) {
+      parameters[i].set_security_parameter(kDefaultSecurityParameter +
+                                           parameters[i].log_domain_size());
+    }
+  }
 
   // Map hierarchy levels to levels in the evaluation tree for value correction,
   // and vice versa.
@@ -66,14 +109,14 @@ absl::StatusOr<std::unique_ptr<ProtoValidator>> ProtoValidator::Create(
   // Also keep track of the height needed for the evaluation tree so far.
   int tree_levels_needed = 0;
   for (int i = 0; i < static_cast<int>(parameters.size()); ++i) {
-    int log_element_size;
+    int log_bits_needed;
     if (parameters[i].has_value_type()) {
-      DPF_ASSIGN_OR_RETURN(int element_bitsize,
-                           GetTotalBitsize(parameters[i].value_type()));
-      log_element_size =
-          static_cast<int>(std::ceil(std::log2(element_bitsize)));
+      DPF_ASSIGN_OR_RETURN(int bits_needed,
+                           BitsNeeded(parameters[i].value_type(),
+                                      parameters[i].security_parameter()));
+      log_bits_needed = static_cast<int>(std::ceil(std::log2(bits_needed)));
     } else {
-      log_element_size =
+      log_bits_needed =
           static_cast<int>(std::log2(parameters[i].element_bitsize()));
     }
 
@@ -86,15 +129,14 @@ absl::StatusOr<std::unique_ptr<ProtoValidator>> ProtoValidator::Create(
     // the same tree_level, hence the std::max.
     int tree_level =
         std::max(tree_levels_needed, parameters[i].log_domain_size() - 7 +
-                                         std::min(log_element_size, 7));
+                                         std::min(log_bits_needed, 7));
     tree_to_hierarchy[tree_level] = i;
     hierarchy_to_tree[i] = tree_level;
     tree_levels_needed = std::max(tree_levels_needed, tree_level + 1);
   }
 
   return absl::WrapUnique(new ProtoValidator(
-      std::vector<DpfParameters>(parameters.begin(), parameters.end()),
-      tree_levels_needed, std::move(tree_to_hierarchy),
+      std::move(parameters), tree_levels_needed, std::move(tree_to_hierarchy),
       std::move(hierarchy_to_tree)));
 }
 
@@ -104,10 +146,8 @@ absl::Status ProtoValidator::ValidateParameters(
   if (parameters.empty()) {
     return absl::InvalidArgumentError("`parameters` must not be empty");
   }
-  // Sentinel values for checking that domain sizes are increasing and not too
-  // far apart, and element sizes are non-decreasing.
+  // Sentinel value for checking that domain sizes are increasing.
   int previous_log_domain_size = 0;
-  int previous_value_type_bitsize = 1;
   for (int i = 0; i < static_cast<int>(parameters.size()); ++i) {
     // Check log_domain_size.
     int log_domain_size = parameters[i].log_domain_size();
@@ -132,24 +172,20 @@ absl::Status ProtoValidator::ValidateParameters(
     }
     previous_log_domain_size = log_domain_size;
 
-    int value_type_bitsize;
     if (parameters[i].has_value_type()) {
       DPF_RETURN_IF_ERROR(ValidateValueType(parameters[i].value_type()));
-      DPF_ASSIGN_OR_RETURN(value_type_bitsize,
-                           GetTotalBitsize(parameters[i].value_type()));
-    } else {
-      ValueType value_type;
-      value_type.mutable_integer()->set_bitsize(
-          parameters[i].element_bitsize());
-      DPF_ASSIGN_OR_RETURN(value_type_bitsize, GetTotalBitsize(value_type));
     }
 
-    if (value_type_bitsize < previous_value_type_bitsize) {
-      return absl::InvalidArgumentError(
-          "`value_type` fields must be of non-decreasing size in "
-          "`parameters`");
+    if (std::isnan(parameters[i].security_parameter())) {
+      return absl::InvalidArgumentError("`security_parameter` must not be NaN");
     }
-    previous_value_type_bitsize = value_type_bitsize;
+    if (parameters[i].security_parameter() < 0 ||
+        parameters[i].security_parameter() > 128) {
+      // Since we use AES-128 for the PRG, a security parameter of > 128 is not
+      // possible.
+      return absl::InvalidArgumentError(
+          "`security_parameter` must be in [0, 128]");
+    }
   }
   return absl::OkStatus();
 }
@@ -193,7 +229,9 @@ absl::Status ProtoValidator::ValidateEvaluationContext(
         "Number of parameters in `ctx` doesn't match");
   }
   for (int i = 0; i < ctx.parameters_size(); ++i) {
-    if (!ParametersAreEqual(parameters_[i], ctx.parameters(i))) {
+    DPF_ASSIGN_OR_RETURN(bool parameters_are_equal,
+                         ParametersAreEqual(parameters_[i], ctx.parameters(i)));
+    if (!parameters_are_equal) {
       return absl::InvalidArgumentError(
           absl::StrCat("Parameter ", i, " in `ctx` doesn't match"));
     }
@@ -217,27 +255,20 @@ absl::Status ProtoValidator::ValidateEvaluationContext(
 
 absl::Status ProtoValidator::ValidateValueType(const ValueType& value_type) {
   if (value_type.type_case() == ValueType::kInteger) {
-    int bitsize = value_type.integer().bitsize();
-    if (bitsize < 1) {
-      return absl::InvalidArgumentError("`bitsize` must be positive");
-    }
-    if (bitsize > 128) {
-      return absl::InvalidArgumentError(
-          "`bitsize` must be less than or equal to 128");
-    }
-    if ((bitsize & (bitsize - 1)) != 0) {
-      return absl::InvalidArgumentError("`bitsize` must be a power of 2");
-    }
-    return absl::OkStatus();
+    return ValidateIntegerType(value_type.integer());
   } else if (value_type.type_case() == ValueType::kTuple) {
     for (const ValueType& el : value_type.tuple().elements()) {
       DPF_RETURN_IF_ERROR(ValidateValueType(el));
     }
     return absl::OkStatus();
-  } else {
-    return absl::InvalidArgumentError(
-        absl::StrCat("Unsupported value_type:\n", value_type.DebugString()));
+  } else if (value_type.type_case() == ValueType::kIntModN) {
+    const ValueType::Integer& base_integer =
+        value_type.int_mod_n().base_integer();
+    DPF_RETURN_IF_ERROR(ValidateIntegerType(base_integer));
+    return ValidateIntegerValue(value_type.int_mod_n().modulus(), base_integer);
   }
+  return absl::InvalidArgumentError(
+      absl::StrCat("Unsupported ValueType:\n", value_type.DebugString()));
 }
 
 absl::Status ProtoValidator::ValidateValue(const Value& value,
@@ -247,15 +278,7 @@ absl::Status ProtoValidator::ValidateValue(const Value& value,
     if (value.value_case() != Value::kInteger) {
       return absl::InvalidArgumentError("Expected integer value");
     }
-    if (type.integer().bitsize() < 128) {
-      DPF_ASSIGN_OR_RETURN(auto value_128,
-                           ConvertValueTo<absl::uint128>(value));
-      if (value_128 >= absl::uint128{1} << type.integer().bitsize()) {
-        return absl::InvalidArgumentError(absl::StrFormat(
-            "Value (= %d) too large for ValueType with bitsize = %d", value_128,
-            type.integer().bitsize()));
-      }
-    }
+    return ValidateIntegerValue(value.integer(), type.integer());
   } else if (type.type_case() == ValueType::kTuple) {
     // Tuples.
     if (value.value_case() != Value::kTuple) {
@@ -270,8 +293,23 @@ absl::Status ProtoValidator::ValidateValue(const Value& value,
       DPF_RETURN_IF_ERROR(
           ValidateValue(value.tuple().elements(i), type.tuple().elements(i)));
     }
+    return absl::OkStatus();
+  } else if (type.type_case() == ValueType::kIntModN) {
+    DPF_RETURN_IF_ERROR(ValidateIntegerValue(value.int_mod_n(),
+                                             type.int_mod_n().base_integer()));
+    DPF_ASSIGN_OR_RETURN(absl::uint128 value_128,
+                         ValueIntegerToUint128(value.int_mod_n()));
+    DPF_ASSIGN_OR_RETURN(absl::uint128 modulus_128,
+                         ValueIntegerToUint128(type.int_mod_n().modulus()));
+    if (value_128 >= modulus_128) {
+      return absl::InvalidArgumentError(
+          absl::StrFormat("Value (= %d) is too large for modulus (= %d)",
+                          value_128, modulus_128));
+    }
+    return absl::OkStatus();
   }
-  return absl::OkStatus();
+  return absl::InvalidArgumentError(
+      absl::StrCat("Unsupported ValueType:\n", type.DebugString()));
 }
 
 }  // namespace distributed_point_functions::dpf_internal
