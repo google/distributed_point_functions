@@ -28,6 +28,8 @@
 
 namespace distributed_point_functions {
 
+namespace dpf_internal {
+
 // Base class holding common functions of IntModN that are independent of the
 // template parameter.
 class IntModNBase {
@@ -77,34 +79,46 @@ class IntModNBase {
   }
 };
 
-template <typename BaseInteger, BaseInteger kModulus>
-class IntModN : public IntModNBase {
+template <typename BaseInteger, typename ModulusType, ModulusType kModulus>
+class IntModNImpl : public IntModNBase {
   static_assert(sizeof(BaseInteger) <= sizeof(absl::uint128),
                 "BaseInteger may be at most 128 bits large");
+  static_assert(
+      std::is_same_v<BaseInteger, absl::uint128> ||
+#ifdef ABSL_HAVE_INTRINSIC_INT128
+          // std::is_unsigned_v<unsigned __int128> is not true everywhere:
+          // https://quuxplusone.github.io/blog/2019/02/28/is-int128-integral/#signedness
+          std::is_same_v<BaseInteger, unsigned __int128> ||
+#endif
+          std::is_unsigned_v<BaseInteger>,
+      "BaseInteger must be unsigned");
+  static_assert(kModulus <= ModulusType(BaseInteger(-1)),
+                "kModulus must fit in BaseInteger");
 
  public:
   using Base = BaseInteger;
 
-  constexpr IntModN() : value_(0) {}
-  explicit constexpr IntModN(BaseInteger value) : value_(value % kModulus) {}
+  constexpr IntModNImpl() : value_(0) {}
+  explicit constexpr IntModNImpl(BaseInteger value)
+      : value_(value % kModulus) {}
 
   // Copyable.
-  constexpr IntModN(const IntModN& a) = default;
+  constexpr IntModNImpl(const IntModNImpl& a) = default;
 
-  constexpr IntModN& operator=(const IntModN& a) = default;
+  constexpr IntModNImpl& operator=(const IntModNImpl& a) = default;
 
   // Assignment operators.
-  constexpr IntModN& operator=(const BaseInteger& a) {
+  constexpr IntModNImpl& operator=(const BaseInteger& a) {
     value_ = a % kModulus;
     return *this;
   }
 
-  constexpr IntModN& operator+=(const IntModN& a) {
+  constexpr IntModNImpl& operator+=(const IntModNImpl& a) {
     AddBaseInteger(a.value_);
     return *this;
   }
 
-  constexpr IntModN& operator-=(const IntModN& a) {
+  constexpr IntModNImpl& operator-=(const IntModNImpl& a) {
     SubtractBaseInteger(a.value_);
     return *this;
   }
@@ -112,7 +126,7 @@ class IntModN : public IntModNBase {
   // Returns the underlying representation as a BaseInteger.
   constexpr BaseInteger value() const { return value_; }
 
-  // Returns the modulus of this IntModN type.
+  // Returns the modulus of this IntModNImpl type.
   static constexpr BaseInteger modulus() { return kModulus; }
 
   // Returns the number of (pseudo)random bytes required to extract
@@ -140,7 +154,7 @@ class IntModN : public IntModNBase {
   template <int kCompiledNumSamples = 1>
   static void UnsafeSampleFromBytes(absl::string_view bytes,
                                     double security_parameter,
-                                    absl::Span<IntModN> samples) {
+                                    absl::Span<IntModNImpl> samples) {
     static_assert(kCompiledNumSamples >= 1);
     absl::uint128 r = ConvertBytesTo<absl::uint128>(bytes.substr(0, 16));
     absl::InlinedVector<BaseInteger, std::max(1, kCompiledNumSamples - 1)>
@@ -150,7 +164,7 @@ class IntModN : public IntModNBase {
           bytes.substr(16 + i * sizeof(BaseInteger), sizeof(BaseInteger)));
     }
     for (int i = 0; i < static_cast<int>(samples.size()); ++i) {
-      samples[i] = IntModN(static_cast<BaseInteger>(r % kModulus));
+      samples[i] = IntModNImpl(static_cast<BaseInteger>(r % kModulus));
       if (i < static_cast<int>(randomness.size())) {
         r /= kModulus;
         r <<= (sizeof(BaseInteger) * 8);
@@ -167,7 +181,7 @@ class IntModN : public IntModNBase {
   //  Otherwise returns r1, ..., rn in `samples`.
   static absl::Status SampleFromBytes(absl::string_view bytes,
                                       double security_parameter,
-                                      absl::Span<IntModN> samples) {
+                                      absl::Span<IntModNImpl> samples) {
     if (samples.empty()) {
       return absl::InvalidArgumentError(
           "The number of samples required must be > 0");
@@ -203,39 +217,59 @@ class IntModN : public IntModNBase {
   BaseInteger value_;
 };
 
-template <typename BaseInteger, BaseInteger modulus>
-constexpr IntModN<BaseInteger, modulus> operator+(
-    IntModN<BaseInteger, modulus> a, const IntModN<BaseInteger, modulus>& b) {
+template <typename BaseInteger, typename ModulusType, ModulusType kModulus>
+constexpr IntModNImpl<BaseInteger, ModulusType, kModulus> operator+(
+    IntModNImpl<BaseInteger, ModulusType, kModulus> a,
+    const IntModNImpl<BaseInteger, ModulusType, kModulus>& b) {
   a += b;
   return a;
 }
 
-template <typename BaseInteger, BaseInteger modulus>
-constexpr IntModN<BaseInteger, modulus> operator-(
-    IntModN<BaseInteger, modulus> a, const IntModN<BaseInteger, modulus>& b) {
+template <typename BaseInteger, typename ModulusType, ModulusType kModulus>
+constexpr IntModNImpl<BaseInteger, ModulusType, kModulus> operator-(
+    IntModNImpl<BaseInteger, ModulusType, kModulus> a,
+    const IntModNImpl<BaseInteger, ModulusType, kModulus>& b) {
   a -= b;
   return a;
 }
 
-template <typename BaseInteger, BaseInteger modulus>
-constexpr IntModN<BaseInteger, modulus> operator-(
-    IntModN<BaseInteger, modulus> a) {
-  IntModN<BaseInteger, modulus> result(BaseInteger{0});
+template <typename BaseInteger, typename ModulusType, ModulusType kModulus>
+constexpr IntModNImpl<BaseInteger, ModulusType, kModulus> operator-(
+    IntModNImpl<BaseInteger, ModulusType, kModulus> a) {
+  IntModNImpl<BaseInteger, ModulusType, kModulus> result(BaseInteger{0});
   result -= a;
   return result;
 }
 
-template <typename BaseInteger, BaseInteger modulus>
-constexpr bool operator==(const IntModN<BaseInteger, modulus>& a,
-                          const IntModN<BaseInteger, modulus>& b) {
+template <typename BaseInteger, typename ModulusType, ModulusType kModulus>
+constexpr bool operator==(
+    const IntModNImpl<BaseInteger, ModulusType, kModulus>& a,
+    const IntModNImpl<BaseInteger, ModulusType, kModulus>& b) {
   return a.value() == b.value();
 }
 
-template <typename BaseInteger, BaseInteger modulus>
-constexpr bool operator!=(const IntModN<BaseInteger, modulus>& a,
-                          const IntModN<BaseInteger, modulus>& b) {
+template <typename BaseInteger, typename ModulusType, ModulusType kModulus>
+constexpr bool operator!=(
+    const IntModNImpl<BaseInteger, ModulusType, kModulus>& a,
+    const IntModNImpl<BaseInteger, ModulusType, kModulus>& b) {
   return !(a == b);
 }
+
+}  // namespace dpf_internal
+
+// Since `absl::uint128` is not an alias to `unsigned __int128`, but a struct,
+// we cannot use it as a template parameter type. So if we have an intrinsic
+// int128, we always use that as the modulus type. Otherwise, the modulus type
+// is the same as BaseInteger.
+#ifdef ABSL_HAVE_INTRINSIC_INT128
+template <typename BaseInteger, unsigned __int128 kModulus>
+using IntModN =
+    dpf_internal::IntModNImpl<BaseInteger, unsigned __int128, kModulus>;
+#else
+template <typename BaseInteger, BaseInteger kModulus>
+class IntModN
+    : public dpf_internal::IntModNImpl<BaseInteger, BaseInteger, kModulus> {};
+#endif
 
 }  // namespace distributed_point_functions
 #endif  // DISTRIBUTED_POINT_FUNCTIONS_DPF_INTERNAL_INT_MOD_N_H_

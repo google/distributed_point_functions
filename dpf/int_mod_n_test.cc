@@ -27,25 +27,35 @@
 namespace distributed_point_functions {
 namespace {
 
-using BaseInteger = uint32_t;
-constexpr BaseInteger kModulus = 4294967295;  // pow(2, 32)-1
-using MyIntModN = IntModN<BaseInteger, kModulus>;
+constexpr double kFeasibleSecurityParameter = 40;
+constexpr double kUnfeasibleSecurityParameter = 95;
+constexpr int kNumSamples = 5;
 
-TEST(IntModNTest, DefaultValueIsZero) {
-  MyIntModN a;
+template <typename T>
+class IntModNTest : public testing::Test {};
+using IntModNTypes = ::testing::Types<
+    IntModN<uint32_t, 4294967291u>,              //  2**32-5
+    IntModN<uint64_t, 18446744073709551557ull>,  //  2**64-59
+    IntModN<absl::uint128, (unsigned __int128)(absl::MakeUint128(
+                               65535u,
+                               18446744073709551551ull))> >;  // 2**80-65
+TYPED_TEST_SUITE(IntModNTest, IntModNTypes);
+
+TYPED_TEST(IntModNTest, DefaultValueIsZero) {
+  TypeParam a;
   EXPECT_EQ(a.value(), 0);
 }
 
-TEST(IntModNTest, SetValueWorks) {
-  MyIntModN a;
+TYPED_TEST(IntModNTest, SetValueWorks) {
+  TypeParam a;
   EXPECT_EQ(a.value(), 0);
   a = 23;
   EXPECT_EQ(a.value(), 23);
 }
 
-TEST(IntModNTest, AdditionWithoutWrapAroundWorks) {
-  MyIntModN a;
-  MyIntModN b;
+TYPED_TEST(IntModNTest, AdditionWithoutWrapAroundWorks) {
+  TypeParam a;
+  TypeParam b;
   a += b;
   EXPECT_EQ(a.value(), 0);
   b = 23;
@@ -56,48 +66,51 @@ TEST(IntModNTest, AdditionWithoutWrapAroundWorks) {
   EXPECT_EQ(a.value(), 4294967223);
 }
 
-TEST(IntModNTest, AdditionWithWrapAroundWorks) {
-  MyIntModN a;
-  MyIntModN b;
+TYPED_TEST(IntModNTest, AdditionWithWrapAroundWorks) {
+  TypeParam a;
+  TypeParam b;
   a += b;
   EXPECT_EQ(a.value(), 0);
   b = 23;
   a += b;
   EXPECT_EQ(a.value(), 23);
-  b = kModulus - 10;
+  b = TypeParam::modulus() - 10;
   a += b;
   EXPECT_EQ(a.value(), 13);
 }
 
-TEST(IntModNTest, NegationWorks) {
-  MyIntModN a(10);
-  MyIntModN b = -a;
-  EXPECT_EQ(a + b, MyIntModN(0));
+TYPED_TEST(IntModNTest, NegationWorks) {
+  TypeParam a(10);
+  TypeParam b = -a;
+  EXPECT_EQ(a + b, TypeParam(0));
 }
 
-TEST(IntModNTest, GetNumBytesRequiredFailsIfUnfeasible) {
-  absl::StatusOr<int> result = MyIntModN::GetNumBytesRequired(5, 95);
-  EXPECT_THAT(result,
-              dpf_internal::StatusIs(
-                  absl::StatusCode::kInvalidArgument,
-                  testing::StartsWith(absl::StrCat(
-                      "For num_samples = 5 and kModulus = ", kModulus))));
+TYPED_TEST(IntModNTest, GetNumBytesRequiredFailsIfUnfeasible) {
+  absl::StatusOr<int> result =
+      TypeParam::GetNumBytesRequired(kNumSamples, kUnfeasibleSecurityParameter);
+  EXPECT_THAT(result, dpf_internal::StatusIs(
+                          absl::StatusCode::kInvalidArgument,
+                          testing::StartsWith(absl::StrFormat(
+                              "For num_samples = 5 and kModulus = %d",
+                              absl::uint128(TypeParam::modulus())))));
 }
 
-TEST(IntModNTest, GetNumBytesRequiredSucceedsIfFeasible) {
-  absl::StatusOr<int> result = MyIntModN::GetNumBytesRequired(5, 32);
+TYPED_TEST(IntModNTest, GetNumBytesRequiredSucceedsIfFeasible) {
+  absl::StatusOr<int> result =
+      TypeParam::GetNumBytesRequired(5, kFeasibleSecurityParameter);
   EXPECT_EQ(result.ok(), true);
 }
 
-TEST(IntModNTest, SampleFailsIfUnfeasible) {
-  absl::StatusOr<int> r_getnum = MyIntModN::GetNumBytesRequired(5, 94);
+TYPED_TEST(IntModNTest, SampleFailsIfUnfeasible) {
+  absl::StatusOr<int> r_getnum =
+      TypeParam::GetNumBytesRequired(5, kFeasibleSecurityParameter);
   EXPECT_EQ(r_getnum.ok(), true);
 
   std::string bytes = std::string(16, '#');
   EXPECT_GT(r_getnum.value(), bytes.size());
-  std::vector<MyIntModN> samples(5);
-  absl::Status r_sample =
-      MyIntModN::SampleFromBytes(bytes, 94, absl::MakeSpan(samples));
+  std::vector<TypeParam> samples(5);
+  absl::Status r_sample = TypeParam::SampleFromBytes(
+      bytes, kFeasibleSecurityParameter, absl::MakeSpan(samples));
   EXPECT_EQ(r_sample.ok(), false);
   EXPECT_THAT(
       r_sample,
@@ -107,109 +120,102 @@ TEST(IntModNTest, SampleFailsIfUnfeasible) {
           "statistical security and number of samples."));
 }
 
-TEST(IntModNTest, SampleSucceedsIfFeasible) {
-  absl::StatusOr<int> r_getnum = MyIntModN::GetNumBytesRequired(5, 94);
+TYPED_TEST(IntModNTest, SampleSucceedsIfFeasible) {
+  absl::StatusOr<int> r_getnum =
+      TypeParam::GetNumBytesRequired(5, kFeasibleSecurityParameter);
   EXPECT_EQ(r_getnum.ok(), true);
 
   std::string bytes = std::string(r_getnum.value(), '#');
-  std::vector<MyIntModN> samples(5);
-  absl::Status r_sample =
-      MyIntModN::SampleFromBytes(bytes, 94, absl::MakeSpan(samples));
+  std::vector<TypeParam> samples(5);
+  absl::Status r_sample = TypeParam::SampleFromBytes(
+      bytes, kFeasibleSecurityParameter, absl::MakeSpan(samples));
   EXPECT_EQ(r_sample.ok(), true);
 }
 
-TEST(IntModNTest, FirstEntryOfSamplesIsAsExpected) {
-  absl::StatusOr<int> r_getnum = MyIntModN::GetNumBytesRequired(5, 94);
+TYPED_TEST(IntModNTest, FirstEntryOfSamplesIsAsExpected) {
+  absl::StatusOr<int> r_getnum =
+      TypeParam::GetNumBytesRequired(5, kFeasibleSecurityParameter);
   EXPECT_EQ(r_getnum.ok(), true);
 
   std::string bytes = std::string(r_getnum.value(), '#');
-  std::vector<MyIntModN> samples(5);
-  absl::Status r_sample =
-      MyIntModN::SampleFromBytes(bytes, 94, absl::MakeSpan(samples));
+  std::vector<TypeParam> samples(5);
+  absl::Status r_sample = TypeParam::SampleFromBytes(
+      bytes, kFeasibleSecurityParameter, absl::MakeSpan(samples));
   EXPECT_EQ(r_sample.ok(), true);
   EXPECT_EQ(
       samples[0].value(),
-      MyIntModN::ConvertBytesTo<absl::uint128>(bytes.substr(0, 16)) % kModulus);
+      TypeParam::template ConvertBytesTo<absl::uint128>(bytes.substr(0, 16)) %
+          TypeParam::modulus());
 }
 
-TEST(IntModNTest, SamplesIsZeroIfBytesIsZero) {
-  absl::StatusOr<int> r_getnum = MyIntModN::GetNumBytesRequired(5, 94);
-  EXPECT_EQ(r_getnum.ok(), true);
-
-  std::string bytes = std::string(r_getnum.value(), '\0');
-  std::vector<MyIntModN> samples(5);
-  absl::Status r_sample =
-      MyIntModN::SampleFromBytes(bytes, 94, absl::MakeSpan(samples));
-  EXPECT_EQ(r_sample.ok(), true);
-  EXPECT_EQ(samples[0].value(), 0);
-  EXPECT_EQ(samples[1].value(), 0);
-  EXPECT_EQ(samples[2].value(), 0);
-  EXPECT_EQ(samples[3].value(), 0);
-  EXPECT_EQ(samples[4].value(), 0);
-}
+using BaseInteger = uint32_t;
+constexpr BaseInteger kModulus32 = 4294967291u;  // 2**32 - 5
+using MyIntModN = IntModN<BaseInteger, kModulus32>;
 
 TEST(IntModNTest, SampleFromBytesWorksInConcreteExample) {
-  absl::StatusOr<int> r_getnum = MyIntModN::GetNumBytesRequired(5, 94);
+  absl::StatusOr<int> r_getnum =
+      MyIntModN::GetNumBytesRequired(5, kFeasibleSecurityParameter);
   EXPECT_EQ(r_getnum.ok(), true);
   EXPECT_EQ(*r_getnum, 32);
   std::string bytes = "this is a length 32 test string.";
   EXPECT_EQ(bytes.size(), 32);
 
   std::vector<MyIntModN> samples(5);
-  absl::Status r_sample =
-      MyIntModN::SampleFromBytes(bytes, 94, absl::MakeSpan(samples));
+  absl::Status r_sample = MyIntModN::SampleFromBytes(
+      bytes, kFeasibleSecurityParameter, absl::MakeSpan(samples));
   EXPECT_EQ(r_sample.ok(), true);
   absl::uint128 r =
       MyIntModN::ConvertBytesTo<absl::uint128>("this is a length");
-  EXPECT_EQ(samples[0].value(), r % kModulus);
-  r /= kModulus;
-  r <<= (sizeof(BaseInteger) * 8);
-  r |= MyIntModN::ConvertBytesTo<BaseInteger>(" 32 ");
-  EXPECT_EQ(samples[1].value(), r % kModulus);
-  r /= kModulus;
-  r <<= (sizeof(BaseInteger) * 8);
-  r |= MyIntModN::ConvertBytesTo<BaseInteger>("test");
-  EXPECT_EQ(samples[2].value(), r % kModulus);
-  r /= kModulus;
-  r <<= (sizeof(BaseInteger) * 8);
-  r |= MyIntModN::ConvertBytesTo<BaseInteger>(" str");
-  EXPECT_EQ(samples[3].value(), r % kModulus);
-  r /= kModulus;
-  r <<= (sizeof(BaseInteger) * 8);
-  r |= MyIntModN::ConvertBytesTo<BaseInteger>("ing.");
-  EXPECT_EQ(samples[4].value(), r % kModulus);
+  EXPECT_EQ(samples[0].value(), r % MyIntModN::modulus());
+  r /= MyIntModN::modulus();
+  r <<= (sizeof(MyIntModN::Base) * 8);
+  r |= MyIntModN::ConvertBytesTo<MyIntModN::Base>(" 32 ");
+  EXPECT_EQ(samples[1].value(), r % MyIntModN::modulus());
+  r /= MyIntModN::modulus();
+  r <<= (sizeof(MyIntModN::Base) * 8);
+  r |= MyIntModN::ConvertBytesTo<MyIntModN::Base>("test");
+  EXPECT_EQ(samples[2].value(), r % MyIntModN::modulus());
+  r /= MyIntModN::modulus();
+  r <<= (sizeof(MyIntModN::Base) * 8);
+  r |= MyIntModN::ConvertBytesTo<MyIntModN::Base>(" str");
+  EXPECT_EQ(samples[3].value(), r % MyIntModN::modulus());
+  r /= MyIntModN::modulus();
+  r <<= (sizeof(MyIntModN::Base) * 8);
+  r |= MyIntModN::ConvertBytesTo<MyIntModN::Base>("ing.");
+  EXPECT_EQ(samples[4].value(), r % MyIntModN::modulus());
 }
 
 TEST(IntModNTest, SampleFromBytesFailsAsExpectedInConcreteExample) {
-  absl::StatusOr<int> r_getnum = MyIntModN::GetNumBytesRequired(5, 94);
+  absl::StatusOr<int> r_getnum =
+      MyIntModN::GetNumBytesRequired(5, kFeasibleSecurityParameter);
   EXPECT_EQ(r_getnum.ok(), true);
   EXPECT_EQ(*r_getnum, 32);
   std::string bytes = "this is a length 32 test string.";
   EXPECT_EQ(bytes.size(), 32);
 
   std::vector<MyIntModN> samples(5);
-  absl::Status r_sample =
-      MyIntModN::SampleFromBytes(bytes, 94, absl::MakeSpan(samples));
+  absl::Status r_sample = MyIntModN::SampleFromBytes(
+      bytes, kFeasibleSecurityParameter, absl::MakeSpan(samples));
   EXPECT_EQ(r_sample.ok(), true);
   absl::uint128 r =
       MyIntModN::ConvertBytesTo<absl::uint128>("this is a length");
-  EXPECT_EQ(samples[0].value(), r % kModulus);
-  r /= kModulus;
-  r <<= (sizeof(BaseInteger) * 8);
-  r |= MyIntModN::ConvertBytesTo<BaseInteger>(" 32 ");
-  EXPECT_EQ(samples[1].value(), r % kModulus);
-  r /= kModulus;
-  r <<= (sizeof(BaseInteger) * 8);
-  r |= MyIntModN::ConvertBytesTo<BaseInteger>("test");
-  EXPECT_EQ(samples[2].value(), r % kModulus);
-  r /= kModulus;
-  r <<= (sizeof(BaseInteger) * 8);
-  r |= MyIntModN::ConvertBytesTo<BaseInteger>(" str");
-  EXPECT_EQ(samples[3].value(), r % kModulus);
-  r /= kModulus;
-  r <<= (sizeof(BaseInteger) * 8);
-  r |= MyIntModN::ConvertBytesTo<BaseInteger>("ing#");  // # instead of .
-  EXPECT_NE(samples[4].value(), r % kModulus);
+  EXPECT_EQ(samples[0].value(), r % MyIntModN::modulus());
+  r /= MyIntModN::modulus();
+  r <<= (sizeof(MyIntModN::Base) * 8);
+  r |= MyIntModN::ConvertBytesTo<MyIntModN::Base>(" 32 ");
+  EXPECT_EQ(samples[1].value(), r % MyIntModN::modulus());
+  r /= MyIntModN::modulus();
+  r <<= (sizeof(MyIntModN::Base) * 8);
+  r |= MyIntModN::ConvertBytesTo<MyIntModN::Base>("test");
+  EXPECT_EQ(samples[2].value(), r % MyIntModN::modulus());
+  r /= MyIntModN::modulus();
+  r <<= (sizeof(MyIntModN::Base) * 8);
+  r |= MyIntModN::ConvertBytesTo<MyIntModN::Base>(" str");
+  EXPECT_EQ(samples[3].value(), r % MyIntModN::modulus());
+  r /= MyIntModN::modulus();
+  r <<= (sizeof(MyIntModN::Base) * 8);
+  r |= MyIntModN::ConvertBytesTo<MyIntModN::Base>("ing#");  // # instead of .
+  EXPECT_NE(samples[4].value(), r % MyIntModN::modulus());
 }
 
 // Test if IntModN operators are in fact constexpr. This will fail to compile
@@ -232,7 +238,7 @@ static_assert(TestAssignment().value() == 5,
 
 #ifdef ABSL_HAVE_INTRINSIC_INT128
 constexpr unsigned __int128 kModulus128 =
-    std::numeric_limits<unsigned __int128>::max() - 158;  // 2^128 - 159
+    (unsigned __int128)(-1);  // 2**128 - 159
 using MyIntModN128 = IntModN<unsigned __int128, kModulus128>;
 constexpr MyIntModN128 TestAddition128() {
   return MyIntModN128(2) + MyIntModN128(5);

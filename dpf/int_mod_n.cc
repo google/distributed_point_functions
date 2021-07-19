@@ -2,6 +2,8 @@
 
 namespace distributed_point_functions {
 
+namespace dpf_internal {
+
 double IntModNBase::GetSecurityLevel(int num_samples, absl::uint128 modulus) {
   return 128 + 3 -
          (std::log2(static_cast<double>(modulus)) +
@@ -58,5 +60,7 @@ absl::StatusOr<int> IntModNBase::GetNumBytesRequired(
   // function `SampleFromBytes`.
   return 16 + base_integer_bytes * (num_samples - 1);
 }
+
+}  // namespace dpf_internal
 
 }  // namespace distributed_point_functions

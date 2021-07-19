@@ -69,8 +69,9 @@ struct is_supported_type<Tuple<ElementType...>, false> {
 };
 
 // Modular integers with supported base types: true.
-template <typename BaseInteger, BaseInteger modulus>
-struct is_supported_type<IntModN<BaseInteger, modulus>, false> {
+template <typename BaseInteger, typename ModulusType, ModulusType kModulus>
+struct is_supported_type<IntModNImpl<BaseInteger, ModulusType, kModulus>,
+                         false> {
   static constexpr bool value = is_unsigned_integer_v<BaseInteger>;
 };
 
@@ -92,8 +93,9 @@ struct can_be_converted_directly<Tuple<ElementType...>, void> {
 };
 
 // IntModN: False.
-template <typename BaseInteger, BaseInteger modulus>
-struct can_be_converted_directly<IntModN<BaseInteger, modulus>, void> {
+template <typename BaseInteger, typename ModulusType, ModulusType kModulus>
+struct can_be_converted_directly<
+    IntModNImpl<BaseInteger, ModulusType, kModulus>, void> {
   static constexpr bool value = false;
 };
 
@@ -258,9 +260,11 @@ absl::StatusOr<TupleType> ConvertValueToImpl2(const Value& value,
 }
 
 // Overload for IntModN.
-template <typename BaseInteger, BaseInteger kModulus>
-absl::StatusOr<IntModN<BaseInteger, kModulus>> ConvertValueToImpl(
-    const Value& value, type_helper<IntModN<BaseInteger, kModulus>>) {
+template <typename BaseInteger, typename ModulusType, ModulusType kModulus>
+absl::StatusOr<IntModNImpl<BaseInteger, ModulusType, kModulus>>
+ConvertValueToImpl(
+    const Value& value,
+    type_helper<IntModNImpl<BaseInteger, ModulusType, kModulus>>) {
   if (value.value_case() != Value::kIntModN) {
     return absl::InvalidArgumentError("The given Value is not an IntModN");
   }
@@ -272,9 +276,10 @@ absl::StatusOr<IntModN<BaseInteger, kModulus>> ConvertValueToImpl(
   if (*value_128 >= absl::uint128{kModulus}) {
     return absl::InvalidArgumentError(
         absl::StrFormat("The given value (= %d) is larger than kModulus (= %d)",
-                        *value_128, kModulus));
+                        *value_128, absl::uint128{kModulus}));
   }
-  return IntModN<BaseInteger, kModulus>(static_cast<BaseInteger>(*value_128));
+  return IntModNImpl<BaseInteger, ModulusType, kModulus>(
+      static_cast<BaseInteger>(*value_128));
 }
 
 // Converts a `repeated Value` proto field to a std::array with element type T.
@@ -312,8 +317,8 @@ Value::Integer Uint128ToValueInteger(absl::uint128 input);
 Value ToValue(absl::uint128 input);
 
 // Overload for IntModN.
-template <typename BaseInteger, BaseInteger kModulus>
-Value ToValue(const IntModN<BaseInteger, kModulus>& input) {
+template <typename BaseInteger, typename ModulusType, ModulusType kModulus>
+Value ToValue(const IntModNImpl<BaseInteger, ModulusType, kModulus>& input) {
   Value result;
   *(result.mutable_int_mod_n()) = Uint128ToValueInteger(input.value());
   return result;
@@ -372,8 +377,9 @@ ValueType ToValueTypeImpl(type_helper<Tuple<ElementType...>>) {
 }
 
 // Overload for IntModN.
-template <typename BaseInteger, BaseInteger kModulus>
-ValueType ToValueTypeImpl(type_helper<IntModN<BaseInteger, kModulus>>) {
+template <typename BaseInteger, typename ModulusType, ModulusType kModulus>
+ValueType ToValueTypeImpl(
+    type_helper<IntModNImpl<BaseInteger, ModulusType, kModulus>>) {
   ValueType result;
   *(result.mutable_int_mod_n()->mutable_base_integer()) =
       ToValueType<BaseInteger>().integer();
@@ -464,10 +470,10 @@ T SampleAndUpdateBytesImpl(bool update, absl::uint128& block,
 }
 
 // Overload for IntModN.
-template <typename BaseInteger, BaseInteger kModulus>
-IntModN<BaseInteger, kModulus> SampleAndUpdateBytesImpl(
+template <typename BaseInteger, typename ModulusType, ModulusType kModulus>
+IntModNImpl<BaseInteger, ModulusType, kModulus> SampleAndUpdateBytesImpl(
     bool update, absl::uint128& block, absl::string_view& bytes,
-    type_helper<IntModN<BaseInteger, kModulus>>) {
+    type_helper<IntModNImpl<BaseInteger, ModulusType, kModulus>>) {
   // Optimization for native uint128. This is equivalent to what's done in
   // int128.cc, but since division is not defined in the header, the compiler
   // cannot optimize the division and modulus into a single operation.
@@ -477,7 +483,8 @@ IntModN<BaseInteger, kModulus> SampleAndUpdateBytesImpl(
 #else
   absl::uint128 quotient = block / kModulus, remainder = block % kModulus;
 #endif
-  IntModN<BaseInteger, kModulus> result(static_cast<BaseInteger>(remainder));
+  IntModNImpl<BaseInteger, ModulusType, kModulus> result(
+      static_cast<BaseInteger>(remainder));
 
   if (update) {
     block = quotient << (sizeof(BaseInteger) * 8);
@@ -506,14 +513,15 @@ Tuple<ElementType...> SampleAndUpdateBytesImpl(
 }
 
 // Implementation of SampleFromBytes for single IntModNs.
-template <typename BaseInteger, BaseInteger kModulus>
-IntModN<BaseInteger, kModulus> SampleFromBytes(
-    absl::string_view bytes, type_helper<IntModN<BaseInteger, kModulus>>) {
+template <typename BaseInteger, typename ModulusType, ModulusType kModulus>
+IntModNImpl<BaseInteger, ModulusType, kModulus> SampleFromBytes(
+    absl::string_view bytes,
+    type_helper<IntModNImpl<BaseInteger, ModulusType, kModulus>>) {
   DCHECK(bytes.size() >= sizeof(absl::uint128));
   absl::uint128 block =
       ConvertBytesTo<absl::uint128>(bytes.substr(0, sizeof(absl::uint128)));
-  return SampleAndUpdateBytes<IntModN<BaseInteger, kModulus>>(false, block,
-                                                              bytes);
+  return SampleAndUpdateBytes<IntModNImpl<BaseInteger, ModulusType, kModulus>>(
+      false, block, bytes);
 }
 
 // Implementation of SampleFromBytes for tuples.
