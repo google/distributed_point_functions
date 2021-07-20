@@ -34,11 +34,14 @@ constexpr int kNumSamples = 5;
 template <typename T>
 class IntModNTest : public testing::Test {};
 using IntModNTypes = ::testing::Types<
-    IntModN<uint32_t, 4294967291u>,              //  2**32-5
-    IntModN<uint64_t, 18446744073709551557ull>,  //  2**64-59
+    IntModN<uint32_t, 4294967291u>,             //  2**32-5
+    IntModN<uint64_t, 18446744073709551557ull>  //  2**64-59
+#ifdef ABSL_HAVE_INTRINSIC_INT128
+    ,
     IntModN<absl::uint128, (unsigned __int128)(absl::MakeUint128(
-                               65535u,
-                               18446744073709551551ull))> >;  // 2**80-65
+                               65535u, 18446744073709551551ull))>  // 2**80-65
+#endif
+    >;
 TYPED_TEST_SUITE(IntModNTest, IntModNTypes);
 
 TYPED_TEST(IntModNTest, DefaultValueIsZero) {

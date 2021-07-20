@@ -452,12 +452,12 @@ T SampleAndUpdateBytesImpl(bool update, absl::uint128& block,
 
   if (update) {
     // Set sizeof(T) least significant bytes to 0.
-    if constexpr (std::is_same_v<T, absl::uint128>) {
-      block = 0;
-    } else {
+    if constexpr (sizeof(T) < sizeof(block)) {
       constexpr absl::uint128 mask =
           ~absl::uint128{std::numeric_limits<T>::max()};
       block &= mask;
+    } else {
+      block = 0;
     }
 
     // Fill up with `bytes` and advance `bytes` by sizeof(T).
@@ -487,7 +487,11 @@ IntModNImpl<BaseInteger, ModulusType, kModulus> SampleAndUpdateBytesImpl(
       static_cast<BaseInteger>(remainder));
 
   if (update) {
-    block = quotient << (sizeof(BaseInteger) * 8);
+    if constexpr (sizeof(BaseInteger) < sizeof(block)) {
+      block = quotient << (sizeof(BaseInteger) * 8);
+    } else {
+      block = 0;
+    }
     block |= ConvertBytesTo<BaseInteger>(bytes.substr(0, sizeof(BaseInteger)));
     bytes = bytes.substr(sizeof(BaseInteger));
   }

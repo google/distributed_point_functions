@@ -212,10 +212,15 @@ TEST(ValueTypeTupleTest, TestSerializationWithConcreteExample) {
 
 template <typename T>
 class ValueTypeIntModNTest : public testing::Test {};
-using IntModNTypes =
-    ::testing::Types<IntModN<uint32_t, 4>, IntModN<uint32_t, 4294967291u>,
-                     IntModN<uint64_t, 4294967291ull>,
-                     IntModN<uint64_t, 1000000000000ull>>;
+using IntModNTypes = ::testing::Types<
+    IntModN<uint32_t, 4>, IntModN<uint32_t, 4294967291u>,
+    IntModN<uint64_t, 4294967291ull>, IntModN<uint64_t, 1000000000000ull>
+#ifdef ABSL_HAVE_INTRINSIC_INT128
+    ,
+    IntModN<absl::uint128, (unsigned __int128)(absl::MakeUint128(
+                               65535u, 18446744073709551551ull))>  // 2**80-65
+#endif
+    >;
 TYPED_TEST_SUITE(ValueTypeIntModNTest, IntModNTypes);
 
 TYPED_TEST(ValueTypeIntModNTest, ToValueType) {
@@ -235,8 +240,8 @@ TYPED_TEST(ValueTypeIntModNTest, TestValueTypesAreEqual) {
 
   value_type_2.mutable_int_mod_n()->mutable_base_integer()->set_bitsize(
       sizeof(TypeParam) * 8);
-  value_type_2.mutable_int_mod_n()->mutable_modulus()->set_value_uint64(
-      TypeParam::modulus());
+  *(value_type_2.mutable_int_mod_n()->mutable_modulus()) =
+      Uint128ToValueInteger(TypeParam::modulus());
 
   DPF_ASSERT_OK_AND_ASSIGN(bool equal,
                            ValueTypesAreEqual(value_type_1, value_type_2));
@@ -265,8 +270,8 @@ TYPED_TEST(ValueTypeIntModNTest, TestValueTypesAreDifferentModulus) {
   ValueType value_type_1 = ToValueType<TypeParam>(),
             value_type_2 = value_type_1;
 
-  value_type_2.mutable_int_mod_n()->mutable_modulus()->set_value_uint64(
-      TypeParam::modulus() - 1);
+  *(value_type_2.mutable_int_mod_n()->mutable_modulus()) =
+      Uint128ToValueInteger(TypeParam::modulus() - 1);
 
   DPF_ASSERT_OK_AND_ASSIGN(bool equal,
                            ValueTypesAreEqual(value_type_1, value_type_2));

@@ -167,7 +167,9 @@ class IntModNImpl : public IntModNBase {
       samples[i] = IntModNImpl(static_cast<BaseInteger>(r % kModulus));
       if (i < static_cast<int>(randomness.size())) {
         r /= kModulus;
-        r <<= (sizeof(BaseInteger) * 8);
+        if constexpr (sizeof(BaseInteger) < sizeof(absl::uint128)) {
+          r <<= (sizeof(BaseInteger) * 8);
+        }
         r |= randomness[i];
       }
     }
@@ -267,8 +269,7 @@ using IntModN =
     dpf_internal::IntModNImpl<BaseInteger, unsigned __int128, kModulus>;
 #else
 template <typename BaseInteger, BaseInteger kModulus>
-class IntModN
-    : public dpf_internal::IntModNImpl<BaseInteger, BaseInteger, kModulus> {};
+using IntModN = dpf_internal::IntModNImpl<BaseInteger, BaseInteger, kModulus>;
 #endif
 
 }  // namespace distributed_point_functions

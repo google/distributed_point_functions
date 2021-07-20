@@ -782,6 +782,7 @@ class DpfEvaluationTest : public ::testing::Test {
     alpha_ = 23;
     SetTo42(beta_);
     parameters_.set_log_domain_size(log_domain_size_);
+    parameters_.set_security_parameter(48);
     *(parameters_.mutable_value_type()) = dpf_internal::ToValueType<T>();
     DPF_ASSERT_OK_AND_ASSIGN(dpf_,
                              DistributedPointFunction::Create(parameters_));
@@ -811,6 +812,11 @@ class DpfEvaluationTest : public ::testing::Test {
 
 using MyIntModN = IntModN<uint32_t, 4294967291u>;                // 2**32 - 5.
 using MyIntModN64 = IntModN<uint64_t, 18446744073709551557ull>;  // 2**64 - 59.
+#ifdef ABSL_HAVE_INTRINSIC_INT128
+using MyIntModN128 =
+    IntModN<absl::uint128, (unsigned __int128)(absl::MakeUint128(
+                               65535u, 18446744073709551551ull))>;  // 2**80-65
+#endif
 using DpfEvaluationTypes = ::testing::Types<
     Tuple<uint8_t>, Tuple<uint32_t>, Tuple<absl::uint128>,
     Tuple<uint32_t, uint32_t>, Tuple<uint32_t, uint64_t>,
@@ -820,7 +826,13 @@ using DpfEvaluationTypes = ::testing::Types<
     Tuple<uint32_t, absl::uint128>, MyIntModN, Tuple<MyIntModN>,
     Tuple<uint32_t, MyIntModN>, Tuple<absl::uint128, MyIntModN>,
     Tuple<MyIntModN, Tuple<MyIntModN>>,
-    Tuple<MyIntModN, MyIntModN, MyIntModN, MyIntModN, MyIntModN>>;
+    Tuple<MyIntModN, MyIntModN, MyIntModN, MyIntModN, MyIntModN>,
+    Tuple<MyIntModN64, MyIntModN64>
+#ifdef ABSL_HAVE_INTRINSIC_INT128
+    ,
+    Tuple<MyIntModN128, MyIntModN128>
+#endif
+    >;
 TYPED_TEST_SUITE(DpfEvaluationTest, DpfEvaluationTypes);
 TYPED_TEST(DpfEvaluationTest, TestRegularDpf) {
   DPF_ASSERT_OK(this->dpf_->template RegisterValueType<TypeParam>());
