@@ -2,7 +2,7 @@ load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@com_github_google_iree//build_tools/embed_data:build_defs.bzl", "cc_embed_data")
 
 package(
-    default_visibility = ["//dpf:__subpackages__"],
+    default_visibility = ["//:__subpackages__"],
 )
 
 licenses(["notice"])
