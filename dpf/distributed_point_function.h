@@ -421,7 +421,7 @@ class DistributedPointFunction {
       absl::flat_hash_map<std::string, ValueCorrectionFunction>&
           value_correction_functions);
 
-  // Used to validate DpfKey and EvaluationContext protos.
+  // Used to validate DpfParameters, DpfKey and EvaluationContext protos.
   const std::unique_ptr<dpf_internal::ProtoValidator> proto_validator_;
 
   // DP parameters passed to the factory function. Contains the domain size and
