@@ -37,51 +37,33 @@ class BasicRng : public SecurePrng {
 
   // Sample 8 bits of randomness using OpenSSL RAND_bytes.
   // Returns an INTERNAL error code if the sampling fails.
-  absl::StatusOr<uint8_t> Rand8() override {
-    unsigned char rand[1];
-    int success = RAND_bytes(rand, 1);
-    if (!success) {
-      return absl::InternalError(
-          "BasicRng::Rand8() - Failed to create randomness");
-    }
-    return static_cast<uint8_t>(rand[0]);
-  }
+  inline absl::StatusOr<uint8_t> Rand8() override { return Rand<uint8_t>(); }
 
   // Sample 64 bits of randomness using OPENSSL RAND_bytes.
   // Returns an INTERNAL error code if the sampling fails.
-  absl::StatusOr<uint64_t> Rand64() override {
-    unsigned char rand[8];
-    int success = RAND_bytes(rand, 8);
-    if (!success) {
-      return absl::InternalError(
-          "BasicRng::Rand64() - Failed to create randomness");
-    }
-    uint64_t rand_uint64 = 0;
-    for (int i = 0; i < 8; i++) {
-      rand_uint64 += static_cast<uint64_t>(rand[8 - i]) << (8 * i);
-    }
-    return rand_uint64;
-  }
+  inline absl::StatusOr<uint64_t> Rand64() override { return Rand<uint64_t>(); }
 
   // Sample 128 bits of randomness using OPENSSL RAND_bytes.
   // Returns an INTERNAL error code if the sampling fails.
-  absl::StatusOr<absl::uint128> Rand128() override {
-    unsigned char rand[16];
-    int success = RAND_bytes(rand, 16);
-    if (!success) {
-      return absl::InternalError(
-          "BasicRng::Rand128() - Failed to create randomness");
-    }
-    absl::uint128 rand_uint128 = 0;
-    for (int i = 0; i < 16; i++) {
-      rand_uint128 += static_cast<absl::uint128>(rand[8 - i]) << (8 * i);
-    }
-    return rand_uint128;
+  inline absl::StatusOr<absl::uint128> Rand128() override {
+    return Rand<absl::uint128>();
   }
 
   // BasicRng does not use seeds.
   static absl::StatusOr<std::string> GenerateSeed() { return std::string(); }
   static int SeedLength() { return 0; }
+
+ private:
+  template <typename T>
+  absl::StatusOr<T> Rand() {
+    std::array<uint8_t, sizeof(T)> rand;
+    int success = RAND_bytes(rand.data(), rand.size());
+    if (!success) {
+      return absl::InternalError(
+          "BasicRng::Rand - Failed to create randomness");
+    }
+    return absl::bit_cast<T>(rand);
+  }
 };
 
 }  // namespace distributed_point_functions

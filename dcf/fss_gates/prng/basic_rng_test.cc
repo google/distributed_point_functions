@@ -26,18 +26,24 @@ namespace {
 using ::testing::Test;
 
 const absl::string_view kSampleSeed = absl::string_view();
+constexpr int kNumSamples = 10;
 
-class BasicRngTest : public Test {};
+class BasicRngTest : public Test {
+ protected:
+  void SetUp() {
+    DPF_ASSERT_OK_AND_ASSIGN(rng_, BasicRng::Create(kSampleSeed));
+  }
+
+  std::unique_ptr<BasicRng> rng_;
+};
 
 TEST_F(BasicRngTest, Test8BitRand) {
-  DPF_ASSERT_OK_AND_ASSIGN(auto rng, BasicRng::Create(kSampleSeed));
-
   // Two random 8 bit strings have 1/256 probability of being equal. Instead,
   // we check that 8 consecutively generated strings are not all equal.
   bool equal = true;
-  DPF_ASSERT_OK_AND_ASSIGN(uint8_t prev, rng->Rand8());
+  DPF_ASSERT_OK_AND_ASSIGN(uint8_t prev, rng_->Rand8());
   for (int i = 0; i < 8; ++i) {
-    DPF_ASSERT_OK_AND_ASSIGN(uint8_t next, rng->Rand8());
+    DPF_ASSERT_OK_AND_ASSIGN(uint8_t next, rng_->Rand8());
     if (next != prev) {
       equal = false;
     }
@@ -47,17 +53,53 @@ TEST_F(BasicRngTest, Test8BitRand) {
 }
 
 TEST_F(BasicRngTest, Test64BitRand) {
-  DPF_ASSERT_OK_AND_ASSIGN(auto rng, BasicRng::Create(kSampleSeed));
-  DPF_ASSERT_OK_AND_ASSIGN(uint64_t r1, rng->Rand64());
-  DPF_ASSERT_OK_AND_ASSIGN(uint64_t r2, rng->Rand64());
+  DPF_ASSERT_OK_AND_ASSIGN(uint64_t r1, rng_->Rand64());
+  DPF_ASSERT_OK_AND_ASSIGN(uint64_t r2, rng_->Rand64());
   EXPECT_NE(r1, r2);
 }
 
 TEST_F(BasicRngTest, Test128BitRand) {
-  DPF_ASSERT_OK_AND_ASSIGN(auto rng, BasicRng::Create(kSampleSeed));
-  DPF_ASSERT_OK_AND_ASSIGN(absl::uint128 r1, rng->Rand128());
-  DPF_ASSERT_OK_AND_ASSIGN(absl::uint128 r2, rng->Rand128());
+  DPF_ASSERT_OK_AND_ASSIGN(absl::uint128 r1, rng_->Rand128());
+  DPF_ASSERT_OK_AND_ASSIGN(absl::uint128 r2, rng_->Rand128());
   EXPECT_NE(r1, r2);
+}
+
+TEST_F(BasicRngTest, BytesAreDifferent64) {
+  std::vector<uint64_t> rand(kNumSamples);
+  for (int i = 0; i < kNumSamples; ++i) {
+    DPF_ASSERT_OK_AND_ASSIGN(rand[i], rng_->Rand64());
+  }
+
+  for (int i = 0; i < sizeof(uint64_t); ++i) {
+    bool not_all_equal = false;
+    for (int j = 1; j < kNumSamples; ++j) {
+      auto byte1 = static_cast<uint8_t>(rand[j - 1] >> (8 * i));
+      auto byte2 = static_cast<uint8_t>(rand[j] >> (8 * i));
+      if (byte1 != byte2) {
+        not_all_equal = true;
+      }
+    }
+    EXPECT_TRUE(not_all_equal);
+  }
+}
+
+TEST_F(BasicRngTest, BytesAreDifferent128) {
+  std::vector<absl::uint128> rand(kNumSamples);
+  for (int i = 0; i < kNumSamples; ++i) {
+    DPF_ASSERT_OK_AND_ASSIGN(rand[i], rng_->Rand128());
+  }
+
+  for (int i = 0; i < sizeof(absl::uint128); ++i) {
+    bool not_all_equal = false;
+    for (int j = 1; j < kNumSamples; ++j) {
+      auto byte1 = static_cast<uint8_t>(rand[j - 1] >> (8 * i));
+      auto byte2 = static_cast<uint8_t>(rand[j] >> (8 * i));
+      if (byte1 != byte2) {
+        not_all_equal = true;
+      }
+    }
+    EXPECT_TRUE(not_all_equal);
+  }
 }
 
 }  // namespace
