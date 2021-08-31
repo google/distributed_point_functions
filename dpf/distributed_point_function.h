@@ -332,10 +332,6 @@ class DistributedPointFunction {
                             absl::Span<bool> control_bits,
                             absl::Span<DpfKey> keys) const;
 
-  // Checks if the parameters of `ctx` are compatible with this DPF. Returns OK
-  // if that's the case, and INVALID_ARGUMENT otherwise.
-  absl::Status CheckContextParameters(const EvaluationContext& ctx) const;
-
   // Computes the tree index (representing a path in the FSS tree) from the
   // given `domain_index` and `hierarchy_level`. Does NOT check whether the
   // given domain index fits in the domain at `hierarchy_level`.
