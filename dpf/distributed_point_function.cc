@@ -254,30 +254,33 @@ DistributedPointFunction::EvaluateSeeds(
   buffer_left.reserve(max_batch_size);
   buffer_right.reserve(max_batch_size);
   BitVector current_bits(max_batch_size);
-
-  // Parse correction words for faster access (we access them once for each
-  // batch).
-  std::vector<std::vector<absl::uint128>> correction_seeds(
-      num_correction_word_sets, std::vector<absl::uint128>(num_levels));
-  std::vector<BitVector> correction_controls_left(num_correction_word_sets,
-                                                  BitVector(num_levels));
-  std::vector<BitVector> correction_controls_right(num_correction_word_sets,
-                                                   BitVector(num_levels));
-  for (int i = 0; i < num_correction_word_sets; ++i) {
-    for (int level = 0; level < num_levels; ++level) {
-      const CorrectionWord& correction = *(correction_words[i][level]);
-      correction_seeds[i][level] =
-          absl::MakeUint128(correction.seed().high(), correction.seed().low());
-      correction_controls_left[i][level] = correction.control_left();
-      correction_controls_right[i][level] = correction.control_right();
-    }
-  }
+  std::vector<absl::uint128> correction_seeds(max_batch_size * num_levels);
+  BitVector correction_controls_left(max_batch_size * num_levels),
+      correction_controls_right(max_batch_size * num_levels);
 
   // Perform DPF evaluation in blocks.
   for (int64_t start_block = 0; start_block < num_seeds;
        start_block += max_batch_size) {
     int64_t current_batch_size =
         std::min<int64_t>(num_seeds - start_block, max_batch_size);
+
+    // Parse correction words for current block. Only do it on the first block
+    // if num_correction_word_sets == 1.
+    int64_t current_batch_correction_words =
+        std::min<int64_t>(num_correction_word_sets, current_batch_size);
+    if (num_correction_word_sets != 1 || start_block == 0) {
+      for (int level = 0; level < num_levels; ++level) {
+        for (int i = 0; i < current_batch_correction_words; ++i) {
+          int index = level * current_batch_correction_words + i;
+          const CorrectionWord& correction = *(correction_words[i][level]);
+          correction_seeds[index] = absl::MakeUint128(correction.seed().high(),
+                                                      correction.seed().low());
+          correction_controls_left[index] = correction.control_left();
+          correction_controls_right[index] = correction.control_right();
+        }
+      }
+    }
+
     for (int level = 0; level < num_levels; ++level) {
       // Sort seeds into left and right depending on the current bit of the
       // corresponding prefix.
@@ -313,19 +316,19 @@ DistributedPointFunction::EvaluateSeeds(
           current_seed = buffer_right[right_index];
           ++right_index;
         }
-        int64_t correction_index =
-            num_correction_word_sets == 1 ? 0 : start_block + i;
+        int64_t correction_index = level * current_batch_correction_words;
+        if (num_correction_word_sets != 1) {
+          correction_index += i;
+        }
         if (result.control_bits[start_block + i]) {
-          current_seed ^= correction_seeds[correction_index][level];
+          current_seed ^= correction_seeds[correction_index];
         }
         bool current_control_bit = ExtractAndClearLowestBit(current_seed);
         if (result.control_bits[start_block + i]) {
           if (current_bits[i] == 0) {
-            current_control_bit ^=
-                correction_controls_left[correction_index][level];
+            current_control_bit ^= correction_controls_left[correction_index];
           } else {
-            current_control_bit ^=
-                correction_controls_right[correction_index][level];
+            current_control_bit ^= correction_controls_right[correction_index];
           }
         }
         result.seeds[start_block + i] = current_seed;
