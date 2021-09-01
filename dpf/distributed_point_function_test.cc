@@ -863,5 +863,39 @@ TYPED_TEST(DpfEvaluationTest, TestRegularDpf) {
   }
 }
 
+TYPED_TEST(DpfEvaluationTest, TestBatchSinglePointEvaluation) {
+  DPF_ASSERT_OK(this->dpf_->template RegisterValueType<TypeParam>());
+  constexpr int kNumKeys = 10;
+  std::vector<std::pair<DpfKey, DpfKey>> keys(kNumKeys);
+  std::vector<const DpfKey*> key_pointers_1(kNumKeys), key_pointers_2(kNumKeys);
+  for (int i = 0; i < kNumKeys; ++i) {
+    DPF_ASSERT_OK_AND_ASSIGN(
+        keys[i], this->dpf_->GenerateKeys(this->alpha_, this->beta_));
+    key_pointers_1[i] = &(keys[i].first);
+    key_pointers_2[i] = &(keys[i].second);
+  }
+
+  // Batch-evaluate all keys on the entire domain.
+  for (int i = 0; i < (1 << this->log_domain_size_); ++i) {
+    std::vector<absl::uint128> evaluation_points(kNumKeys, i);
+    DPF_ASSERT_OK_AND_ASSIGN(std::vector<TypeParam> output_1,
+                             this->dpf_->template BatchEvaluateKeys<TypeParam>(
+                                 key_pointers_1, 0, evaluation_points));
+    DPF_ASSERT_OK_AND_ASSIGN(std::vector<TypeParam> output_2,
+                             this->dpf_->template BatchEvaluateKeys<TypeParam>(
+                                 key_pointers_2, 0, evaluation_points));
+    ASSERT_EQ(output_1.size(), output_2.size());
+    ASSERT_EQ(output_1.size(), kNumKeys);
+    for (int j = 0; j < kNumKeys; ++j) {
+      TypeParam sum = output_1[j] + output_2[j];
+      if (i == this->alpha_) {
+        EXPECT_EQ(sum, this->beta_);
+      } else {
+        EXPECT_EQ(sum, TypeParam{});
+      }
+    }
+  }
+}
+
 }  // namespace
 }  // namespace distributed_point_functions

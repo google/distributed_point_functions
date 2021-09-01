@@ -222,7 +222,8 @@ int DistributedPointFunction::DomainToBlockIndex(absl::uint128 domain_index,
 absl::StatusOr<DistributedPointFunction::DpfExpansion>
 DistributedPointFunction::EvaluateSeeds(
     DpfExpansion partial_evaluations, absl::Span<const absl::uint128> paths,
-    absl::Span<const CorrectionWord* const> correction_words) const {
+    absl::Span<const absl::Span<const CorrectionWord* const>> correction_words)
+    const {
   if (partial_evaluations.seeds.size() !=
           partial_evaluations.control_bits.size() ||
       partial_evaluations.seeds.size() != paths.size()) {
@@ -232,7 +233,19 @@ DistributedPointFunction::EvaluateSeeds(
         "all be equal");
   }
   auto num_seeds = static_cast<int64_t>(partial_evaluations.seeds.size());
-  auto num_levels = static_cast<int>(correction_words.size());
+  auto num_correction_word_sets = static_cast<int64_t>(correction_words.size());
+  if (num_correction_word_sets != 1 && num_correction_word_sets != num_seeds) {
+    return absl::InvalidArgumentError(
+        "correction_words.size() must either be 1 or equal to "
+        "partial_evaluations.seeds.size()");
+  }
+  auto num_levels = static_cast<int>(correction_words[0].size());
+  for (int64_t i = 1; i < num_correction_word_sets; ++i) {
+    if (static_cast<int>(correction_words[i].size()) != num_levels) {
+      return absl::InvalidArgumentError(
+          "All elements of correction_words must have the same size");
+    }
+  }
   int64_t max_batch_size = Aes128FixedKeyHash::kBatchSize;
 
   // Allocate output and temporary buffers.
@@ -244,15 +257,20 @@ DistributedPointFunction::EvaluateSeeds(
 
   // Parse correction words for faster access (we access them once for each
   // batch).
-  std::vector<absl::uint128> correction_seeds(num_levels);
-  BitVector correction_controls_left(num_levels);
-  BitVector correction_controls_right(num_levels);
-  for (int level = 0; level < num_levels; ++level) {
-    const CorrectionWord& correction = *(correction_words[level]);
-    correction_seeds[level] =
-        absl::MakeUint128(correction.seed().high(), correction.seed().low());
-    correction_controls_left[level] = correction.control_left();
-    correction_controls_right[level] = correction.control_right();
+  std::vector<std::vector<absl::uint128>> correction_seeds(
+      num_correction_word_sets, std::vector<absl::uint128>(num_levels));
+  std::vector<BitVector> correction_controls_left(num_correction_word_sets,
+                                                  BitVector(num_levels));
+  std::vector<BitVector> correction_controls_right(num_correction_word_sets,
+                                                   BitVector(num_levels));
+  for (int i = 0; i < num_correction_word_sets; ++i) {
+    for (int level = 0; level < num_levels; ++level) {
+      const CorrectionWord& correction = *(correction_words[i][level]);
+      correction_seeds[i][level] =
+          absl::MakeUint128(correction.seed().high(), correction.seed().low());
+      correction_controls_left[i][level] = correction.control_left();
+      correction_controls_right[i][level] = correction.control_right();
+    }
   }
 
   // Perform DPF evaluation in blocks.
@@ -295,15 +313,19 @@ DistributedPointFunction::EvaluateSeeds(
           current_seed = buffer_right[right_index];
           ++right_index;
         }
+        int64_t correction_index =
+            num_correction_word_sets == 1 ? 0 : start_block + i;
         if (result.control_bits[start_block + i]) {
-          current_seed ^= correction_seeds[level];
+          current_seed ^= correction_seeds[correction_index][level];
         }
         bool current_control_bit = ExtractAndClearLowestBit(current_seed);
         if (result.control_bits[start_block + i]) {
           if (current_bits[i] == 0) {
-            current_control_bit ^= correction_controls_left[level];
+            current_control_bit ^=
+                correction_controls_left[correction_index][level];
           } else {
-            current_control_bit ^= correction_controls_right[level];
+            current_control_bit ^=
+                correction_controls_right[correction_index][level];
           }
         }
         result.seeds[start_block + i] = current_seed;
@@ -513,6 +535,27 @@ DistributedPointFunction::ExpandAndUpdateContext(
   // Update hierarchy level in ctx.
   ctx.set_previous_hierarchy_level(hierarchy_level);
   return expansion;
+}
+
+absl::StatusOr<std::vector<absl::uint128>>
+DistributedPointFunction::HashExpandedSeeds(
+    int hierarchy_level, absl::Span<const absl::uint128> expansion) const {
+  const auto expansion_size = static_cast<int64_t>(expansion.size());
+  const int blocks_needed = blocks_needed_[hierarchy_level];
+  std::vector<absl::uint128> hashed_expansion;
+  hashed_expansion.reserve(expansion_size * blocks_needed);
+  for (int64_t i = 0; i < expansion_size; ++i) {
+    for (int j = 0; j < blocks_needed; ++j) {
+      hashed_expansion.push_back(expansion[i] + j);
+    }
+  }
+
+  // Evaluate PRG in place (this is safe as `Evaluate` creates a copy of the
+  // input).
+  DPF_RETURN_IF_ERROR(
+      prg_value_.Evaluate(hashed_expansion, absl::MakeSpan(hashed_expansion)));
+
+  return hashed_expansion;
 }
 
 absl::StatusOr<std::string>
