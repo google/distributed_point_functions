@@ -323,5 +323,51 @@ void BM_HeavyHitters(benchmark::State& state) {
 }
 BENCHMARK(BM_HeavyHitters)->RangeMultiplier(2)->Range(16, 128);
 
+// Benchmark batch evaluation of multiple DPF keys at a single point each.
+// The first argument specifies the number of keys, the second the domain size,
+// and the last the number of evaluation points per key.
+template <typename T>
+void BM_BatchEvaluation(benchmark::State& state) {
+  const int num_keys = state.range(0);
+  const int evaluation_points_per_key = state.range(1);
+  constexpr int kLogDomainSize = 64 - 7;
+
+  DpfParameters parameters;
+  parameters.set_log_domain_size(kLogDomainSize);
+  *(parameters.mutable_value_type()) = dpf_internal::ToValueType<T>();
+
+  std::unique_ptr<DistributedPointFunction> dpf =
+      DistributedPointFunction::Create(parameters).value();
+
+  absl::BitGen rng;
+  google::protobuf::Arena arena;
+  std::vector<const DpfKey*> key_pointers(num_keys * evaluation_points_per_key);
+  std::vector<absl::uint128> evaluation_points(num_keys *
+                                               evaluation_points_per_key);
+  for (int i = 0; i < num_keys; ++i) {
+    absl::uint128 alpha = absl::MakeUint128(absl::Uniform<uint64_t>(rng),
+                                            absl::Uniform<uint64_t>(rng));
+    if constexpr (kLogDomainSize < 128) {
+      alpha &= (absl::uint128{1} << kLogDomainSize) - 1;
+    }
+    T beta{};
+    DpfKey* key = google::protobuf::Arena::CreateMessage<DpfKey>(&arena);
+    *key = dpf->GenerateKeys(alpha, beta).value().first;
+
+    for (int j = 0; j < evaluation_points_per_key; ++j) {
+      key_pointers[i * evaluation_points_per_key + j] = key;
+      evaluation_points[i * evaluation_points_per_key + j] = absl::MakeUint128(
+          absl::Uniform<uint64_t>(rng), absl::Uniform<uint64_t>(rng));
+    }
+  }
+
+  for (auto s : state) {
+    std::vector<T> result =
+        dpf->BatchEvaluateKeys<T>(key_pointers, 0, evaluation_points).value();
+    benchmark::DoNotOptimize(result);
+  }
+}
+BENCHMARK_TEMPLATE(BM_BatchEvaluation, absl::uint128)->ArgPair(512, 80);
+
 }  // namespace
 }  // namespace distributed_point_functions

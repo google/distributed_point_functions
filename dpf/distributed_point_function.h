@@ -300,7 +300,7 @@ class DistributedPointFunction {
   template <typename T>
   absl::StatusOr<std::vector<T>> BatchEvaluateKeys(
       absl::Span<const DpfKey* const> keys, int hierarchy_level,
-      absl::Span<const absl::uint128> evaluation_points);
+      absl::Span<const absl::uint128> evaluation_points) const;
 
  private:
   // BitVector is a vector of bools. Allows for faster access times than
@@ -766,7 +766,7 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
 template <typename T>
 absl::StatusOr<std::vector<T>> DistributedPointFunction::BatchEvaluateKeys(
     absl::Span<const DpfKey* const> keys, int hierarchy_level,
-    absl::Span<const absl::uint128> evaluation_points) {
+    absl::Span<const absl::uint128> evaluation_points) const {
   if (keys.size() != evaluation_points.size()) {
     return absl::InvalidArgumentError(
         "`keys` and `evaluation_points` must have the same size");
@@ -787,6 +787,9 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::BatchEvaluateKeys(
   absl::flat_hash_map<const DpfKey*, std::array<T, elements_per_block>>
       correction_ints;
   for (int64_t i = 0; i < num_keys; ++i) {
+    if (keys[i] == nullptr) {
+      return absl::InvalidArgumentError("`keys` may not contain null pointers");
+    }
     bool was_inserted;
     typename decltype(correction_ints)::iterator it;
     std::tie(it, was_inserted) = correction_ints.try_emplace(keys[i]);
