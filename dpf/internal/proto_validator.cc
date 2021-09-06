@@ -266,9 +266,11 @@ absl::Status ProtoValidator::ValidateValueType(const ValueType& value_type) {
         value_type.int_mod_n().base_integer();
     DPF_RETURN_IF_ERROR(ValidateIntegerType(base_integer));
     return ValidateIntegerValue(value_type.int_mod_n().modulus(), base_integer);
+  } else if (value_type.type_case() == ValueType::kXorWrapper) {
+    return ValidateIntegerType(value_type.xor_wrapper());
   }
-  return absl::InvalidArgumentError(
-      absl::StrCat("Unsupported ValueType:\n", value_type.DebugString()));
+  return absl::InvalidArgumentError(absl::StrCat(
+      "ValidateValueType: Unsupported ValueType:\n", value_type.DebugString()));
 }
 
 absl::Status ProtoValidator::ValidateValue(const Value& value,
@@ -307,9 +309,14 @@ absl::Status ProtoValidator::ValidateValue(const Value& value,
                           value_128, modulus_128));
     }
     return absl::OkStatus();
+  } else if (type.type_case() == ValueType::kXorWrapper) {
+    if (value.value_case() != Value::kXorWrapper) {
+      return absl::InvalidArgumentError("Expected XorWrapper value");
+    }
+    return ValidateIntegerValue(value.xor_wrapper(), type.xor_wrapper());
   }
-  return absl::InvalidArgumentError(
-      absl::StrCat("Unsupported ValueType:\n", type.DebugString()));
+  return absl::InvalidArgumentError(absl::StrCat(
+      "ValidateValue: Unsupported ValueType:\n", type.DebugString()));
 }
 
 }  // namespace distributed_point_functions::dpf_internal

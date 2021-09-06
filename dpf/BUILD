@@ -153,3 +153,23 @@ cc_test(
         "@com_google_absl//absl/numeric:int128",
     ],
 )
+
+cc_library(
+    name = "xor_wrapper",
+    hdrs = ["xor_wrapper.h"],
+    deps = [
+        "@com_google_absl//absl/base:core_headers",
+    ],
+)
+
+cc_test(
+    name = "xor_wrapper_test",
+    srcs = [
+        "xor_wrapper_test.cc",
+    ],
+    deps = [
+        ":xor_wrapper",
+        "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/numeric:int128",
+    ],
+)

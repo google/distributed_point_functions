@@ -80,7 +80,7 @@ TEST(DistributedPointFunction, CreateFailsForInvalidValueType) {
 
   EXPECT_THAT(DistributedPointFunction::Create(parameters),
               StatusIs(absl::StatusCode::kInvalidArgument,
-                       StartsWith("Unsupported ValueType")));
+                       StartsWith("ValidateValueType: Unsupported ValueType")));
 }
 
 TEST(DistributedPointFunction, TestGenerateKeysIncrementalTemplate) {
@@ -791,7 +791,7 @@ class DpfEvaluationTest : public ::testing::Test {
   // Helper function that recursively sets all elements of a tuple to 42.
   template <typename T0>
   static void SetTo42(T0& x) {
-    x = 42;
+    x = T0(42);
   }
   template <typename T0, typename... Tn>
   static void SetTo42(T0& x0, Tn&... xn) {
@@ -818,21 +818,25 @@ using MyIntModN128 =
                                65535u, 18446744073709551551ull))>;  // 2**80-65
 #endif
 using DpfEvaluationTypes = ::testing::Types<
+    // Tuple
     Tuple<uint8_t>, Tuple<uint32_t>, Tuple<absl::uint128>,
     Tuple<uint32_t, uint32_t>, Tuple<uint32_t, uint64_t>,
     Tuple<uint64_t, uint64_t>, Tuple<uint8_t, uint16_t, uint32_t, uint64_t>,
     Tuple<uint32_t, uint32_t, uint32_t, uint32_t>,
     Tuple<uint32_t, Tuple<uint32_t, uint32_t>, uint32_t>,
-    Tuple<uint32_t, absl::uint128>, MyIntModN, Tuple<MyIntModN>,
-    Tuple<uint32_t, MyIntModN>, Tuple<absl::uint128, MyIntModN>,
-    Tuple<MyIntModN, Tuple<MyIntModN>>,
+    Tuple<uint32_t, absl::uint128>,
+    // IntModN
+    MyIntModN, Tuple<MyIntModN>, Tuple<uint32_t, MyIntModN>,
+    Tuple<absl::uint128, MyIntModN>, Tuple<MyIntModN, Tuple<MyIntModN>>,
     Tuple<MyIntModN, MyIntModN, MyIntModN, MyIntModN, MyIntModN>,
     Tuple<MyIntModN64, MyIntModN64>
 #ifdef ABSL_HAVE_INTRINSIC_INT128
     ,
-    Tuple<MyIntModN128, MyIntModN128>
+    Tuple<MyIntModN128, MyIntModN128>,
 #endif
-    >;
+    // XorWrapper
+    XorWrapper<uint8_t>, XorWrapper<absl::uint128>,
+    Tuple<XorWrapper<uint32_t>, absl::uint128>>;
 TYPED_TEST_SUITE(DpfEvaluationTest, DpfEvaluationTypes);
 TYPED_TEST(DpfEvaluationTest, TestRegularDpf) {
   DPF_ASSERT_OK(this->dpf_->template RegisterValueType<TypeParam>());

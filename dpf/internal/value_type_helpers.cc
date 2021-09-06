@@ -50,6 +50,9 @@ absl::StatusOr<bool> ValueTypesAreEqual(const ValueType& lhs,
     return lhs.int_mod_n().base_integer().bitsize() ==
                rhs.int_mod_n().base_integer().bitsize() &&
            lhs_modulus_128 == rhs_modulus_128;
+  } else if (lhs.type_case() == ValueType::kXorWrapper &&
+             rhs.type_case() == ValueType::kXorWrapper) {
+    return lhs.xor_wrapper().bitsize() == rhs.xor_wrapper().bitsize();
   }
   return false;
 }
@@ -134,9 +137,11 @@ absl::StatusOr<int> BitsNeeded(const ValueType& value_type,
                              1, value_type.int_mod_n().base_integer().bitsize(),
                              modulus, security_parameter));
     return 8 * bytes_needed_ints_mod_n;
+  } else if (value_type.type_case() == ValueType::kXorWrapper) {
+    return value_type.xor_wrapper().bitsize();
   }
-  return absl::InvalidArgumentError(
-      absl::StrCat("Unsupported ValueType:\n", value_type.DebugString()));
+  return absl::InvalidArgumentError(absl::StrCat(
+      "BitsNeeded: Unsupported ValueType:\n", value_type.DebugString()));
 }
 
 absl::StatusOr<absl::uint128> ValueIntegerToUint128(const Value::Integer& in) {

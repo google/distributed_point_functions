@@ -76,6 +76,8 @@ BENCHMARK_TEMPLATE(
     BM_EvaluateRegularDpf,
     Tuple<MyIntModN64, MyIntModN64, MyIntModN64, MyIntModN64, MyIntModN64>)
     ->DenseRange(12, 24, 2);
+BENCHMARK_TEMPLATE(BM_EvaluateRegularDpf, XorWrapper<absl::uint128>)
+    ->DenseRange(12, 24, 2);
 
 // Benchmarks full evaluation of all hierarchy levels. Expects the first range
 // argument to specify the number of iterations. The output domain size is fixed
@@ -367,7 +369,10 @@ void BM_BatchEvaluation(benchmark::State& state) {
     benchmark::DoNotOptimize(result);
   }
 }
-BENCHMARK_TEMPLATE(BM_BatchEvaluation, absl::uint128)->ArgPair(512, 80);
+BENCHMARK_TEMPLATE(BM_BatchEvaluation, XorWrapper<absl::uint128>)
+    ->ArgPair(1, 400000)
+    ->ArgPair(10, 40000)
+    ->ArgPair(100, 4000);
 
 }  // namespace
 }  // namespace distributed_point_functions

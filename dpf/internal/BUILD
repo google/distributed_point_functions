@@ -16,6 +16,7 @@ cc_library(
         "//dpf:int_mod_n",
         "//dpf:status_macros",
         "//dpf:tuple",
+        "//dpf:xor_wrapper",
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/numeric:int128",

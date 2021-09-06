@@ -50,6 +50,8 @@ message ValueType {
     Tuple tuple = 2;
     // A integer with custom modulus.
     IntModN int_mod_n = 3;
+    // An XOR-wrapped integer. Corresponds to the XorWrapper C++ class.
+    Integer xor_wrapper = 4;
   }
   // Do not add fields outside of the `oneof` above, to ensure that messages
   // with known ValueTypes are serialized deterministically. See the
@@ -78,6 +80,7 @@ message Value {
     Tuple tuple = 2;
     Integer int_mod_n =
         3;  // The value of an IntModN is represented by its base_integer type.
+    Integer xor_wrapper = 4;
   }
 }
 // LINT.ThenChange(

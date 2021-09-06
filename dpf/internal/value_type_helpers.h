@@ -28,6 +28,7 @@
 #include "dpf/distributed_point_function.pb.h"
 #include "dpf/int_mod_n.h"
 #include "dpf/tuple.h"
+#include "dpf/xor_wrapper.h"
 
 namespace distributed_point_functions {
 
@@ -73,6 +74,12 @@ template <typename BaseInteger, typename ModulusType, ModulusType kModulus>
 struct is_supported_type<IntModNImpl<BaseInteger, ModulusType, kModulus>,
                          false> {
   static constexpr bool value = is_unsigned_integer_v<BaseInteger>;
+};
+
+// XOR-wrapped unsigned integers: true.
+template <typename T>
+struct is_supported_type<XorWrapper<T>, false> {
+  static constexpr bool value = is_unsigned_integer_v<T>;
 };
 
 template <typename T>
@@ -125,6 +132,12 @@ constexpr int GetTotalBitsizeImpl(type_helper<Tuple<T...>>) {
   return bitsize;
 }
 
+// Overload for XorWrapper.
+template <typename T>
+constexpr int GetTotalBitsizeImpl(type_helper<XorWrapper<T>>) {
+  return GetTotalBitsize<T>();
+}
+
 // Type trait to test if a type supports batching. True if T can be converted
 // directly from bytes and has a size of at most 128 bits.
 
@@ -170,6 +183,23 @@ absl::StatusOr<int> BitsNeeded(const ValueType& value_type,
 // Returns INVALID_ARGUMENT if `in` is not a simple integer or IntModN.
 absl::StatusOr<absl::uint128> ValueIntegerToUint128(const Value::Integer& in);
 
+// Checks if the given value is in range of T, and if so, returns it converted
+// to T.
+//
+// Otherwise returns INVALID_ARGUMENT.
+template <typename T, typename = std::enable_if_t<is_unsigned_integer_v<T>>>
+absl::StatusOr<T> Uint128To(absl::uint128 in) {
+  // Check whether value is in range if it's smaller than 128 bits.
+  if (!std::is_same_v<T, absl::uint128> &&
+      absl::Uint128Low64(in) >
+          static_cast<uint64_t>(std::numeric_limits<T>::max())) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "Value (= ", absl::Uint128Low64(in),
+        ") too large for the given type T (size ", sizeof(T), ")"));
+  }
+  return static_cast<T>(in);
+}
+
 // Returns `true` if `lhs` and `rhs` describe the same types, and `false`
 // otherwise.
 //
@@ -198,15 +228,7 @@ absl::StatusOr<T> ConvertValueToImpl(const Value& value, type_helper<T>) {
   if (!value_128.ok()) {
     return value_128.status();
   }
-  // Check whether value is in range if it's smaller than 128 bits.
-  if (!std::is_same_v<T, absl::uint128> &&
-      absl::Uint128Low64(*value_128) >
-          static_cast<uint64_t>(std::numeric_limits<T>::max())) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "Value (= ", absl::Uint128Low64(*value_128),
-        ") too large for the given type T (size ", sizeof(T), ")"));
-  }
-  return static_cast<T>(*value_128);
+  return Uint128To<T>(*value_128);
 }
 
 // Implementation of ConvertValueTo<T> for Tuple<ElementType...>.
@@ -282,6 +304,22 @@ ConvertValueToImpl(
       static_cast<BaseInteger>(*value_128));
 }
 
+// Overload for XorWrapper.
+template <typename T>
+absl::StatusOr<XorWrapper<T>> ConvertValueToImpl(const Value& value,
+                                                 type_helper<XorWrapper<T>>) {
+  absl::StatusOr<absl::uint128> wrapped128 =
+      ValueIntegerToUint128(value.xor_wrapper());
+  if (!wrapped128.ok()) {
+    return wrapped128.status();
+  }
+  absl::StatusOr<T> wrapped = Uint128To<T>(*wrapped128);
+  if (!wrapped.ok()) {
+    return wrapped.status();
+  }
+  return XorWrapper(*wrapped);
+}
+
 // Converts a `repeated Value` proto field to a std::array with element type T.
 //
 // Returns INVALID_ARGUMENT in case the input has the wrong size, or if the
@@ -324,6 +362,14 @@ Value ToValue(const IntModNImpl<BaseInteger, ModulusType, kModulus>& input) {
   return result;
 }
 
+// Overload for XorWrapper.
+template <typename T>
+Value ToValue(const XorWrapper<T>& input) {
+  Value result;
+  *(result.mutable_xor_wrapper()) = Uint128ToValueInteger(input.value());
+  return result;
+}
+
 // Overload for Tuple<ElementType...>.
 template <typename... ElementType>
 Value ToValue(const Tuple<ElementType...>& input) {
@@ -357,6 +403,8 @@ ValueType ToValueType() {
 
 // ToValueTypeImpl should be overloaded for any new types supported in the
 // `ValueType` proto.
+//
+// Overload for simple integers.
 template <typename T, typename = std::enable_if_t<is_unsigned_integer_v<T>>>
 ValueType ToValueTypeImpl(type_helper<T>) {
   ValueType result;
@@ -388,6 +436,14 @@ ValueType ToValueTypeImpl(
   return result;
 }
 
+// Overload for XorWrapper
+template <typename T>
+ValueType ToValueTypeImpl(type_helper<XorWrapper<T>>) {
+  ValueType result;
+  *(result.mutable_xor_wrapper()) = ToValueType<T>().integer();
+  return result;
+}
+
 // Creates a value of type T from the given `bytes`. If possible, converts bytes
 // directly using ConvertBytesDirectlyTo. Otherwise, uses SampleFromBytes.
 //
@@ -415,6 +471,13 @@ T ConvertBytesDirectlyTo(absl::string_view bytes, type_helper<T>) {
   }
 #endif
   return out;
+}
+
+// Overload for XorWrapper.
+template <typename T>
+XorWrapper<T> ConvertBytesDirectlyTo(absl::string_view bytes,
+                                     type_helper<XorWrapper<T>>) {
+  return XorWrapper<T>(ConvertBytesTo<T>(bytes));
 }
 
 // Overload of ConvertBytesDirectlyTo for tuples.

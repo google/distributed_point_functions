@@ -311,13 +311,23 @@ TEST_F(ProtoValidatorTest, ValidateValueFailsIfValueLargerThanModulus) {
                        "Value (= 3) is too large for modulus (= 3)"));
 }
 
+TEST_F(ProtoValidatorTest, ValidateValueFailsIfTypeNotXorWrapper) {
+  ValueType type = ToValueType<XorWrapper<uint32_t>>();
+  Value value = ToValue(uint32_t{23});
+
+  EXPECT_THAT(proto_validator_->ValidateValue(value, type),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "Expected XorWrapper value"));
+}
+
 TEST_F(ProtoValidatorTest, ValidateValueFailsIfValueIsUnknown) {
   ValueType type;
   Value value;
 
-  EXPECT_THAT(proto_validator_->ValidateValue(value, type),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       testing::StartsWith("Unsupported ValueType:")));
+  EXPECT_THAT(
+      proto_validator_->ValidateValue(value, type),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               testing::StartsWith("ValidateValue: Unsupported ValueType:")));
 }
 
 TEST(ProtoValidator, ValidateValueTypeFailsIfBitsizeNotPositive) {
@@ -355,7 +365,7 @@ TEST(ProtoValidator, ValidateValueTypeFailsIfNoTypeChosen) {
 
   EXPECT_THAT(ProtoValidator::ValidateValueType(type),
               StatusIs(absl::StatusCode::kInvalidArgument,
-                       StartsWith("Unsupported ValueType")));
+                       StartsWith("ValidateValueType: Unsupported ValueType")));
 }
 
 }  // namespace

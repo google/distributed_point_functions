@@ -34,9 +34,10 @@ TEST(ValueTypeHelperTest, ValueTypesAreEqualFailsOnInvalidValueTypes) {
 }
 
 TEST(ValueTypeHelperTest, BitsNeededFailsOnInvalidValueType) {
-  EXPECT_THAT(BitsNeeded(ValueType{}, kDefaultSecurityParameter),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       testing::StartsWith("Unsupported ValueType")));
+  EXPECT_THAT(
+      BitsNeeded(ValueType{}, kDefaultSecurityParameter),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               testing::StartsWith("BitsNeeded: Unsupported ValueType")));
 }
 
 template <typename T>
