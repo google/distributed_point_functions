@@ -332,7 +332,7 @@ template <typename T>
 void BM_BatchEvaluation(benchmark::State& state) {
   const int num_keys = state.range(0);
   const int evaluation_points_per_key = state.range(1);
-  constexpr int kLogDomainSize = 64 - 7;
+  constexpr int kLogDomainSize = 63 - 7;
 
   DpfParameters parameters;
   parameters.set_log_domain_size(kLogDomainSize);
@@ -364,9 +364,15 @@ void BM_BatchEvaluation(benchmark::State& state) {
   }
 
   for (auto s : state) {
-    std::vector<T> result =
-        dpf->BatchEvaluateKeys<T>(key_pointers, 0, evaluation_points).value();
-    benchmark::DoNotOptimize(result);
+    for (int i = 0; i < num_keys; ++i) {
+      std::vector<T> result =
+          dpf->EvaluateAt<T>(*(key_pointers[i]), 0,
+                             absl::MakeConstSpan(evaluation_points)
+                                 .subspan(i * evaluation_points_per_key,
+                                          evaluation_points_per_key))
+              .value();
+      benchmark::DoNotOptimize(result);
+    }
   }
 }
 BENCHMARK_TEMPLATE(BM_BatchEvaluation, XorWrapper<absl::uint128>)

@@ -280,32 +280,31 @@ class DistributedPointFunction {
     }
   }
 
-  // Evaluates multiple keys at a single point each, up to the given
-  // hierarchy_level. The i-th element of the result will be the result of
-  // evaluating keys[i] on evaluation_points[i]. All keys have to be valid for
-  // this DPF instance, and so share the same parameters.
+  // Evaluates a single key at one or multiple points, up to the given
+  // hierarchy_level. Each element of `evaluation_points` must be within the
+  // domain of this DPF at `hierarchy_level`.
   //
   // Example:
   //
-  //   DpfKey key_a = ..., key_b = ...;
-  //   std::vector<const DpfKey*> key_ptrs = {&key_a, &key_b, &key_a};
+  //   DpfKey key = ...;
   //   std::vector<absl::uint128> evaluation_points = {1, 23, 42};
+  //   // Evaluate `key` on {1, 23, 42}.
+  //   DPF_ASSIGN_OR_RETURN(std::vector<T> result,
+  //                        dpf->EvaluateAt(key, 0, evaluation_points);
   //
-  //   // Evaluates key_a at 1, key_b at 23, and key_a (again) at 42.
-  //   DPF_ASSIGN_OR_RETURN(std::vector<...> result,
-  //                        BatchEvaluateKeys(key_ptrs, 0, evaluation_points));
-  //
-  // Returns INVALID_ARGUMENT if the sizes of keys and evaluation_points don't
-  // match, any key is malformed, or hierarchy_level is out of range.
+  // Returns INVALID_ARGUMENT if `key` is malformed, or if `hierarchy_level` or
+  // any element of `evaluation_points` is out of range.
   template <typename T>
-  absl::StatusOr<std::vector<T>> BatchEvaluateKeys(
-      absl::Span<const DpfKey* const> keys, int hierarchy_level,
+  absl::StatusOr<std::vector<T>> EvaluateAt(
+      const DpfKey& key, int hierarchy_level,
       absl::Span<const absl::uint128> evaluation_points) const;
 
  private:
   // BitVector is a vector of bools. Allows for faster access times than
   // std::vector<bool>, as well as inlining if the size is small.
-  using BitVector = absl::InlinedVector<bool, 8 / sizeof(bool)>;
+  using BitVector =
+      absl::InlinedVector<bool,
+                          std::max<size_t>(1, sizeof(bool*) / sizeof(bool))>;
 
   // Seeds and control bits resulting from a DPF expansion. This type is
   // returned by `ExpandSeeds` and `ExpandAndUpdateContext`.
@@ -367,29 +366,16 @@ class DistributedPointFunction {
 
   // Performs DPF evaluation of the given `partial_evaluations` using
   // prg_ctx_left_ or prg_ctx_right_, and the given `correction_words`. At each
-  // level `l < correction_words[0].size()`, the evaluation for the i-th seed in
+  // level `l < correction_words.size()`, the evaluation for the i-th seed in
   // `partial_evaluations` continues along the left or right path depending on
-  // the l-th most significant bit among the lowest `correction_words[i].size()`
+  // the l-th most significant bit among the lowest `correction_words.size()`
   // bits of `paths[i]`.
-  //
-  // Each element of correction_words should be a span of equal length. The
-  // number of spans in correction_words should either be 1 (when all seeds come
-  // from the same key), or equal to partial_evaluations.seeds.size().
   //
   // Returns INVALID_ARGUMENT if the input sizes don't match.
   // Returns INTERNAL in case of OpenSSL errors.
   absl::StatusOr<DpfExpansion> EvaluateSeeds(
       DpfExpansion partial_evaluations, absl::Span<const absl::uint128> paths,
-      absl::Span<const absl::Span<const CorrectionWord* const>>
-          correction_words) const;
-
-  // Overload for the case of a single set of correction words.
-  inline absl::StatusOr<DpfExpansion> EvaluateSeeds(
-      DpfExpansion partial_evaluations, absl::Span<const absl::uint128> paths,
-      absl::Span<const CorrectionWord* const> correction_words) const {
-    return EvaluateSeeds(partial_evaluations, paths,
-                         absl::MakeConstSpan(&correction_words, 1));
-  }
+      absl::Span<const CorrectionWord* const> correction_words) const;
 
   // Performs DPF expansion of the given `partial_evaluations` using
   // prg_ctx_left_ and prg_ctx_right_, and the given `correction_words`. In more
@@ -764,14 +750,10 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
 }
 
 template <typename T>
-absl::StatusOr<std::vector<T>> DistributedPointFunction::BatchEvaluateKeys(
-    absl::Span<const DpfKey* const> keys, int hierarchy_level,
+absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateAt(
+    const DpfKey& key, int hierarchy_level,
     absl::Span<const absl::uint128> evaluation_points) const {
-  if (keys.size() != evaluation_points.size()) {
-    return absl::InvalidArgumentError(
-        "`keys` and `evaluation_points` must have the same size");
-  }
-  const auto num_keys = static_cast<int64_t>(keys.size());
+  auto num_evaluation_points = static_cast<int64_t>(evaluation_points.size());
   if (hierarchy_level < 0) {
     return absl::InvalidArgumentError("`hierarchy_level` must be non-negative");
   }
@@ -780,87 +762,62 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::BatchEvaluateKeys(
         "`hierarchy_level` must be less than the number of parameters passed "
         "at construction");
   }
+  absl::Status status = proto_validator_->ValidateDpfKey(key);
+  if (!status.ok()) {
+    return status;
+  }
 
-  // For each unique key pointer in `keys`, check if it's consistent with this
-  // DPF and extract the value correction words to be used later.
+  // Get output correction word from `key`.
   constexpr int elements_per_block = dpf_internal::ElementsPerBlock<T>();
-  absl::flat_hash_map<const DpfKey*, std::array<T, elements_per_block>>
-      correction_ints;
-  for (int64_t i = 0; i < num_keys; ++i) {
-    if (keys[i] == nullptr) {
-      return absl::InvalidArgumentError("`keys` may not contain null pointers");
-    }
-    bool was_inserted;
-    typename decltype(correction_ints)::iterator it;
-    std::tie(it, was_inserted) = correction_ints.try_emplace(keys[i]);
-    if (!was_inserted) {
-      continue;  // We already checked this key.
-    }
-    absl::Status status = proto_validator_->ValidateDpfKey(*(keys[i]));
-    if (!status.ok()) {
-      return status;
-    }
+  const ::google::protobuf::RepeatedPtrField<Value>* value_correction = nullptr;
+  if (hierarchy_level < static_cast<int>(parameters_.size()) - 1) {
+    value_correction =
+        &(key.correction_words(hierarchy_to_tree_[hierarchy_level])
+              .value_correction());
+  } else {
+    // Last level value correction is stored in an extra proto field, since we
+    // have one less correction word than tree levels.
+    value_correction = &(key.last_level_value_correction());
+  }
 
-    // Get output correction word from `ctx`.
-    const ::google::protobuf::RepeatedPtrField<Value>* value_correction =
-        nullptr;
-    if (hierarchy_level < static_cast<int>(parameters_.size()) - 1) {
-      value_correction =
-          &(keys[i]
-                ->correction_words(hierarchy_to_tree_[hierarchy_level])
-                .value_correction());
-    } else {
-      // Last level value correction is stored in an extra proto field, since we
-      // have one less correction word than tree levels.
-      value_correction = &(keys[i]->last_level_value_correction());
-    }
-
-    // Split output correction into elements of type T, and save it in
-    // correction_ints.
-    absl::StatusOr<std::array<T, elements_per_block>> current_correction_ints =
-        dpf_internal::ValuesToArray<T>(*value_correction);
-    if (!current_correction_ints.ok()) {
-      return current_correction_ints.status();
-    }
-    it->second = std::move(*current_correction_ints);
+  // Split output correction into elements of type T, and save it in
+  // correction_ints.
+  absl::StatusOr<std::array<T, elements_per_block>> correction_ints =
+      dpf_internal::ValuesToArray<T>(*value_correction);
+  if (!correction_ints.ok()) {
+    return correction_ints.status();
   }
 
   // Split up evaluation_points into tree indices and block indices.
   std::vector<absl::uint128> tree_indices;
   std::vector<int> block_indices;
-  tree_indices.reserve(num_keys);
-  block_indices.reserve(num_keys);
-  for (int64_t i = 0; i < num_keys; ++i) {
+  tree_indices.reserve(num_evaluation_points);
+  block_indices.reserve(num_evaluation_points);
+  for (int64_t i = 0; i < num_evaluation_points; ++i) {
     tree_indices.push_back(
         DomainToTreeIndex(evaluation_points[i], hierarchy_level));
     block_indices.push_back(
         DomainToBlockIndex(evaluation_points[i], hierarchy_level));
   }
 
-  // Extract seeds for DPF evaluation.
+  // Extract seed and party for DPF evaluation.
+  absl::uint128 seed = absl::MakeUint128(key.seed().high(), key.seed().low());
+  bool party = key.party();
   DpfExpansion inputs;
-  inputs.seeds.reserve(num_keys);
-  inputs.control_bits.reserve(num_keys);
-  for (int64_t i = 0; i < num_keys; ++i) {
-    inputs.seeds.push_back(
-        absl::MakeUint128(keys[i]->seed().high(), keys[i]->seed().low()));
-    inputs.control_bits.push_back(keys[i]->party());
-  }
+  inputs.seeds.resize(num_evaluation_points, seed);
+  inputs.control_bits.resize(num_evaluation_points, party);
 
   // Evaluate DPFs.
-  std::vector<absl::Span<const CorrectionWord* const>> correction_words;
-  correction_words.reserve(num_keys);
   const int stop_level = hierarchy_to_tree_[hierarchy_level];
-  for (int64_t i = 0; i < num_keys; ++i) {
-    correction_words.push_back(absl::MakeConstSpan(keys[i]->correction_words())
-                                   .subspan(0, stop_level));
-  }
+  auto correction_words =
+      absl::MakeConstSpan(key.correction_words()).subspan(0, stop_level);
   absl::StatusOr<DpfExpansion> evaluated_inputs =
       EvaluateSeeds(std::move(inputs), tree_indices, correction_words);
   if (!evaluated_inputs.ok()) {
     return evaluated_inputs.status();
   }
-  DCHECK(static_cast<int64_t>(evaluated_inputs->seeds.size()) == num_keys);
+  DCHECK(static_cast<int64_t>(evaluated_inputs->seeds.size()) ==
+         num_evaluation_points);
 
   // Hash DPF evaluations.
   absl::StatusOr<std::vector<absl::uint128>> hashed_expansion =
@@ -871,9 +828,9 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::BatchEvaluateKeys(
 
   // Perform value correction.
   std::vector<T> result;
-  result.reserve(num_keys);
+  result.reserve(num_evaluation_points);
   const int blocks_needed = blocks_needed_[hierarchy_level];
-  for (int64_t i = 0; i < num_keys; ++i) {
+  for (int64_t i = 0; i < num_evaluation_points; ++i) {
     std::array<T, elements_per_block> current_elements =
         dpf_internal::ConvertBytesToArrayOf<T>(
             absl::string_view(reinterpret_cast<const char*>(
@@ -881,9 +838,9 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::BatchEvaluateKeys(
                               blocks_needed * sizeof(absl::uint128)));
     result.push_back(current_elements[block_indices[i]]);
     if (evaluated_inputs->control_bits[i]) {
-      result[i] += correction_ints[keys[i]][block_indices[i]];
+      result[i] += (*correction_ints)[block_indices[i]];
     }
-    if (keys[i]->party() == 1) {
+    if (party == 1) {
       result[i] = -result[i];
     }
   }
