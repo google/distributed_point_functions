@@ -56,7 +56,7 @@ absl::Status Aes128FixedKeyHash::Evaluate(absl::Span<const absl::uint128> in,
   // Compute orthomorphism sigma for each element in `in`, `kBatchSize` elements
   // at a time.
   auto in_size = static_cast<int64_t>(in.size());
-  std::vector<absl::uint128> sigma_in(kBatchSize);
+  std::array<absl::uint128, kBatchSize> sigma_in;
   for (int64_t start_block = 0; start_block < in_size;
        start_block += kBatchSize) {
     int64_t batch_size = std::min<int64_t>(in_size - start_block, kBatchSize);

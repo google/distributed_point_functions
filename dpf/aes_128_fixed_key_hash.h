@@ -61,8 +61,8 @@ class Aes128FixedKeyHash {
 
   // The maximum number of AES blocks encrypted at once. Chosen to pipeline AES
   // as much as possible, while still allowing both source and destination to
-  // comfortably fit in the L2 CPU cache.
-  static constexpr int kBatchSize = 4096;
+  // comfortably fit in the L1 CPU cache.
+  static constexpr int kBatchSize = 64;
 
  private:
   // Called by `Create`.
