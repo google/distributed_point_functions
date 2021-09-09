@@ -788,16 +788,21 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateAt(
     return correction_ints.status();
   }
 
-  // Split up evaluation_points into tree indices and block indices.
-  std::vector<absl::uint128> tree_indices;
-  std::vector<int> block_indices;
-  tree_indices.reserve(num_evaluation_points);
-  block_indices.reserve(num_evaluation_points);
-  for (int64_t i = 0; i < num_evaluation_points; ++i) {
-    tree_indices.push_back(
-        DomainToTreeIndex(evaluation_points[i], hierarchy_level));
-    block_indices.push_back(
-        DomainToBlockIndex(evaluation_points[i], hierarchy_level));
+  // Split up evaluation_points into tree indices and block indices, if we're
+  // operating on a packed type. Otherwise set `tree_indices` to
+  // `evaluation_points`.
+  std::vector<absl::uint128> maybe_recomputed_tree_indices(0);
+  absl::Span<const absl::uint128> tree_indices;
+  if constexpr (elements_per_block > 1) {
+    maybe_recomputed_tree_indices.reserve(num_evaluation_points);
+    for (int64_t i = 0; i < num_evaluation_points; ++i) {
+      maybe_recomputed_tree_indices.push_back(
+          DomainToTreeIndex(evaluation_points[i], hierarchy_level));
+    }
+    tree_indices = absl::MakeConstSpan(maybe_recomputed_tree_indices);
+  } else {
+    // This avoids copying the evaluation points when elements_per_block == 1.
+    tree_indices = evaluation_points;
   }
 
   // Extract seed and party for DPF evaluation.
@@ -836,9 +841,13 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateAt(
             absl::string_view(reinterpret_cast<const char*>(
                                   &(*hashed_expansion)[i * blocks_needed]),
                               blocks_needed * sizeof(absl::uint128)));
-    result.push_back(current_elements[block_indices[i]]);
+    int block_index = 0;
+    if constexpr (elements_per_block > 1) {
+      block_index = DomainToBlockIndex(evaluation_points[i], hierarchy_level);
+    }
+    result.push_back(current_elements[block_index]);
     if (evaluated_inputs->control_bits[i]) {
-      result[i] += (*correction_ints)[block_indices[i]];
+      result[i] += (*correction_ints)[block_index];
     }
     if (party == 1) {
       result[i] = -result[i];
