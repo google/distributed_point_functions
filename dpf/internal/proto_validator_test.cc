@@ -225,6 +225,17 @@ TEST_F(ProtoValidatorTest,
 }
 
 TEST_F(ProtoValidatorTest,
+       ValidateEvaluationContextSucceedsIfSecurityParameterIsDefault) {
+  parameters_[0].set_security_parameter(0);
+  DPF_ASSERT_OK_AND_ASSIGN(proto_validator_,
+                           ProtoValidator::Create(parameters_));
+
+  ctx_.mutable_parameters(0)->set_security_parameter(0);
+
+  EXPECT_THAT(proto_validator_->ValidateEvaluationContext(ctx_), IsOk());
+}
+
+TEST_F(ProtoValidatorTest,
        ValidateEvaluationContextFailsIfSecurityParameterDoesntMatch) {
   ctx_.mutable_parameters(0)->set_security_parameter(
       ctx_.parameters(0).security_parameter() + 1);

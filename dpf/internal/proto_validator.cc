@@ -18,33 +18,53 @@
 #include "dpf/internal/value_type_helpers.h"
 #include "dpf/status_macros.h"
 
-namespace distributed_point_functions::dpf_internal {
+namespace distributed_point_functions {
+namespace dpf_internal {
 
 namespace {
+
+inline double GetDefaultSecurityParameter(const DpfParameters& parameters) {
+  return ProtoValidator::kDefaultSecurityParameter +
+         parameters.log_domain_size();
+}
+
+inline bool AlmostEqual(double a, double b) {
+  return std::abs(a - b) <= ProtoValidator::kSecurityParameterEpsilon;
+}
 
 absl::StatusOr<bool> ParametersAreEqual(const DpfParameters& lhs,
                                         const DpfParameters& rhs) {
   if (lhs.log_domain_size() != rhs.log_domain_size()) {
     return false;
   }
-  if (std::abs(lhs.security_parameter() - rhs.security_parameter()) >
-      ProtoValidator::kSecurityParameterEpsilon) {
+  if (!(
+          // There are three ways that security parameters can be equivalent.
+          // Both equal.
+          AlmostEqual(lhs.security_parameter(), rhs.security_parameter()) ||
+          // lhs is zero and rhs has the default value.
+          (lhs.security_parameter() == 0 &&
+           AlmostEqual(rhs.security_parameter(),
+                       GetDefaultSecurityParameter(rhs))) ||
+          // rhs is zero and lhs has the default value.
+          (rhs.security_parameter() == 0 &&
+           AlmostEqual(lhs.security_parameter(),
+                       GetDefaultSecurityParameter(lhs))))) {
     return false;
   }
   if (lhs.has_value_type() && rhs.has_value_type()) {
-    return dpf_internal::ValueTypesAreEqual(lhs.value_type(), rhs.value_type());
+    return ValueTypesAreEqual(lhs.value_type(), rhs.value_type());
   }
 
   // Legacy element_bitsize support.
   if (!lhs.has_value_type() && rhs.has_value_type()) {
     ValueType lhs_value_type;
     lhs_value_type.mutable_integer()->set_bitsize(lhs.element_bitsize());
-    return dpf_internal::ValueTypesAreEqual(lhs_value_type, rhs.value_type());
+    return ValueTypesAreEqual(lhs_value_type, rhs.value_type());
   }
   if (lhs.has_value_type() && !rhs.has_value_type()) {
     ValueType rhs_value_type;
     rhs_value_type.mutable_integer()->set_bitsize(rhs.element_bitsize());
-    return dpf_internal::ValueTypesAreEqual(lhs.value_type(), rhs_value_type);
+    return ValueTypesAreEqual(lhs.value_type(), rhs_value_type);
   }
   return lhs.element_bitsize() == rhs.element_bitsize();
 }
@@ -97,8 +117,8 @@ absl::StatusOr<std::unique_ptr<ProtoValidator>> ProtoValidator::Create(
                                         parameters_in.end());
   for (int i = 0; i < static_cast<int>(parameters.size()); ++i) {
     if (parameters[i].security_parameter() == 0) {
-      parameters[i].set_security_parameter(kDefaultSecurityParameter +
-                                           parameters[i].log_domain_size());
+      parameters[i].set_security_parameter(
+          GetDefaultSecurityParameter(parameters[i]));
     }
   }
 
@@ -319,4 +339,5 @@ absl::Status ProtoValidator::ValidateValue(const Value& value,
       "ValidateValue: Unsupported ValueType:\n", type.DebugString()));
 }
 
-}  // namespace distributed_point_functions::dpf_internal
+}  // namespace dpf_internal
+}  // namespace distributed_point_functions
