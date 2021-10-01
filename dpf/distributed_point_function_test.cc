@@ -786,6 +786,9 @@ class DpfEvaluationTest : public ::testing::Test {
     *(parameters_.mutable_value_type()) = dpf_internal::ToValueType<T>();
     DPF_ASSERT_OK_AND_ASSIGN(dpf_,
                              DistributedPointFunction::Create(parameters_));
+    DPF_ASSERT_OK(this->dpf_->template RegisterValueType<T>());
+    DPF_ASSERT_OK_AND_ASSIGN(
+        keys_, this->dpf_->GenerateKeys(this->alpha_, this->beta_));
   }
 
   // Helper function that recursively sets all elements of a tuple to 42.
@@ -808,6 +811,7 @@ class DpfEvaluationTest : public ::testing::Test {
   T beta_;
   DpfParameters parameters_;
   std::unique_ptr<DistributedPointFunction> dpf_;
+  std::pair<DpfKey, DpfKey> keys_;
 };
 
 using MyIntModN = IntModN<uint32_t, 4294967291u>;                // 2**32 - 5.
@@ -840,15 +844,12 @@ using DpfEvaluationTypes = ::testing::Types<
 TYPED_TEST_SUITE(DpfEvaluationTest, DpfEvaluationTypes);
 
 TYPED_TEST(DpfEvaluationTest, TestRegularDpf) {
-  DPF_ASSERT_OK(this->dpf_->template RegisterValueType<TypeParam>());
-  std::pair<DpfKey, DpfKey> keys;
-  DPF_ASSERT_OK_AND_ASSIGN(keys,
-                           this->dpf_->GenerateKeys(this->alpha_, this->beta_));
-
-  DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx_1,
-                           this->dpf_->CreateEvaluationContext(keys.first));
-  DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx_2,
-                           this->dpf_->CreateEvaluationContext(keys.second));
+  DPF_ASSERT_OK_AND_ASSIGN(
+      EvaluationContext ctx_1,
+      this->dpf_->CreateEvaluationContext(this->keys_.first));
+  DPF_ASSERT_OK_AND_ASSIGN(
+      EvaluationContext ctx_2,
+      this->dpf_->CreateEvaluationContext(this->keys_.second));
   DPF_ASSERT_OK_AND_ASSIGN(
       std::vector<TypeParam> output_1,
       this->dpf_->template EvaluateNext<TypeParam>({}, ctx_1));
@@ -869,20 +870,15 @@ TYPED_TEST(DpfEvaluationTest, TestRegularDpf) {
 }
 
 TYPED_TEST(DpfEvaluationTest, TestBatchSinglePointEvaluation) {
-  DPF_ASSERT_OK(this->dpf_->template RegisterValueType<TypeParam>());
-  std::pair<DpfKey, DpfKey> keys;
-  DPF_ASSERT_OK_AND_ASSIGN(keys,
-                           this->dpf_->GenerateKeys(this->alpha_, this->beta_));
-
   // Batch-evaluate key on the entire domain.
   std::vector<absl::uint128> evaluation_points(1 << this->log_domain_size_);
   std::iota(evaluation_points.begin(), evaluation_points.end(), 0);
   DPF_ASSERT_OK_AND_ASSIGN(std::vector<TypeParam> output_1,
                            this->dpf_->template EvaluateAt<TypeParam>(
-                               keys.first, 0, evaluation_points));
+                               this->keys_.first, 0, evaluation_points));
   DPF_ASSERT_OK_AND_ASSIGN(std::vector<TypeParam> output_2,
                            this->dpf_->template EvaluateAt<TypeParam>(
-                               keys.second, 0, evaluation_points));
+                               this->keys_.second, 0, evaluation_points));
   ASSERT_EQ(output_1.size(), output_2.size());
   ASSERT_EQ(output_1.size(), 1 << this->log_domain_size_);
 
