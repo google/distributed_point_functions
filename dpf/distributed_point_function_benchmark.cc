@@ -349,7 +349,7 @@ void BM_BatchEvaluation(benchmark::State& state) {
   for (int i = 0; i < num_keys; ++i) {
     absl::uint128 alpha = absl::MakeUint128(absl::Uniform<uint64_t>(rng),
                                             absl::Uniform<uint64_t>(rng));
-    if constexpr (kLogDomainSize < 128) {
+    if (kLogDomainSize < 128) {
       alpha &= (absl::uint128{1} << kLogDomainSize) - 1;
     }
     T beta{};

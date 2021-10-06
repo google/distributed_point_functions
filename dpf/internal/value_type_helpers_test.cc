@@ -102,7 +102,7 @@ TYPED_TEST(ValueTypeIntegerTest, ValueConversionFailsIfValueOutOfRange) {
   auto value_64 = uint64_t{1} << 32;
   value.mutable_integer()->set_value_uint64(value_64);
 
-  if constexpr (sizeof(TypeParam) >= sizeof(uint64_t)) {
+  if (sizeof(TypeParam) >= sizeof(uint64_t)) {
     DPF_EXPECT_OK(ValueTypeHelper<TypeParam>::FromValue(value));
   } else {
     EXPECT_THAT(ValueTypeHelper<TypeParam>::FromValue(value),
@@ -115,42 +115,51 @@ TYPED_TEST(ValueTypeIntegerTest, ValueConversionFailsIfValueOutOfRange) {
 
 template <typename T>
 class ValueTypeTupleTest : public testing::Test {};
-using TupleTypes = ::testing::Types<Tuple<uint64_t>, Tuple<uint64_t, uint64_t>,
-                                    Tuple<uint32_t, absl::uint128, uint8_t>,
-                                    Tuple<uint8_t, uint8_t, uint8_t, uint8_t>>;
+
+template <typename T, int... bits>
+struct TupleTestParam {
+  using Tuple = T;
+  static constexpr int ExpectedNumElements() { return sizeof...(bits); };
+  static constexpr std::array<int, ExpectedNumElements()> ExpectedBitSizes() {
+    return {bits...};
+  }
+};
+
+// We only test tuples consisting of integers here.
+using TupleTypes = ::testing::Types<
+    TupleTestParam<Tuple<uint64_t>, 64>,
+    TupleTestParam<Tuple<uint64_t, uint64_t>, 64, 64>,
+    TupleTestParam<Tuple<uint32_t, absl::uint128, uint8_t>, 32, 128, 8>,
+    TupleTestParam<Tuple<uint8_t, uint8_t, uint8_t, uint8_t>, 8, 8, 8, 8>>;
 TYPED_TEST_SUITE(ValueTypeTupleTest, TupleTypes);
 
 TYPED_TEST(ValueTypeTupleTest, ToValueTypeTuples) {
-  ValueType value_type = ValueTypeHelper<TypeParam>::ToValueType();
+  ValueType value_type =
+      ValueTypeHelper<typename TypeParam::Tuple>::ToValueType();
 
+  constexpr int expected_num_elements = TypeParam::ExpectedNumElements();
   EXPECT_TRUE(value_type.has_tuple());
-  EXPECT_EQ(value_type.tuple().elements_size(),
-            std::tuple_size<typename TypeParam::Base>());
-  // Fold expression to iterate over tuple elements. See
-  // https://stackoverflow.com/a/54053084.
-  auto it = value_type.tuple().elements().begin();
-  std::apply(
-      [&it](auto&&... args) {
-        ((
-             // We need an extra lambda because we need multiple statements per
-             // tuple element.
-             [&it] {
-               EXPECT_TRUE(it->has_integer());
-               EXPECT_EQ(it->integer().bitsize(), (sizeof(args) * 8));
-               ++it;
-             }()),
-         ...);
-      },
-      TypeParam().value());
+  ASSERT_EQ(std::tuple_size<typename TypeParam::Tuple::Base>(),
+            expected_num_elements);  // Sanity check for test parameters.
+  EXPECT_EQ(value_type.tuple().elements_size(), expected_num_elements);
+
+  std::array<int, expected_num_elements> expected_bit_sizes =
+      TypeParam::ExpectedBitSizes();
+  for (int i = 0; i < expected_num_elements; ++i) {
+    EXPECT_TRUE(value_type.tuple().elements(i).has_integer());
+    EXPECT_EQ(value_type.tuple().elements(i).integer().bitsize(),
+              expected_bit_sizes[i]);
+  }
 }
 
 TYPED_TEST(ValueTypeTupleTest, BitsNeededEqualsCompileTimeTypeSize) {
-  ValueType value_type = ValueTypeHelper<TypeParam>::ToValueType();
+  ValueType value_type =
+      ValueTypeHelper<typename TypeParam::Tuple>::ToValueType();
 
   DPF_ASSERT_OK_AND_ASSIGN(int bitsize,
                            BitsNeeded(value_type, kDefaultSecurityParameter));
 
-  EXPECT_EQ(bitsize, TotalBitSize<TypeParam>());
+  EXPECT_EQ(bitsize, TotalBitSize<typename TypeParam::Tuple>());
 }
 
 TYPED_TEST(ValueTypeTupleTest, ValueConversionFailsIfValueIsNotATuple) {

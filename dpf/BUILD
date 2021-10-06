@@ -61,6 +61,7 @@ cc_library(
         "@com_github_google_glog//:glog",
         "@com_google_absl//absl/container:btree",
         "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/meta:type_traits",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings:str_format",
     ],
@@ -76,6 +77,7 @@ cc_test(
         "@com_github_google_googletest//:gtest_main",
         "@com_google_absl//absl/random",
         "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/utility",
     ],
 )
 

@@ -75,13 +75,16 @@ absl::StatusOr<int> BitsNeeded(const ValueType& value_type,
         // this tuple and increase counter.
         if (!int_mod_n) {
           int_mod_n = &el;
-        } else if (absl::StatusOr<bool> types_are_equal =
-                       ValueTypesAreEqual(el, *int_mod_n);
-                   !types_are_equal.ok()) {
-          return types_are_equal.status();
-        } else if (!*types_are_equal) {
-          return absl::UnimplementedError(
-              "All elements of type IntModN in a tuple must be the same");
+        } else {
+          absl::StatusOr<bool> types_are_equal =
+              ValueTypesAreEqual(el, *int_mod_n);
+          if (!types_are_equal.ok()) {
+            return types_are_equal.status();
+          }
+          if (!*types_are_equal) {
+            return absl::UnimplementedError(
+                "All elements of type IntModN in a tuple must be the same");
+          }
         }
         ++num_ints_mod_n;
       } else {

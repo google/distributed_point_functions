@@ -17,6 +17,7 @@ cc_library(
         "//dpf:distributed_point_function",
         "//dpf:distributed_point_function_cc_proto",
         "//dpf:status_macros",
+        "@com_google_absl//absl/meta:type_traits",
         "@com_google_absl//absl/status:statusor",
     ],
 )
@@ -42,5 +43,6 @@ cc_test(
         "//dpf/internal:status_matchers",
         "@com_github_google_googletest//:gtest_main",
         "@com_google_absl//absl/random",
+        "@com_google_absl//absl/utility",
     ],
 )

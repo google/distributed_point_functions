@@ -19,6 +19,7 @@
 
 #include <memory>
 
+#include "absl/meta/type_traits.h"
 #include "absl/status/statusor.h"
 #include "dcf/distributed_comparison_function.pb.h"
 #include "dpf/distributed_point_function.h"
@@ -44,9 +45,9 @@ class DistributedComparisonFunction {
   // Template for automatic conversion to Value proto. Disabled if the argument
   // is convertible to `absl::uint128` or `Value` to make overloading
   // unambiguous.
-  template <typename T,
-            typename = std::enable_if_t<!std::is_convertible_v<T, Value> &&
-                                        is_supported_type_v<T>>>
+  template <typename T, typename = absl::enable_if_t<
+                            !std::is_convertible<T, Value>::value &&
+                            is_supported_type_v<T>>>
   absl::StatusOr<std::pair<DcfKey, DcfKey>> GenerateKeys(absl::uint128 alpha,
                                                          const T& beta) {
     absl::StatusOr<Value> value = dpf_->ToValue(beta);

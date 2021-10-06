@@ -19,6 +19,7 @@
 
 #include "absl/random/random.h"
 #include "absl/strings/str_format.h"
+#include "absl/utility/utility.h"
 #include "dpf/internal/status_matchers.h"
 
 namespace distributed_point_functions {
@@ -803,7 +804,7 @@ class DpfEvaluationTest : public ::testing::Test {
   }
   template <typename... Tn>
   static void SetTo42(Tuple<Tn...>& x) {
-    std::apply([](auto&... in) { SetTo42(in...); }, x.value());
+    absl::apply([](auto&... in) { SetTo42(in...); }, x.value());
   }
 
   int log_domain_size_;

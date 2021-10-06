@@ -84,13 +84,13 @@ class IntModNImpl : public IntModNBase {
   static_assert(sizeof(BaseInteger) <= sizeof(absl::uint128),
                 "BaseInteger may be at most 128 bits large");
   static_assert(
-      std::is_same_v<BaseInteger, absl::uint128> ||
+      std::is_same<BaseInteger, absl::uint128>::value ||
 #ifdef ABSL_HAVE_INTRINSIC_INT128
           // std::is_unsigned_v<unsigned __int128> is not true everywhere:
           // https://quuxplusone.github.io/blog/2019/02/28/is-int128-integral/#signedness
-          std::is_same_v<BaseInteger, unsigned __int128> ||
+          std::is_same<BaseInteger, unsigned __int128>::value ||
 #endif
-          std::is_unsigned_v<BaseInteger>,
+          std::is_unsigned<BaseInteger>::value,
       "BaseInteger must be unsigned");
   static_assert(kModulus <= ModulusType(BaseInteger(-1)),
                 "kModulus must fit in BaseInteger");
@@ -167,7 +167,7 @@ class IntModNImpl : public IntModNBase {
       samples[i] = IntModNImpl(static_cast<BaseInteger>(r % kModulus));
       if (i < static_cast<int>(randomness.size())) {
         r /= kModulus;
-        if constexpr (sizeof(BaseInteger) < sizeof(absl::uint128)) {
+        if (sizeof(BaseInteger) < sizeof(absl::uint128)) {
           r <<= (sizeof(BaseInteger) * 8);
         }
         r |= randomness[i];

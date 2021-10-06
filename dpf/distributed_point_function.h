@@ -25,6 +25,7 @@
 
 #include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/meta/type_traits.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 #include "dpf/aes_128_fixed_key_hash.h"
@@ -39,24 +40,24 @@ namespace distributed_point_functions {
 template <typename T>
 using is_supported_type = dpf_internal::is_supported_type<T>;
 template <typename T>
-inline constexpr bool is_supported_type_v = is_supported_type<T>::value;
+constexpr bool is_supported_type_v = is_supported_type<T>::value;
 
 // Converts a given Value to the template parameter T.
 //
 // Returns INVALID_ARGUMENT if the conversion fails.
-template <typename T, typename = std::enable_if_t<is_supported_type_v<T>>>
+template <typename T, typename = absl::enable_if_t<is_supported_type_v<T>>>
 absl::StatusOr<T> FromValue(const Value& value) {
   return dpf_internal::ValueTypeHelper<T>::FromValue(value);
 }
 
 // ToValue Converts the argument to a Value.
-template <typename T, typename = std::enable_if_t<is_supported_type_v<T>>>
+template <typename T, typename = absl::enable_if_t<is_supported_type_v<T>>>
 Value ToValue(const T& input) {
   return dpf_internal::ValueTypeHelper<T>::ToValue(input);
 }
 
 // ToValueType<T> Returns a `ValueType` message describing T.
-template <typename T, typename = std::enable_if_t<is_supported_type_v<T>>>
+template <typename T, typename = absl::enable_if_t<is_supported_type_v<T>>>
 ValueType ToValueType() {
   return dpf_internal::ValueTypeHelper<T>::ToValueType();
 }
@@ -166,10 +167,10 @@ class DistributedPointFunction {
   // Template for automatic conversion to Value proto. Disabled if the argument
   // is convertible to `absl::uint128` or `Value` to make overloading
   // unambiguous.
-  template <typename T,
-            typename = std::enable_if_t<
-                !std::is_convertible_v<T, absl::uint128> &&
-                !std::is_convertible_v<T, Value> && is_supported_type_v<T>>>
+  template <typename T, typename = absl::enable_if_t<
+                            !std::is_convertible<T, absl::uint128>::value &&
+                            !std::is_convertible<T, Value>::value &&
+                            is_supported_type_v<T>>>
   absl::StatusOr<std::pair<DpfKey, DpfKey>> GenerateKeys(absl::uint128 alpha,
                                                          const T& beta) {
     absl::StatusOr<Value> value = ToValue<T>(beta);
@@ -236,11 +237,13 @@ class DistributedPointFunction {
 
   // Variadic template version. Disabled if the first argument is convertible to
   // a span of `absl::uint128`s or `Value`s to make overloading unambiguous.
-  template <typename T0, typename... Tn,
-            typename = std::enable_if_t<
-                !std::is_convertible_v<T0, absl::Span<const Value>> &&
-                !std::is_convertible_v<T0, absl::Span<const absl::uint128>> &&
-                is_supported_type_v<T0> && (is_supported_type_v<Tn> && ...)>>
+  template <
+      typename T0, typename... Tn,
+      typename = absl::enable_if_t<
+          !std::is_convertible<T0, absl::Span<const Value>>::value &&
+          !std::is_convertible<T0, absl::Span<const absl::uint128>>::value &&
+          absl::conjunction<is_supported_type<T0>,
+                            is_supported_type<Tn>...>::value>>
   absl::StatusOr<std::pair<DpfKey, DpfKey>> GenerateKeysIncremental(
       absl::uint128 alpha, T0&& beta_0, Tn&&... beta_n);
 
@@ -541,7 +544,7 @@ absl::Status DistributedPointFunction::RegisterValueTypeImpl(
   return absl::OkStatus();
 }
 
-template <typename T0, typename... Tn, typename /*= std::enable_if_t<...>*/>
+template <typename T0, typename... Tn, typename /*= absl::enable_if_t<...>*/>
 absl::StatusOr<std::pair<DpfKey, DpfKey>>
 DistributedPointFunction::GenerateKeysIncremental(absl::uint128 alpha,
                                                   T0&& beta_0, Tn&&... beta_n) {
@@ -555,17 +558,20 @@ DistributedPointFunction::GenerateKeysIncremental(absl::uint128 alpha,
   values.reserve(1 + sizeof...(beta_n));
   // Convert all values in the parameter pack, stopping at the first error.
   absl::Status status = absl::OkStatus();
-  (([this, &status, &values, &value](auto&& beta_i) {
-     if (status.ok()) {
-       value = ToValue(beta_i);
-       if (value.ok()) {
-         values.push_back(std::move(*value));
-       } else {
-         status = value.status();
-       }
-     }
-   }(beta_n)),
-   ...);
+  // We create an unused std::tuple<Tn...> here, because its braced-initializer
+  // list constructor allows us to operate on beta_n in a well-defined order. In
+  // C++17, this could be replaced by a fold expression instead.
+  std::tuple<Tn...>{[this, &status, &values, &value](auto&& beta_i) -> Tn {
+    if (status.ok()) {
+      value = this->ToValue(beta_i);
+      if (value.ok()) {
+        values.push_back(std::move(*value));
+      } else {
+        status = value.status();
+      }
+    }
+    return Tn{};
+  }(beta_n)...};
   // Return if there was an error during conversion, otherwise generate keys.
   if (!status.ok()) {
     return status;
@@ -577,8 +583,8 @@ template <typename T>
 absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
     int hierarchy_level, absl::Span<const absl::uint128> prefixes,
     EvaluationContext& ctx) const {
-  if (absl::Status status = proto_validator_->ValidateEvaluationContext(ctx);
-      !status.ok()) {
+  absl::Status status = proto_validator_->ValidateEvaluationContext(ctx);
+  if (!status.ok()) {
     return status;
   }
   if (hierarchy_level < 0 ||
@@ -818,7 +824,7 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateAt(
   // `evaluation_points`.
   std::vector<absl::uint128> maybe_recomputed_tree_indices(0);
   absl::Span<const absl::uint128> tree_indices;
-  if constexpr (elements_per_block > 1) {
+  if (elements_per_block > 1) {
     maybe_recomputed_tree_indices.reserve(num_evaluation_points);
     for (int64_t i = 0; i < num_evaluation_points; ++i) {
       maybe_recomputed_tree_indices.push_back(
@@ -867,7 +873,7 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateAt(
                                   &(*hashed_expansion)[i * blocks_needed]),
                               blocks_needed * sizeof(absl::uint128)));
     int block_index = 0;
-    if constexpr (elements_per_block > 1) {
+    if (elements_per_block > 1) {
       block_index = DomainToBlockIndex(evaluation_points[i], hierarchy_level);
     }
     result.push_back(current_elements[block_index]);

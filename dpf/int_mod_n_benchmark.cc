@@ -28,15 +28,16 @@ constexpr int kNumSamples = 5;
 void BM_Sample(benchmark::State& state) {
   int num_iterations = state.range(0);
   double security_parameter = 40 + std::log2(num_iterations);
-  std::string bytes(
-      MyInt::GetNumBytesRequired(kNumSamples, security_parameter).value(),
-      '\0');
-  RAND_bytes(reinterpret_cast<uint8_t*>(bytes.data()), bytes.size());
+  std::vector<uint8_t> bytes(
+      MyInt::GetNumBytesRequired(kNumSamples, security_parameter).value());
+  RAND_bytes(bytes.data(), bytes.size());
   std::vector<MyInt> output(num_iterations * kNumSamples);
   for (auto s : state) {
     for (int i = 0; i < num_iterations; ++i) {
       MyInt::UnsafeSampleFromBytes<kNumSamples>(
-          bytes, security_parameter,
+          absl::string_view(reinterpret_cast<const char*>(bytes.data()),
+                            bytes.size()),
+          security_parameter,
           absl::MakeSpan(&output[i * kNumSamples], kNumSamples));
     }
     benchmark::DoNotOptimize(output);

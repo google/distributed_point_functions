@@ -18,6 +18,7 @@
 #include <gtest/gtest.h>
 
 #include "absl/random/random.h"
+#include "absl/utility/utility.h"
 #include "dpf/internal/status_matchers.h"
 
 namespace distributed_point_functions {
@@ -36,7 +37,7 @@ static void SetTo42(T0& x0, Tn&... xn) {
 }
 template <typename... Tn>
 static void SetTo42(Tuple<Tn...>& x) {
-  std::apply([](auto&... in) { SetTo42(in...); }, x.value());
+  absl::apply([](auto&... in) { SetTo42(in...); }, x.value());
 }
 
 TEST(DcfTest, CreateFailsWithZeroLogDomainSize) {
