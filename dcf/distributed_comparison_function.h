@@ -46,7 +46,7 @@ class DistributedComparisonFunction {
   // unambiguous.
   template <typename T,
             typename = std::enable_if_t<!std::is_convertible_v<T, Value> &&
-                                        dpf_internal::is_supported_type_v<T>>>
+                                        is_supported_type_v<T>>>
   absl::StatusOr<std::pair<DcfKey, DcfKey>> GenerateKeys(absl::uint128 alpha,
                                                          const T& beta) {
     absl::StatusOr<Value> value = dpf_->ToValue(beta);

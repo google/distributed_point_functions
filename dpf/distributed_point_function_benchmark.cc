@@ -28,7 +28,7 @@ template <typename T>
 void BM_EvaluateRegularDpf(benchmark::State& state) {
   DpfParameters parameters;
   parameters.set_log_domain_size(state.range(0));
-  *(parameters.mutable_value_type()) = dpf_internal::ToValueType<T>();
+  *(parameters.mutable_value_type()) = ToValueType<T>();
   std::unique_ptr<DistributedPointFunction> dpf =
       DistributedPointFunction::Create(parameters).value();
   absl::uint128 alpha = 0;
@@ -336,7 +336,7 @@ void BM_BatchEvaluation(benchmark::State& state) {
 
   DpfParameters parameters;
   parameters.set_log_domain_size(kLogDomainSize);
-  *(parameters.mutable_value_type()) = dpf_internal::ToValueType<T>();
+  *(parameters.mutable_value_type()) = ToValueType<T>();
 
   std::unique_ptr<DistributedPointFunction> dpf =
       DistributedPointFunction::Create(parameters).value();

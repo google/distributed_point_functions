@@ -20,7 +20,6 @@
 #include "absl/strings/str_format.h"
 #include "dpf/internal/proto_validator_test_textproto_embed.h"
 #include "dpf/internal/status_matchers.h"
-#include "dpf/internal/value_type_helpers.h"
 #include "dpf/tuple.h"
 #include "google/protobuf/text_format.h"
 
@@ -267,8 +266,11 @@ TEST_F(
 }
 
 TEST_F(ProtoValidatorTest, ValidateValueFailsIfTypeNotInteger) {
-  ValueType type = ToValueType<uint32_t>();
-  Value value = ToValue(Tuple<uint32_t>{23});
+  ValueType type;
+  type.mutable_integer()->set_bitsize(32);
+  Value value;
+  value.mutable_tuple()->add_elements()->mutable_integer()->set_value_uint64(
+      23);
 
   EXPECT_THAT(
       proto_validator_->ValidateValue(value, type),
@@ -293,8 +295,10 @@ TEST_F(ProtoValidatorTest, ValidateValueFailsIfIntegerTooLarge) {
 }
 
 TEST_F(ProtoValidatorTest, ValidateValueFailsIfTypeNotTuple) {
-  ValueType type = ToValueType<Tuple<uint32_t>>();
-  Value value = ToValue(uint32_t{23});
+  ValueType type;
+  type.mutable_tuple()->add_elements()->mutable_integer()->set_bitsize(32);
+  Value value;
+  value.mutable_integer()->set_value_uint64(23);
 
   EXPECT_THAT(
       proto_validator_->ValidateValue(value, type),
@@ -302,8 +306,14 @@ TEST_F(ProtoValidatorTest, ValidateValueFailsIfTypeNotTuple) {
 }
 
 TEST_F(ProtoValidatorTest, ValidateValueFailsIfTupleSizeDoesntMatch) {
-  ValueType type = ToValueType<Tuple<uint32_t>>();
-  Value value = ToValue(Tuple<uint32_t, uint32_t>{23, 42});
+  ValueType type;
+  type.mutable_tuple()->add_elements()->mutable_integer()->set_bitsize(32);
+  Value value;
+
+  value.mutable_tuple()->add_elements()->mutable_integer()->set_value_uint64(
+      23);
+  value.mutable_tuple()->add_elements()->mutable_integer()->set_value_uint64(
+      42);
 
   EXPECT_THAT(proto_validator_->ValidateValue(value, type),
               StatusIs(absl::StatusCode::kInvalidArgument,
@@ -312,7 +322,9 @@ TEST_F(ProtoValidatorTest, ValidateValueFailsIfTupleSizeDoesntMatch) {
 
 TEST_F(ProtoValidatorTest, ValidateValueFailsIfValueLargerThanModulus) {
   constexpr uint64_t kModulus = 3;
-  ValueType type = ToValueType<IntModN<uint64_t, kModulus>>();
+  ValueType type;
+  type.mutable_int_mod_n()->mutable_base_integer()->set_bitsize(64);
+  type.mutable_int_mod_n()->mutable_modulus()->set_value_uint64(kModulus);
   Value value;
 
   value.mutable_int_mod_n()->set_value_uint64(kModulus);
@@ -323,8 +335,10 @@ TEST_F(ProtoValidatorTest, ValidateValueFailsIfValueLargerThanModulus) {
 }
 
 TEST_F(ProtoValidatorTest, ValidateValueFailsIfTypeNotXorWrapper) {
-  ValueType type = ToValueType<XorWrapper<uint32_t>>();
-  Value value = ToValue(uint32_t{23});
+  ValueType type;
+  type.mutable_xor_wrapper()->set_bitsize(32);
+  Value value;
+  value.mutable_integer()->set_value_uint64(23);
 
   EXPECT_THAT(proto_validator_->ValidateValue(value, type),
               StatusIs(absl::StatusCode::kInvalidArgument,

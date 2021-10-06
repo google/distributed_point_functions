@@ -64,8 +64,8 @@ TEST(DistributedPointFunction, TestCreateIncrementalLargeDomain) {
 TEST(DistributedPointFunction, CreateFailsForTupleTypesWithDifferentIntModN) {
   DpfParameters parameters;
   parameters.set_log_domain_size(10);
-  *(parameters.mutable_value_type()) = dpf_internal::ToValueType<
-      Tuple<IntModN<uint32_t, 3>, IntModN<uint64_t, 4>>>();
+  *(parameters.mutable_value_type()) =
+      ToValueType<Tuple<IntModN<uint32_t, 3>, IntModN<uint64_t, 4>>>();
 
   EXPECT_THAT(
       DistributedPointFunction::Create(parameters),
@@ -88,9 +88,9 @@ TEST(DistributedPointFunction, TestGenerateKeysIncrementalTemplate) {
 
   parameters[0].set_log_domain_size(10);
   parameters[1].set_log_domain_size(20);
-  *(parameters[0].mutable_value_type()) = dpf_internal::ToValueType<uint16_t>();
+  *(parameters[0].mutable_value_type()) = ToValueType<uint16_t>();
   *(parameters[1].mutable_value_type()) =
-      dpf_internal::ToValueType<Tuple<uint32_t, uint64_t>>();
+      ToValueType<Tuple<uint32_t, uint64_t>>();
   DPF_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<DistributedPointFunction> dpf,
       DistributedPointFunction::CreateIncremental(parameters));
@@ -783,7 +783,7 @@ class DpfEvaluationTest : public ::testing::Test {
     SetTo42(beta_);
     parameters_.set_log_domain_size(log_domain_size_);
     parameters_.set_security_parameter(48);
-    *(parameters_.mutable_value_type()) = dpf_internal::ToValueType<T>();
+    *(parameters_.mutable_value_type()) = ToValueType<T>();
     DPF_ASSERT_OK_AND_ASSIGN(dpf_,
                              DistributedPointFunction::Create(parameters_));
     DPF_ASSERT_OK(this->dpf_->template RegisterValueType<T>());

@@ -47,14 +47,15 @@ using IntegerTypes =
 TYPED_TEST_SUITE(ValueTypeIntegerTest, IntegerTypes);
 
 TYPED_TEST(ValueTypeIntegerTest, ToValueTypeIntegers) {
-  ValueType value_type = ToValueType<TypeParam>();
+  ValueType value_type = ValueTypeHelper<TypeParam>::ToValueType();
 
   EXPECT_TRUE(value_type.has_integer());
   EXPECT_EQ(value_type.integer().bitsize(), sizeof(TypeParam) * 8);
 }
 
 TYPED_TEST(ValueTypeIntegerTest, TestValueTypesAreEqual) {
-  ValueType value_type_1 = ToValueType<TypeParam>(), value_type_2;
+  ValueType value_type_1 = ValueTypeHelper<TypeParam>::ToValueType(),
+            value_type_2;
   value_type_2.mutable_integer()->set_bitsize(sizeof(TypeParam) * 8);
 
   DPF_ASSERT_OK_AND_ASSIGN(bool equal,
@@ -66,7 +67,8 @@ TYPED_TEST(ValueTypeIntegerTest, TestValueTypesAreEqual) {
 }
 
 TYPED_TEST(ValueTypeIntegerTest, TestValueTypesAreNotEqual) {
-  ValueType value_type_1 = ToValueType<TypeParam>(), value_type_2;
+  ValueType value_type_1 = ValueTypeHelper<TypeParam>::ToValueType(),
+            value_type_2;
   value_type_2.mutable_integer()->set_bitsize(sizeof(TypeParam) * 8 * 2);
 
   DPF_ASSERT_OK_AND_ASSIGN(bool equal,
@@ -81,7 +83,7 @@ TYPED_TEST(ValueTypeIntegerTest, ValueConversionFailsIfNotInteger) {
   Value value;
   value.mutable_tuple();
 
-  EXPECT_THAT(FromValue<TypeParam>(value),
+  EXPECT_THAT(ValueTypeHelper<TypeParam>::FromValue(value),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        "The given Value is not an integer"));
 }
@@ -90,7 +92,7 @@ TYPED_TEST(ValueTypeIntegerTest, ValueConversionFailsIfInvalidIntegerCase) {
   Value value;
   value.mutable_integer();
 
-  EXPECT_THAT(FromValue<TypeParam>(value),
+  EXPECT_THAT(ValueTypeHelper<TypeParam>::FromValue(value),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        "Unknown value case for the given integer Value"));
 }
@@ -101,9 +103,9 @@ TYPED_TEST(ValueTypeIntegerTest, ValueConversionFailsIfValueOutOfRange) {
   value.mutable_integer()->set_value_uint64(value_64);
 
   if constexpr (sizeof(TypeParam) >= sizeof(uint64_t)) {
-    DPF_EXPECT_OK(FromValue<TypeParam>(value));
+    DPF_EXPECT_OK(ValueTypeHelper<TypeParam>::FromValue(value));
   } else {
-    EXPECT_THAT(FromValue<TypeParam>(value),
+    EXPECT_THAT(ValueTypeHelper<TypeParam>::FromValue(value),
                 StatusIs(absl::StatusCode::kInvalidArgument,
                          absl::StrCat("Value (= ", value_64,
                                       ") too large for the given type T (size ",
@@ -119,7 +121,7 @@ using TupleTypes = ::testing::Types<Tuple<uint64_t>, Tuple<uint64_t, uint64_t>,
 TYPED_TEST_SUITE(ValueTypeTupleTest, TupleTypes);
 
 TYPED_TEST(ValueTypeTupleTest, ToValueTypeTuples) {
-  ValueType value_type = ToValueType<TypeParam>();
+  ValueType value_type = ValueTypeHelper<TypeParam>::ToValueType();
 
   EXPECT_TRUE(value_type.has_tuple());
   EXPECT_EQ(value_type.tuple().elements_size(),
@@ -143,7 +145,7 @@ TYPED_TEST(ValueTypeTupleTest, ToValueTypeTuples) {
 }
 
 TYPED_TEST(ValueTypeTupleTest, BitsNeededEqualsCompileTimeTypeSize) {
-  ValueType value_type = ToValueType<TypeParam>();
+  ValueType value_type = ValueTypeHelper<TypeParam>::ToValueType();
 
   DPF_ASSERT_OK_AND_ASSIGN(int bitsize,
                            BitsNeeded(value_type, kDefaultSecurityParameter));
@@ -155,7 +157,7 @@ TYPED_TEST(ValueTypeTupleTest, ValueConversionFailsIfValueIsNotATuple) {
   Value value;
   value.mutable_integer();
 
-  EXPECT_THAT(FromValue<Tuple<uint32_t>>(value),
+  EXPECT_THAT(ValueTypeHelper<Tuple<uint32_t>>::FromValue(value),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        "The given Value is not a tuple"));
 }
@@ -167,7 +169,7 @@ TEST(ValueTypeTupleTest, ValueConversionFailsIfValueSizeDoesntMatchTupleSize) {
 
   using TupleType = Tuple<uint32_t, uint32_t>;
   EXPECT_THAT(
-      FromValue<TupleType>(value),
+      ValueTypeHelper<TupleType>::FromValue(value),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           "The tuple in the given Value has the wrong number of elements"));
@@ -177,8 +179,8 @@ TEST(ValueTypeTupleTest, TestValueTypesAreEqual) {
   using T1 = Tuple<uint32_t, absl::uint128, uint8_t>;
   using T2 = Tuple<uint32_t, absl::uint128, uint8_t>;
 
-  ValueType value_type_1 = ToValueType<T1>();
-  ValueType value_type_2 = ToValueType<T2>();
+  ValueType value_type_1 = ValueTypeHelper<T1>::ToValueType();
+  ValueType value_type_2 = ValueTypeHelper<T2>::ToValueType();
 
   DPF_ASSERT_OK_AND_ASSIGN(bool equal,
                            ValueTypesAreEqual(value_type_1, value_type_2));
@@ -192,8 +194,8 @@ TEST(ValueTypeTupleTest, TestValueTypesAreNotEqual) {
   using T1 = Tuple<uint32_t, absl::uint128, uint8_t>;
   using T2 = Tuple<uint32_t, absl::uint128, uint16_t>;
 
-  ValueType value_type_1 = ToValueType<T1>();
-  ValueType value_type_2 = ToValueType<T2>();
+  ValueType value_type_1 = ValueTypeHelper<T1>::ToValueType();
+  ValueType value_type_2 = ValueTypeHelper<T2>::ToValueType();
 
   DPF_ASSERT_OK_AND_ASSIGN(bool equal,
                            ValueTypesAreEqual(value_type_1, value_type_2));
@@ -242,7 +244,7 @@ using IntModNTypes = ::testing::Types<
 TYPED_TEST_SUITE(ValueTypeIntModNTest, IntModNTypes);
 
 TYPED_TEST(ValueTypeIntModNTest, ToValueType) {
-  ValueType value_type = ToValueType<TypeParam>();
+  ValueType value_type = ValueTypeHelper<TypeParam>::ToValueType();
 
   EXPECT_TRUE(value_type.type_case() == ValueType::kIntModN);
   EXPECT_EQ(value_type.int_mod_n().base_integer().bitsize(),
@@ -254,7 +256,8 @@ TYPED_TEST(ValueTypeIntModNTest, ToValueType) {
 }
 
 TYPED_TEST(ValueTypeIntModNTest, TestValueTypesAreEqual) {
-  ValueType value_type_1 = ToValueType<TypeParam>(), value_type_2;
+  ValueType value_type_1 = ValueTypeHelper<TypeParam>::ToValueType(),
+            value_type_2;
 
   value_type_2.mutable_int_mod_n()->mutable_base_integer()->set_bitsize(
       sizeof(TypeParam) * 8);
@@ -270,7 +273,7 @@ TYPED_TEST(ValueTypeIntModNTest, TestValueTypesAreEqual) {
 }
 
 TYPED_TEST(ValueTypeIntModNTest, TestValueTypesAreDifferentBase) {
-  ValueType value_type_1 = ToValueType<TypeParam>(),
+  ValueType value_type_1 = ValueTypeHelper<TypeParam>::ToValueType(),
             value_type_2 = value_type_1;
 
   value_type_2.mutable_int_mod_n()->mutable_base_integer()->set_bitsize(
@@ -285,7 +288,7 @@ TYPED_TEST(ValueTypeIntModNTest, TestValueTypesAreDifferentBase) {
 };
 
 TYPED_TEST(ValueTypeIntModNTest, TestValueTypesAreDifferentModulus) {
-  ValueType value_type_1 = ToValueType<TypeParam>(),
+  ValueType value_type_1 = ValueTypeHelper<TypeParam>::ToValueType(),
             value_type_2 = value_type_1;
 
   *(value_type_2.mutable_int_mod_n()->mutable_modulus()) =
@@ -300,7 +303,7 @@ TYPED_TEST(ValueTypeIntModNTest, TestValueTypesAreDifferentModulus) {
 }
 
 TYPED_TEST(ValueTypeIntModNTest, ValueTypesAreEqualFailsWhenModulusInvalid) {
-  ValueType value_type_1 = ToValueType<TypeParam>(),
+  ValueType value_type_1 = ValueTypeHelper<TypeParam>::ToValueType(),
             value_type_2 = value_type_1;
 
   value_type_2.mutable_int_mod_n()->clear_modulus();
@@ -314,7 +317,7 @@ TYPED_TEST(ValueTypeIntModNTest, ValueConversionFailsIfNotInteger) {
   Value value;
   value.mutable_tuple();
 
-  EXPECT_THAT(FromValue<TypeParam>(value),
+  EXPECT_THAT(ValueTypeHelper<TypeParam>::FromValue(value),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        "The given Value is not an IntModN"));
 }
@@ -323,7 +326,7 @@ TYPED_TEST(ValueTypeIntModNTest, ValueConversionFailsIfTooLargeForModulus) {
   Value value;
   *(value.mutable_int_mod_n()) = Uint128ToValueInteger(TypeParam::modulus());
 
-  EXPECT_THAT(FromValue<TypeParam>(value),
+  EXPECT_THAT(ValueTypeHelper<TypeParam>::FromValue(value),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        testing::HasSubstr("is larger than kModulus")));
 }

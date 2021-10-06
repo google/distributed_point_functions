@@ -86,7 +86,7 @@ MultipleIntervalContainmentGate::Create(const MicParameters& mic_parameters) {
   // Setting the output ValueType of the DCF so that it can store 128 bit
   // integers.
   *(dcf_parameters.mutable_parameters()->mutable_value_type()) =
-      dpf_internal::ToValueType<absl::uint128>();
+      ToValueType<absl::uint128>();
 
   // Creating a DCF with appropriate parameters.
   DPF_ASSIGN_OR_RETURN(std::unique_ptr<DistributedComparisonFunction> dcf,

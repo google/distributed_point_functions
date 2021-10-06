@@ -108,26 +108,6 @@ template <typename T>
 inline constexpr bool can_be_converted_directly_v =
     can_be_converted_directly<T>::value;
 
-// Converts a given Value to the template parameter T.
-//
-// Returns INVALID_ARGUMENT if the conversion fails.
-template <typename T>
-absl::StatusOr<T> FromValue(const Value& value) {
-  return ValueTypeHelper<T>::FromValue(value);
-}
-
-// ToValue Converts the argument to a Value.
-template <typename T>
-Value ToValue(const T& input) {
-  return ValueTypeHelper<T>::ToValue(input);
-}
-
-// ToValueType<T> Returns a `ValueType` message describing T.
-template <typename T>
-ValueType ToValueType() {
-  return ValueTypeHelper<T>::ToValueType();
-}
-
 // Returns the total number of bits in a T.
 template <typename T,
           typename = std::enable_if_t<can_be_converted_directly_v<T>>>
@@ -178,7 +158,7 @@ absl::StatusOr<std::array<T, ElementsPerBlock<T>()>> ValuesToArray(
   }
   std::array<T, ElementsPerBlock<T>()> result;
   for (int i = 0; i < ElementsPerBlock<T>(); ++i) {
-    absl::StatusOr<T> element = dpf_internal::FromValue<T>(values[i]);
+    absl::StatusOr<T> element = ValueTypeHelper<T>::FromValue(values[i]);
     if (element.ok()) {
       result[i] = std::move(*element);
     } else {
@@ -221,7 +201,7 @@ template <typename T>
 absl::StatusOr<std::vector<Value>> ComputeValueCorrectionFor(
     absl::string_view seed_a, absl::string_view seed_b, int block_index,
     const Value& beta, bool invert) {
-  absl::StatusOr<T> beta_T = dpf_internal::FromValue<T>(beta);
+  absl::StatusOr<T> beta_T = ValueTypeHelper<T>::FromValue(beta);
   if (!beta_T.ok()) {
     return beta_T.status();
   }
@@ -230,12 +210,8 @@ absl::StatusOr<std::vector<Value>> ComputeValueCorrectionFor(
 
   // Compute values from seeds. Both arrays will have multiple elements if T
   // supports batching, and a single one otherwise.
-  std::array<T, elements_per_block> ints_a =
-                                        dpf_internal::ConvertBytesToArrayOf<T>(
-                                            seed_a),
-                                    ints_b =
-                                        dpf_internal::ConvertBytesToArrayOf<T>(
-                                            seed_b);
+  std::array<T, elements_per_block> ints_a = ConvertBytesToArrayOf<T>(seed_a),
+                                    ints_b = ConvertBytesToArrayOf<T>(seed_b);
 
   // Add beta to the right position.
   ints_b[block_index] += *beta_T;
@@ -252,7 +228,7 @@ absl::StatusOr<std::vector<Value>> ComputeValueCorrectionFor(
   std::vector<Value> result;
   result.reserve(ints_b.size());
   for (const T& element : ints_b) {
-    result.push_back(dpf_internal::ToValue(element));
+    result.push_back(ValueTypeHelper<T>::ToValue(element));
   }
   return result;
 }
@@ -438,9 +414,9 @@ struct ValueTypeHelper<
   static ValueType ToValueType() {
     ValueType result;
     *(result.mutable_int_mod_n()->mutable_base_integer()) =
-        dpf_internal::ToValueType<BaseInteger>().integer();
+        ValueTypeHelper<BaseInteger>::ToValueType().integer();
     *(result.mutable_int_mod_n()->mutable_modulus()) =
-        dpf_internal::ToValue(kModulus).integer();
+        ValueTypeHelper<ModulusType>::ToValue(kModulus).integer();
     return result;
   }
 
@@ -508,7 +484,7 @@ struct ValueTypeHelper<Tuple<ElementType...>, void> {
     TupleType result = {[&value, &status, &element_index] {
       if (status.ok()) {
         absl::StatusOr<ElementType> element =
-            dpf_internal::FromValue<ElementType>(
+            ValueTypeHelper<ElementType>::FromValue(
                 value.tuple().elements(element_index));
         element_index++;
         if (element.ok()) {
@@ -531,7 +507,7 @@ struct ValueTypeHelper<Tuple<ElementType...>, void> {
     std::apply(
         [&result](const ElementType&... element) {
           ((*(result.mutable_tuple()->add_elements()) =
-                dpf_internal::ToValue(element)),
+                ValueTypeHelper<ElementType>::ToValue(element)),
            ...);
         },
         input.value());
@@ -544,13 +520,13 @@ struct ValueTypeHelper<Tuple<ElementType...>, void> {
     // Append the type of each ElementType. We use a C++17 fold expression to
     // guarantee the order is well-defined. See
     // https://stackoverflow.com/a/54053084.
-    ((*(tuple->add_elements()) = dpf_internal::ToValueType<ElementType>()),
+    ((*(tuple->add_elements()) = ValueTypeHelper<ElementType>::ToValueType()),
      ...);
     return result;
   }
 
   static constexpr int TotalBitSize() {
-    return (dpf_internal::TotalBitSize<ElementType>() + ...);
+    return (ValueTypeHelper<ElementType>::TotalBitSize() + ...);
   }
 
   static TupleType DirectlyFromBytes(absl::string_view bytes) {
@@ -560,9 +536,9 @@ struct ValueTypeHelper<Tuple<ElementType...>, void> {
     // Braced-init-list ensures the elements are constructed in-order.
     return TupleType{[&bytes, &offset, &status] {
       constexpr int element_size_bytes =
-          (dpf_internal::TotalBitSize<ElementType>() + 7) / 8;
-      ElementType element = dpf_internal::FromBytes<ElementType>(
-          bytes.substr(offset, element_size_bytes));
+          (ValueTypeHelper<ElementType>::TotalBitSize() + 7) / 8;
+      ElementType element =
+          FromBytes<ElementType>(bytes.substr(offset, element_size_bytes));
       offset += element_size_bytes;
       return element;
     }()...};
@@ -619,7 +595,8 @@ struct ValueTypeHelper<XorWrapper<T>, void> {
 
   static ValueType ToValueType() {
     ValueType result;
-    *(result.mutable_xor_wrapper()) = dpf_internal::ToValueType<T>().integer();
+    *(result.mutable_xor_wrapper()) =
+        ValueTypeHelper<T>::ToValueType().integer();
     return result;
   }
 

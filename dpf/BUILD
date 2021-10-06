@@ -140,6 +140,9 @@ cc_test(
 cc_library(
     name = "tuple",
     hdrs = ["tuple.h"],
+    deps = [
+        ":distributed_point_function_cc_proto",
+    ],
 )
 
 cc_test(

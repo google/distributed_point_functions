@@ -66,7 +66,7 @@ struct DcfTest : public testing::Test {
     DcfParameters parameters;
     parameters.mutable_parameters()->set_log_domain_size(T::kLogDomainSize);
     *(parameters.mutable_parameters()->mutable_value_type()) =
-        dpf_internal::ToValueType<typename T::ValueType>();
+        ToValueType<typename T::ValueType>();
 
     DPF_ASSERT_OK_AND_ASSIGN(dcf_,
                              DistributedComparisonFunction::Create(parameters));
@@ -130,7 +130,7 @@ TEST(DcfTest, WorksCorrectlyOnUint64TWithLargeDomain) {
   DcfParameters parameters;
   parameters.mutable_parameters()->set_log_domain_size(64);
   *(parameters.mutable_parameters()->mutable_value_type()) =
-      dpf_internal::ToValueType<uint64_t>();
+      ToValueType<uint64_t>();
 
   DPF_ASSERT_OK_AND_ASSIGN(auto dcf,
                            DistributedComparisonFunction::Create(parameters));

@@ -34,6 +34,33 @@
 
 namespace distributed_point_functions {
 
+// Type trait for all supported types. Used to provide meaningful error messages
+// in std::enable_if template guards.
+template <typename T>
+using is_supported_type = dpf_internal::is_supported_type<T>;
+template <typename T>
+inline constexpr bool is_supported_type_v = is_supported_type<T>::value;
+
+// Converts a given Value to the template parameter T.
+//
+// Returns INVALID_ARGUMENT if the conversion fails.
+template <typename T, typename = std::enable_if_t<is_supported_type_v<T>>>
+absl::StatusOr<T> FromValue(const Value& value) {
+  return dpf_internal::ValueTypeHelper<T>::FromValue(value);
+}
+
+// ToValue Converts the argument to a Value.
+template <typename T, typename = std::enable_if_t<is_supported_type_v<T>>>
+Value ToValue(const T& input) {
+  return dpf_internal::ValueTypeHelper<T>::ToValue(input);
+}
+
+// ToValueType<T> Returns a `ValueType` message describing T.
+template <typename T, typename = std::enable_if_t<is_supported_type_v<T>>>
+ValueType ToValueType() {
+  return dpf_internal::ValueTypeHelper<T>::ToValueType();
+}
+
 // Implements key generation and evaluation of distributed point functions.
 // A distributed point function (DPF) is parameterized by an index `alpha` and a
 // value `beta`. The key generation procedure produces two keys `k_a`, `k_b`.
@@ -71,7 +98,7 @@ class DistributedPointFunction {
     if (absl::Status status = RegisterValueType<T>(); !status.ok()) {
       return status;
     }
-    return dpf_internal::ToValue(in);
+    return distributed_point_functions::ToValue(in);
   }
 
   // Registers the template parameter type with this DPF. Note that it is rarely
@@ -139,10 +166,10 @@ class DistributedPointFunction {
   // Template for automatic conversion to Value proto. Disabled if the argument
   // is convertible to `absl::uint128` or `Value` to make overloading
   // unambiguous.
-  template <typename T, typename = std::enable_if_t<
-                            !std::is_convertible_v<T, absl::uint128> &&
-                            !std::is_convertible_v<T, Value> &&
-                            dpf_internal::is_supported_type_v<T>>>
+  template <typename T,
+            typename = std::enable_if_t<
+                !std::is_convertible_v<T, absl::uint128> &&
+                !std::is_convertible_v<T, Value> && is_supported_type_v<T>>>
   absl::StatusOr<std::pair<DpfKey, DpfKey>> GenerateKeys(absl::uint128 alpha,
                                                          const T& beta) {
     absl::StatusOr<Value> value = ToValue<T>(beta);
@@ -213,8 +240,7 @@ class DistributedPointFunction {
             typename = std::enable_if_t<
                 !std::is_convertible_v<T0, absl::Span<const Value>> &&
                 !std::is_convertible_v<T0, absl::Span<const absl::uint128>> &&
-                dpf_internal::is_supported_type_v<T0> &&
-                (dpf_internal::is_supported_type_v<Tn> && ...)>>
+                is_supported_type_v<T0> && (is_supported_type_v<Tn> && ...)>>
   absl::StatusOr<std::pair<DpfKey, DpfKey>> GenerateKeysIncremental(
       absl::uint128 alpha, T0&& beta_0, Tn&&... beta_n);
 
@@ -504,7 +530,7 @@ template <typename T>
 absl::Status DistributedPointFunction::RegisterValueTypeImpl(
     absl::flat_hash_map<std::string, ValueCorrectionFunction>&
         value_correction_functions) {
-  ValueType value_type = dpf_internal::ToValueType<T>();
+  ValueType value_type = ToValueType<T>();
   absl::StatusOr<std::string> serialized_value_type =
       SerializeValueTypeDeterministically(value_type);
   if (!serialized_value_type.ok()) {
@@ -563,8 +589,7 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
   }
   if (parameters_[hierarchy_level].has_value_type()) {
     absl::StatusOr<bool> types_are_equal = dpf_internal::ValueTypesAreEqual(
-        dpf_internal::ToValueType<T>(),
-        parameters_[hierarchy_level].value_type());
+        ToValueType<T>(), parameters_[hierarchy_level].value_type());
     if (!types_are_equal.ok()) {
       return types_are_equal.status();
     } else if (!*types_are_equal) {
