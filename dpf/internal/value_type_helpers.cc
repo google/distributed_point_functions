@@ -57,24 +57,6 @@ absl::StatusOr<bool> ValueTypesAreEqual(const ValueType& lhs,
   return false;
 }
 
-Value::Integer Uint128ToValueInteger(absl::uint128 input) {
-  Value::Integer result;
-  if (absl::Uint128High64(input) == 0) {
-    result.set_value_uint64(absl::Uint128Low64(input));
-  } else {
-    Block& block = *(result.mutable_value_uint128());
-    block.set_high(absl::Uint128High64(input));
-    block.set_low(absl::Uint128Low64(input));
-  }
-  return result;
-}
-
-Value ToValue(absl::uint128 input) {
-  Value result;
-  *(result.mutable_integer()) = Uint128ToValueInteger(input);
-  return result;
-}
-
 absl::StatusOr<int> BitsNeeded(const ValueType& value_type,
                                double security_parameter) {
   if (value_type.type_case() == ValueType::kInteger) {
@@ -122,7 +104,7 @@ absl::StatusOr<int> BitsNeeded(const ValueType& value_type,
           ValueIntegerToUint128(int_mod_n->int_mod_n().modulus()));
       DPF_ASSIGN_OR_RETURN(
           int64_t bytes_needed_ints_mod_n,
-          IntModNBase::GetNumBytesRequired(
+          dpf_internal::IntModNBase::GetNumBytesRequired(
               num_ints_mod_n, int_mod_n->int_mod_n().base_integer().bitsize(),
               modulus, security_parameter));
       bitsize_ints_mod_n = bytes_needed_ints_mod_n * 8;
@@ -133,7 +115,7 @@ absl::StatusOr<int> BitsNeeded(const ValueType& value_type,
         absl::uint128 modulus,
         ValueIntegerToUint128(value_type.int_mod_n().modulus()));
     DPF_ASSIGN_OR_RETURN(int64_t bytes_needed_ints_mod_n,
-                         IntModNBase::GetNumBytesRequired(
+                         dpf_internal::IntModNBase::GetNumBytesRequired(
                              1, value_type.int_mod_n().base_integer().bitsize(),
                              modulus, security_parameter));
     return 8 * bytes_needed_ints_mod_n;
@@ -142,6 +124,20 @@ absl::StatusOr<int> BitsNeeded(const ValueType& value_type,
   }
   return absl::InvalidArgumentError(absl::StrCat(
       "BitsNeeded: Unsupported ValueType:\n", value_type.DebugString()));
+}
+
+// Integer Helpers
+
+Value::Integer Uint128ToValueInteger(absl::uint128 input) {
+  Value::Integer result;
+  if (absl::Uint128High64(input) == 0) {
+    result.set_value_uint64(absl::Uint128Low64(input));
+  } else {
+    Block& block = *(result.mutable_value_uint128());
+    block.set_high(absl::Uint128High64(input));
+    block.set_low(absl::Uint128Low64(input));
+  }
+  return result;
 }
 
 absl::StatusOr<absl::uint128> ValueIntegerToUint128(const Value::Integer& in) {
@@ -156,5 +152,4 @@ absl::StatusOr<absl::uint128> ValueIntegerToUint128(const Value::Integer& in) {
 }
 
 }  // namespace dpf_internal
-
 }  // namespace distributed_point_functions

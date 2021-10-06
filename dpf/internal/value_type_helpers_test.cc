@@ -81,7 +81,7 @@ TYPED_TEST(ValueTypeIntegerTest, ValueConversionFailsIfNotInteger) {
   Value value;
   value.mutable_tuple();
 
-  EXPECT_THAT(ConvertValueTo<TypeParam>(value),
+  EXPECT_THAT(FromValue<TypeParam>(value),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        "The given Value is not an integer"));
 }
@@ -90,7 +90,7 @@ TYPED_TEST(ValueTypeIntegerTest, ValueConversionFailsIfInvalidIntegerCase) {
   Value value;
   value.mutable_integer();
 
-  EXPECT_THAT(ConvertValueTo<TypeParam>(value),
+  EXPECT_THAT(FromValue<TypeParam>(value),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        "Unknown value case for the given integer Value"));
 }
@@ -101,9 +101,9 @@ TYPED_TEST(ValueTypeIntegerTest, ValueConversionFailsIfValueOutOfRange) {
   value.mutable_integer()->set_value_uint64(value_64);
 
   if constexpr (sizeof(TypeParam) >= sizeof(uint64_t)) {
-    DPF_EXPECT_OK(ConvertValueTo<TypeParam>(value));
+    DPF_EXPECT_OK(FromValue<TypeParam>(value));
   } else {
-    EXPECT_THAT(ConvertValueTo<TypeParam>(value),
+    EXPECT_THAT(FromValue<TypeParam>(value),
                 StatusIs(absl::StatusCode::kInvalidArgument,
                          absl::StrCat("Value (= ", value_64,
                                       ") too large for the given type T (size ",
@@ -148,14 +148,14 @@ TYPED_TEST(ValueTypeTupleTest, BitsNeededEqualsCompileTimeTypeSize) {
   DPF_ASSERT_OK_AND_ASSIGN(int bitsize,
                            BitsNeeded(value_type, kDefaultSecurityParameter));
 
-  EXPECT_EQ(bitsize, GetTotalBitsize<TypeParam>());
+  EXPECT_EQ(bitsize, TotalBitSize<TypeParam>());
 }
 
 TYPED_TEST(ValueTypeTupleTest, ValueConversionFailsIfValueIsNotATuple) {
   Value value;
   value.mutable_integer();
 
-  EXPECT_THAT(ConvertValueTo<Tuple<uint32_t>>(value),
+  EXPECT_THAT(FromValue<Tuple<uint32_t>>(value),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        "The given Value is not a tuple"));
 }
@@ -167,7 +167,7 @@ TEST(ValueTypeTupleTest, ValueConversionFailsIfValueSizeDoesntMatchTupleSize) {
 
   using TupleType = Tuple<uint32_t, uint32_t>;
   EXPECT_THAT(
-      ConvertValueTo<TupleType>(value),
+      FromValue<TupleType>(value),
       StatusIs(
           absl::StatusCode::kInvalidArgument,
           "The tuple in the given Value has the wrong number of elements"));
@@ -203,12 +203,29 @@ TEST(ValueTypeTupleTest, TestValueTypesAreNotEqual) {
   EXPECT_FALSE(equal);
 }
 
-TEST(ValueTypeTupleTest, TestSerializationWithConcreteExample) {
+TEST(ValueTypeTupleTest, TestFromBytesWithConcreteExample) {
   std::string bytes = "A 128 bit string";
 
-  auto tuple = ConvertBytesTo<Tuple<uint64_t, uint64_t>>(bytes);
-  EXPECT_EQ(std::get<0>(tuple.value()), ConvertBytesTo<uint64_t>("A 128 bi"));
-  EXPECT_EQ(std::get<1>(tuple.value()), ConvertBytesTo<uint64_t>("t string"));
+  auto tuple = FromBytes<Tuple<uint64_t, uint64_t>>(bytes);
+  EXPECT_EQ(std::get<0>(tuple.value()), FromBytes<uint64_t>("A 128 bi"));
+  EXPECT_EQ(std::get<1>(tuple.value()), FromBytes<uint64_t>("t string"));
+}
+
+TEST(ValueTypeTupleTest, TestFromBytesWithConcreteExampleForIntModN) {
+  constexpr uint32_t kModulus = 4294967291u;
+  using MyIntModN = IntModN<uint32_t, kModulus>;
+  std::string bytes = "A 128+32 bit string.";
+
+  absl::uint128 block = FromBytes<absl::uint128>("A 128+32 bit str");
+  MyIntModN expected_0(static_cast<uint32_t>(block % kModulus));
+  block /= kModulus;
+  block <<= (8 * sizeof(uint32_t));
+  block |= FromBytes<uint32_t>("ing.");
+  MyIntModN expected_1(static_cast<uint32_t>(block % kModulus));
+
+  auto tuple = FromBytes<Tuple<MyIntModN, MyIntModN>>(bytes).value();
+  EXPECT_EQ(std::get<0>(tuple), expected_0);
+  EXPECT_EQ(std::get<1>(tuple), expected_1);
 }
 
 template <typename T>
@@ -297,7 +314,7 @@ TYPED_TEST(ValueTypeIntModNTest, ValueConversionFailsIfNotInteger) {
   Value value;
   value.mutable_tuple();
 
-  EXPECT_THAT(ConvertValueTo<TypeParam>(value),
+  EXPECT_THAT(FromValue<TypeParam>(value),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        "The given Value is not an IntModN"));
 }
@@ -306,7 +323,7 @@ TYPED_TEST(ValueTypeIntModNTest, ValueConversionFailsIfTooLargeForModulus) {
   Value value;
   *(value.mutable_int_mod_n()) = Uint128ToValueInteger(TypeParam::modulus());
 
-  EXPECT_THAT(ConvertValueTo<TypeParam>(value),
+  EXPECT_THAT(FromValue<TypeParam>(value),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        testing::HasSubstr("is larger than kModulus")));
 }

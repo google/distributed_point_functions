@@ -19,8 +19,6 @@
 
 #include <utility>
 
-#include "absl/base/attributes.h"
-
 namespace distributed_point_functions {
 
 // Wraps the given type, replacing additions and subtractions by XOR.

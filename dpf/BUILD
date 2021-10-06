@@ -157,9 +157,6 @@ cc_test(
 cc_library(
     name = "xor_wrapper",
     hdrs = ["xor_wrapper.h"],
-    deps = [
-        "@com_google_absl//absl/base:core_headers",
-    ],
 )
 
 cc_test(
