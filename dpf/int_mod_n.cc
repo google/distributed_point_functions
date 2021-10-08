@@ -63,9 +63,9 @@ absl::Status IntModNBase::CheckParameters(int num_samples,
 absl::StatusOr<int> IntModNBase::GetNumBytesRequired(
     int num_samples, int base_integer_bitsize, absl::uint128 modulus,
     double security_parameter) {
-  if (absl::Status status = CheckParameters(num_samples, base_integer_bitsize,
-                                            modulus, security_parameter);
-      !status.ok()) {
+  absl::Status status = CheckParameters(num_samples, base_integer_bitsize,
+                                        modulus, security_parameter);
+  if (!status.ok()) {
     return status;
   }
 

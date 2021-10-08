@@ -96,7 +96,8 @@ class DistributedPointFunction {
   // value type with the DPF by calling `RegisterValueType<T>()`.
   template <typename T>
   absl::StatusOr<Value> ToValue(const T& in) {
-    if (absl::Status status = RegisterValueType<T>(); !status.ok()) {
+    absl::Status status = RegisterValueType<T>();
+    if (!status.ok()) {
       return status;
     }
     return distributed_point_functions::ToValue(in);

@@ -155,7 +155,8 @@ class IntModNImpl : public IntModNBase {
   static void UnsafeSampleFromBytes(absl::string_view bytes,
                                     double security_parameter,
                                     absl::Span<IntModNImpl> samples) {
-    static_assert(kCompiledNumSamples >= 1);
+    static_assert(kCompiledNumSamples >= 1,
+                  "kCompiledNumSamples must be positive");
     absl::uint128 r = ConvertBytesTo<absl::uint128>(bytes.substr(0, 16));
     absl::InlinedVector<BaseInteger, std::max(1, kCompiledNumSamples - 1)>
         randomness(samples.size() - 1);

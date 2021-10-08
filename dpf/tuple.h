@@ -28,9 +28,9 @@ class Tuple {
  public:
   using Base = std::tuple<T...>;
 
-  Tuple(){};
-  Tuple(T... elements) : value_(elements...){};
-  explicit Tuple(Base t) : value_(std::move(t)){};
+  Tuple() {}
+  Tuple(T... elements) : value_(elements...) {}
+  explicit Tuple(Base t) : value_(std::move(t)) {}
 
   // Copy constructor.
   Tuple(const Tuple& t) = default;

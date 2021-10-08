@@ -20,6 +20,7 @@
 #include <limits>
 
 #include "dpf/status_macros.h"
+#include "google/protobuf/io/zero_copy_stream_impl_lite.h"
 
 namespace distributed_point_functions {
 
