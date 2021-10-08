@@ -66,7 +66,7 @@ TEST_F(BasicRngTest, Test128BitRand) {
 
 TEST_F(BasicRngTest, BytesAreDifferent64) {
   std::vector<uint64_t> rand(kNumSamples);
-  for (int i = 0; i < kNumSamples; ++i) {
+  for (size_t i = 0; i < kNumSamples; ++i) {
     DPF_ASSERT_OK_AND_ASSIGN(rand[i], rng_->Rand64());
   }
 
@@ -89,7 +89,7 @@ TEST_F(BasicRngTest, BytesAreDifferent128) {
     DPF_ASSERT_OK_AND_ASSIGN(rand[i], rng_->Rand128());
   }
 
-  for (int i = 0; i < sizeof(absl::uint128); ++i) {
+  for (size_t i = 0; i < sizeof(absl::uint128); ++i) {
     bool not_all_equal = false;
     for (int j = 1; j < kNumSamples; ++j) {
       auto byte1 = static_cast<uint8_t>(rand[j - 1] >> (8 * i));

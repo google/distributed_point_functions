@@ -15,6 +15,7 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_PRNG_PRNG_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_PRNG_PRNG_H_
 
+#include "absl/numeric/int128.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "dpf/status_macros.h"

@@ -11,6 +11,7 @@ cc_library(
     hdrs = ["prng.h"],
     deps = [
         "//dpf:status_macros",
+        "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
     ],
@@ -22,6 +23,7 @@ cc_library(
     deps = [
         ":prng",
         "@boringssl//:crypto",
+        "@com_google_absl//absl/base",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/strings",

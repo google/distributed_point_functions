@@ -17,6 +17,7 @@
 
 #include <openssl/rand.h>
 
+#include "absl/base/casts.h"
 #include "absl/memory/memory.h"
 #include "absl/numeric/int128.h"
 #include "absl/strings/string_view.h"
