@@ -186,9 +186,9 @@ absl::Status DistributedPointFunction::GenerateNext(
 
   // Line 11: Update control bits.  Again, same typo as in Line 12.
   control_bits[0] = expanded_control_bits[keep][0] ^
-                    (control_bits[0] & control_bit_correction[keep]);
+                    (control_bits[0] && control_bit_correction[keep]);
   control_bits[1] = expanded_control_bits[keep][1] ^
-                    (control_bits[1] & control_bit_correction[keep]);
+                    (control_bits[1] && control_bit_correction[keep]);
 
   // Line 15: Assemble correction word and add it to keys[0].
   correction_word->mutable_seed()->set_high(
