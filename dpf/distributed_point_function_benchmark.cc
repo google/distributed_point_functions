@@ -235,14 +235,16 @@ void BM_KeyGeneration(benchmark::State& state) {
   absl::uniform_int_distribution<uint64_t> dist;
   absl::uint128 alpha_mask =
       (absl::uint128{1} << parameters.back().log_domain_size()) - 1;
+  std::pair<DpfKey, DpfKey> result;
   for (auto s : state) {
     // Sample alpha randomly, so we don't rely on any structure here.
     absl::uint128 alpha = absl::MakeUint128(dist(rng), dist(rng)) & alpha_mask;
-    std::pair<DpfKey, DpfKey> result =
-        dpf->GenerateKeysIncremental(alpha, beta).value();
+    result = dpf->GenerateKeysIncremental(alpha, beta).value();
     benchmark::DoNotOptimize(result);
   }
+  state.SetLabel(absl::StrCat("key_size: ", result.first.ByteSizeLong()));
 }
+
 BENCHMARK(BM_KeyGeneration)->RangeMultiplier(2)->Range(1, 128);
 
 // Generates `num_nonzeros` uniform indices, and computes their prefixes for
