@@ -713,7 +713,7 @@ DistributedPointFunction::GenerateKeysIncremental(
 }
 
 absl::StatusOr<EvaluationContext>
-DistributedPointFunction::CreateEvaluationContext(DpfKey key) {
+DistributedPointFunction::CreateEvaluationContext(DpfKey key) const {
   // Check that `key` is valid.
   DPF_RETURN_IF_ERROR(proto_validator_->ValidateDpfKey(key));
 

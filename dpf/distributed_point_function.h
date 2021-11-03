@@ -253,7 +253,7 @@ class DistributedPointFunction {
   //
   // Returns INVALID_ARGUMENT if `key` doesn't match the parameters given at
   // construction.
-  absl::StatusOr<EvaluationContext> CreateEvaluationContext(DpfKey key);
+  absl::StatusOr<EvaluationContext> CreateEvaluationContext(DpfKey key) const;
 
   // Evaluates the given `hierarchy_level` of the DPF under all `prefixes`
   // passed to this function. If `prefixes` is empty, evaluation starts from the
