@@ -329,6 +329,11 @@ class DistributedPointFunction {
       const DpfKey& key, int hierarchy_level,
       absl::Span<const absl::uint128> evaluation_points) const;
 
+  // Returns the DpfParameters of this DPF.
+  inline absl::Span<const DpfParameters> parameters() const {
+    return parameters_;
+  }
+
  private:
   // BitVector is a vector of bools. Allows for faster access times than
   // std::vector<bool>, as well as inlining if the size is small.
