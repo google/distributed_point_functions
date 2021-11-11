@@ -32,7 +32,7 @@ using ::testing::Ne;
 using ::testing::StartsWith;
 
 TEST(DistributedPointFunction, TestCreate) {
-  for (int log_domain_size = 0; log_domain_size <= 62; ++log_domain_size) {
+  for (int log_domain_size = 0; log_domain_size <= 128; ++log_domain_size) {
     for (int element_bitsize = 1; element_bitsize <= 128;
          element_bitsize *= 2) {
       DpfParameters parameters;
@@ -55,7 +55,7 @@ TEST(DistributedPointFunction, TestCreateIncrementalLargeDomain) {
   parameters[1].mutable_value_type()->mutable_integer()->set_bitsize(128);
 
   // Test that creating an incremental DPF with a large total domain size works.
-  parameters[0].set_log_domain_size(50);
+  parameters[0].set_log_domain_size(10);
   parameters[1].set_log_domain_size(100);
 
   EXPECT_THAT(DistributedPointFunction::CreateIncremental(parameters),
@@ -126,7 +126,7 @@ TEST(DistributedPointFunction, EvaluationFailsIfOutputSizeTooLarge) {
   std::vector<DpfParameters> parameters(2);
   parameters[0].mutable_value_type()->mutable_integer()->set_bitsize(128);
   parameters[1].mutable_value_type()->mutable_integer()->set_bitsize(128);
-  parameters[0].set_log_domain_size(50);
+  parameters[0].set_log_domain_size(10);
   parameters[1].set_log_domain_size(100);
   DPF_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<DistributedPointFunction> dpf,
@@ -778,9 +778,10 @@ INSTANTIATE_TEST_SUITE_P(
 template <typename T>
 class DpfEvaluationTest : public ::testing::Test {
  protected:
-  void SetUp() override {
-    log_domain_size_ = 10;
-    alpha_ = 23;
+  void SetUp() { SetUp(10, 23); }
+  void SetUp(int log_domain_size, int alpha) {
+    log_domain_size_ = log_domain_size;
+    alpha_ = alpha;
     SetTo42(beta_);
     parameters_.set_log_domain_size(log_domain_size_);
     parameters_.set_security_parameter(48);
@@ -871,8 +872,13 @@ TYPED_TEST(DpfEvaluationTest, TestRegularDpf) {
 }
 
 TYPED_TEST(DpfEvaluationTest, TestBatchSinglePointEvaluation) {
-  // Batch-evaluate key on the entire domain.
-  std::vector<absl::uint128> evaluation_points(1 << this->log_domain_size_);
+  // Set Up with a large output domain, to make sure this works.
+  const int log_domain_size = 128;
+  const int alpha = 23;
+  this->SetUp(log_domain_size, alpha);
+  // Batch-evaluate key on the first 1000 points, which includes alpha.
+  const int num_evaluation_points = 1000;
+  std::vector<absl::uint128> evaluation_points(num_evaluation_points);
   std::iota(evaluation_points.begin(), evaluation_points.end(), 0);
   DPF_ASSERT_OK_AND_ASSIGN(std::vector<TypeParam> output_1,
                            this->dpf_->template EvaluateAt<TypeParam>(
@@ -881,9 +887,9 @@ TYPED_TEST(DpfEvaluationTest, TestBatchSinglePointEvaluation) {
                            this->dpf_->template EvaluateAt<TypeParam>(
                                this->keys_.second, 0, evaluation_points));
   ASSERT_EQ(output_1.size(), output_2.size());
-  ASSERT_EQ(output_1.size(), 1 << this->log_domain_size_);
+  ASSERT_EQ(output_1.size(), num_evaluation_points);
 
-  for (int i = 0; i < (1 << this->log_domain_size_); ++i) {
+  for (int i = 0; i < num_evaluation_points; ++i) {
     TypeParam sum = output_1[i] + output_2[i];
     if (i == this->alpha_) {
       EXPECT_EQ(sum, this->beta_);

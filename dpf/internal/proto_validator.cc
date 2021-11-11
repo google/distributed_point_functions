@@ -180,16 +180,6 @@ absl::Status ProtoValidator::ValidateParameters(
           "`log_domain_size` fields must be in ascending order in "
           "`parameters`");
     }
-    // For full evaluation of a particular hierarchy level, want to be able to
-    // represent 1 << (log_domain_size - previous_log_domain_size) in an
-    // int64_t, so hierarchy levels may be at most 62 apart. Note that such
-    // large gaps between levels are rare in practice, and in any case this
-    // error can circumvented by adding additional intermediate hierarchy
-    // levels.
-    if (log_domain_size > previous_log_domain_size + 62) {
-      return absl::InvalidArgumentError(
-          "Hierarchies may be at most 62 levels apart");
-    }
     previous_log_domain_size = log_domain_size;
 
     if (parameters[i].has_value_type()) {

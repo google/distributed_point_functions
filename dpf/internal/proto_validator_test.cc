@@ -146,14 +146,12 @@ TEST_F(ProtoValidatorTest, CreateWorksWhenElementBitsizesDecrease) {
   EXPECT_THAT(ProtoValidator::Create(parameters_), IsOkAndHolds(Ne(nullptr)));
 }
 
-TEST_F(ProtoValidatorTest, CreateFailsWhenHierarchiesAreTooFarApart) {
+TEST_F(ProtoValidatorTest, CreateWorksWhenHierarchiesAreFarApart) {
   parameters_.resize(2);
   parameters_[0].set_log_domain_size(10);
-  parameters_[1].set_log_domain_size(73);
+  parameters_[1].set_log_domain_size(128);
 
-  EXPECT_THAT(ProtoValidator::Create(parameters_),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       "Hierarchies may be at most 62 levels apart"));
+  EXPECT_THAT(ProtoValidator::Create(parameters_), IsOkAndHolds(Ne(nullptr)));
 }
 
 TEST_F(ProtoValidatorTest,
