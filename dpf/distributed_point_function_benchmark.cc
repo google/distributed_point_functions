@@ -75,7 +75,7 @@ using MyIntModN64 = IntModN<uint64_t, 18446744073709551557ull>;  // 2**64 - 59.
 BENCHMARK_TEMPLATE(
     BM_EvaluateRegularDpf,
     Tuple<MyIntModN64, MyIntModN64, MyIntModN64, MyIntModN64, MyIntModN64>)
-    ->DenseRange(12, 24, 2);
+    ->DenseRange(12, 22, 2);
 BENCHMARK_TEMPLATE(BM_EvaluateRegularDpf, XorWrapper<absl::uint128>)
     ->DenseRange(12, 24, 2);
 
