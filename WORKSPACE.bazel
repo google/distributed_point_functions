@@ -125,3 +125,23 @@ http_archive(
         "https://github.com/google/iree/archive/7e6012468cbaafaaf30302748a2943771b40e2c3.zip",
     ],
 )
+
+# riegeli for file IO
+http_archive(
+  name = "com_github_google_riegeli",
+  sha256 = "3919f42bae25c890b89bf96525939debdd3679abfc6a81725a11397694cfbe07",
+  strip_prefix = "riegeli-accecad7fbbbe1af525ba5e35c6260f63eebf8c5",
+  urls = [
+    "https://github.com/google/riegeli/archive/accecad7fbbbe1af525ba5e35c6260f63eebf8c5.zip",
+  ],
+)
+
+# cppitertools for logging
+http_archive(
+  name = "com_github_ryanhaining_cppitertools",
+  sha256 = "83aedc4f593212d8112eac0b32b5f191219604f3db922cc218fd733ea448118c",
+  strip_prefix = "cppitertools-b2b98e60438f1ed6b04b77cdb6cc5d5516af301b",
+  urls = [
+    "https://github.com/ryanhaining/cppitertools/archive/b2b98e60438f1ed6b04b77cdb6cc5d5516af301b.zip",
+  ]
+)

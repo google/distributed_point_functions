@@ -13,10 +13,20 @@
 # limitations under the License.
 
 tasks:
-  ubuntu2004:
+  ubuntu2004-c++14:
+    platform: "ubuntu2004"
     build_targets:
       - "//..."
+      - "-//experiments/..."
+    build_flags:
+      - "--cxxopt=-std=c++14"
     test_flags:
       - "--test_tag_filters=-benchmark"
     test_targets:
       - "//..."
+  ubuntu2004-c++17:
+    platform: "ubuntu2004"
+    build_targets:
+      - "//..."
+    build_flags:
+      - "--cxxopt=-std=c++17"
