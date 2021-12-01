@@ -72,8 +72,8 @@ void ValidateFlags() {
   }
 }
 
-// Returns the prefixes of the given buckets using the bit lengths specified
-// in `parameters`.
+// Returns the prefixes of the given `last_level_prefixes` for each bit-length
+// in {1, ..., `log_domain_size`}.
 std::vector<std::vector<absl::uint128>> ComputePrefixes(
     const absl::btree_set<absl::uint128>& last_level_prefixes,
     int log_domain_size) {
@@ -119,38 +119,40 @@ absl::btree_set<absl::uint128> ReadUniqueValuesFromFile(
   return nonzeros;
 }
 
+// Selects bit prefix lengths in {1, ..., `log_domain_size`}, such that for the
+// given `prefixes` at each bit, the full domain evaluation from one level to
+// the next never exceeds the last level size by a factor of more than
+// `max_expansion_factor`.
 std::vector<int> ComputeLevelsToEvaluate(
-    absl::Span<const std::vector<absl::uint128>> prefixes,
-    int log_domain_size) {
+    absl::Span<const std::vector<absl::uint128>> prefixes, int log_domain_size,
+    int max_expansion_factor) {
   int num_nonzeros = prefixes.back().size();
-  if (num_nonzeros > 0) {
-    std::vector<int> levels_to_evaluate;
-    // The first level is chosen such that it has size at most expansion_factor
-    // * num_nonzeros.
-    int max_expansion_factor = absl::GetFlag(FLAGS_max_expansion_factor);
-    int first_level =
-        std::min(log_domain_size,
-                 static_cast<int>(std::log2(num_nonzeros) +
-                                  std::log2(max_expansion_factor))) -
-        1;
-    levels_to_evaluate.push_back(first_level);
-    while (levels_to_evaluate.back() < log_domain_size) {
-      int nonzeros_at_last_level =
-          prefixes[levels_to_evaluate.back() + 1].size();
-      // We want to evaluate as many levels as possible so that we get no more
-      // than expansion_factor * num_nonzeros. So 2^bits_to_next_level *
-      // nonzeros_at_last_level < expansion_factor * num_nonzeros.
-      levels_to_evaluate.push_back(std::min(
-          log_domain_size,
-          static_cast<int>(levels_to_evaluate.back() + std::log2(num_nonzeros) +
-                           std::log2(max_expansion_factor) -
-                           std::log2(nonzeros_at_last_level))));
-    }
-    return levels_to_evaluate;
+  CHECK_GT(num_nonzeros, 0);
+  std::vector<int> levels_to_evaluate;
+  // The first level is chosen such that it has size at most expansion_factor
+  // * num_nonzeros.
+  int first_level =
+      std::min(log_domain_size,
+               static_cast<int>(std::log2(num_nonzeros) +
+                                std::log2(max_expansion_factor))) -
+      1;
+  levels_to_evaluate.push_back(first_level);
+  while (levels_to_evaluate.back() < log_domain_size) {
+    int nonzeros_at_last_level = prefixes[levels_to_evaluate.back() + 1].size();
+    // We want to evaluate as many levels as possible so that we get no more
+    // than expansion_factor * num_nonzeros. So 2^bits_to_next_level *
+    // nonzeros_at_last_level < expansion_factor * num_nonzeros.
+    levels_to_evaluate.push_back(std::min(
+        log_domain_size,
+        static_cast<int>(levels_to_evaluate.back() + std::log2(num_nonzeros) +
+                         std::log2(max_expansion_factor) -
+                         std::log2(nonzeros_at_last_level))));
   }
-  return {log_domain_size};
+  return levels_to_evaluate;
 }
 
+// Evaluates the given `key` for `dpf` at each hierarchy level, using the given
+// `prefixes` for each level. Repeats `num_iterations` times.
 template <typename T>
 void RunHierarchicalEvaluation(
     const distributed_point_functions::DistributedPointFunction& dpf,
@@ -175,6 +177,8 @@ void RunHierarchicalEvaluation(
   }
 }
 
+// Evaluates the given `key` for `dpf` at the points in `nonzeros`, repeating
+// `num_iterations` times.
 template <typename T>
 void RunBatchedSinglePointEvaluation(
     const distributed_point_functions::DistributedPointFunction& dpf,
@@ -219,8 +223,9 @@ int main(int argc, char* argv[]) {
     CHECK(absl::SimpleAtoi(levels_to_evaluate_str[i], &levels_to_evaluate[i]));
   }
   if (levels_to_evaluate.empty()) {
-    if (!only_nonzeros) {
-      levels_to_evaluate = ComputeLevelsToEvaluate(prefixes, log_domain_size);
+    if (!only_nonzeros && !prefixes.back().empty()) {
+      levels_to_evaluate = ComputeLevelsToEvaluate(
+          prefixes, log_domain_size, absl::GetFlag(FLAGS_max_expansion_factor));
     } else {
       levels_to_evaluate = {log_domain_size};
     }
@@ -277,6 +282,5 @@ int main(int argc, char* argv[]) {
                                  num_iterations);
   }
   absl::Duration wallclock = absl::Now() - start;
-  LOG(INFO) << "Wallclock time per iteration: "
-            << wallclock / absl::GetFlag(FLAGS_num_iterations);
+  LOG(INFO) << "Wallclock time per iteration: " << wallclock / num_iterations;
 }
