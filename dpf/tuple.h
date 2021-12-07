@@ -103,7 +103,7 @@ namespace dpf_internal {
 template <typename... T, std::size_t... I>
 constexpr Tuple<T...> add(const Tuple<T...>& lhs, const Tuple<T...>& rhs,
                           std::index_sequence<I...>) {
-  return Tuple<T...>{std::get<I>(lhs.value()) + std::get<I>(rhs.value())...};
+  return Tuple<T...>{T(std::get<I>(lhs.value()) + std::get<I>(rhs.value()))...};
 }
 
 template <typename... T, std::size_t... I>
