@@ -283,6 +283,7 @@ int main(int argc, char* argv[]) {
   distributed_point_functions::DpfKey key;
   std::tie(key, std::ignore) =
       dpf->GenerateKeysIncremental(alpha, beta).value();
+  LOG(INFO) << "Key size: " << key.ByteSizeLong() << " bytes";
 
   // Run the experiment and measure time.
   int num_iterations = absl::GetFlag(FLAGS_num_iterations);
