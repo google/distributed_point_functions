@@ -184,6 +184,11 @@ absl::Status ProtoValidator::ValidateParameters(
 
     if (parameters[i].has_value_type()) {
       DPF_RETURN_IF_ERROR(ValidateValueType(parameters[i].value_type()));
+    } else {
+      // Legacy element_bitsize support.
+      ValueType::Integer integer_type;
+      integer_type.set_bitsize(parameters[i].element_bitsize());
+      DPF_RETURN_IF_ERROR(ValidateIntegerType(integer_type));
     }
 
     if (std::isnan(parameters[i].security_parameter())) {
