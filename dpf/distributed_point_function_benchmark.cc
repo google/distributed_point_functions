@@ -91,7 +91,8 @@ void BM_EvaluateHierarchicalFull(benchmark::State& state) {
   for (int i = 0; i < num_hierarchy_levels; ++i) {
     parameters[i].set_log_domain_size(static_cast<int>(
         static_cast<double>(i + 1) / num_hierarchy_levels * kMaxLogDomainSize));
-    parameters[i].set_element_bitsize(sizeof(T) * 8);
+    parameters[i].mutable_value_type()->mutable_integer()->set_bitsize(
+        sizeof(T) * 8);
   }
   std::unique_ptr<DistributedPointFunction> dpf =
       DistributedPointFunction::CreateIncremental(parameters).value();
@@ -182,11 +183,11 @@ void BM_IsrgExampleHierarchy(benchmark::State& state) {
   std::vector<int> num_nonzeros(kNumHierarchyLevels - 1);
 
   parameters[0].set_log_domain_size(12);
-  parameters[0].set_element_bitsize(32);
+  parameters[0].mutable_value_type()->mutable_integer()->set_bitsize(32);
   num_nonzeros[0] = 32;
 
   parameters[1].set_log_domain_size(25);
-  parameters[1].set_element_bitsize(32);
+  parameters[1].mutable_value_type()->mutable_integer()->set_bitsize(32);
 
   std::unique_ptr<DistributedPointFunction> dpf =
       DistributedPointFunction::CreateIncremental(parameters).value();
@@ -308,7 +309,7 @@ void BM_HeavyHitters(benchmark::State& state) {
   std::vector<DpfParameters> parameters(num_parameters);
   for (int i = 0; i < num_parameters; ++i) {
     parameters[i].set_log_domain_size(i + 1);
-    parameters[i].set_element_bitsize(64);
+    parameters[i].mutable_value_type()->mutable_integer()->set_bitsize(64);
   }
   std::unique_ptr<DistributedPointFunction> dpf =
       *(DistributedPointFunction::CreateIncremental(parameters));
