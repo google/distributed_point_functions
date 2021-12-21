@@ -18,6 +18,7 @@
 #include "absl/random/random.h"
 #include "benchmark/benchmark.h"
 #include "dpf/distributed_point_function.h"
+#include "hwy/aligned_allocator.h"
 
 namespace distributed_point_functions {
 namespace {
@@ -356,8 +357,8 @@ void BM_BatchEvaluation(benchmark::State& state) {
   absl::BitGen rng;
   google::protobuf::Arena arena;
   std::vector<const DpfKey*> key_pointers(num_keys * evaluation_points_per_key);
-  std::vector<absl::uint128> evaluation_points(num_keys *
-                                               evaluation_points_per_key);
+  auto evaluation_points =
+      hwy::AllocateAligned<absl::uint128>(num_keys * evaluation_points_per_key);
   for (int i = 0; i < num_keys; ++i) {
     absl::uint128 alpha = absl::MakeUint128(absl::Uniform<uint64_t>(rng),
                                             absl::Uniform<uint64_t>(rng));
@@ -378,10 +379,11 @@ void BM_BatchEvaluation(benchmark::State& state) {
   for (auto s : state) {
     for (int i = 0; i < num_keys; ++i) {
       std::vector<T> result =
-          dpf->EvaluateAt<T>(*(key_pointers[i]), 0,
-                             absl::MakeConstSpan(evaluation_points)
-                                 .subspan(i * evaluation_points_per_key,
-                                          evaluation_points_per_key))
+          dpf->EvaluateAt<T>(
+                 *(key_pointers[i]), 0,
+                 absl::MakeConstSpan(
+                     evaluation_points.get() + i * evaluation_points_per_key,
+                     evaluation_points_per_key))
               .value();
       benchmark::DoNotOptimize(result);
     }

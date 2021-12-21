@@ -134,6 +134,16 @@ http_archive(
   ],
 )
 
+# Highway for SIMD operations.
+http_archive(
+  name = "com_github_google_highway",
+  sha256 = "4319b782773538ff6f50695936c72d3b6be09d4d8ebcb88ab1472aa435ccaeb2",
+  strip_prefix = "highway-be16031e3637fe6c3ffba158124fbfdbc0329330",
+  urls = [
+    "https://github.com/google/highway/archive/be16031e3637fe6c3ffba158124fbfdbc0329330.zip",
+  ],
+)
+
 # cppitertools for logging
 http_archive(
   name = "com_github_ryanhaining_cppitertools",

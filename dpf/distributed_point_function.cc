@@ -19,8 +19,10 @@
 
 #include <limits>
 
+#include "dpf/internal/evaluate_prg_hwy.h"
 #include "dpf/status_macros.h"
 #include "google/protobuf/io/zero_copy_stream_impl_lite.h"
+#include "hwy/aligned_allocator.h"
 
 namespace distributed_point_functions {
 
@@ -37,13 +39,6 @@ constexpr absl::uint128 kPrgKeyRight =
     absl::MakeUint128(0xef94b6aedebb026cULL, 0xe2ea1fe0f66f4d0bULL);
 constexpr absl::uint128 kPrgKeyValue =
     absl::MakeUint128(0x05a5d1588c5423e3ULL, 0x46a31101b21d1c98ULL);
-
-// Extracts the lowest bit of `x` and sets it to 0 in `x`.
-bool ExtractAndClearLowestBit(absl::uint128& x) {
-  bool bit = ((x & absl::uint128{1}) != 0);
-  x &= ~absl::uint128{1};
-  return bit;
-}
 
 }  // namespace
 
@@ -141,10 +136,14 @@ absl::Status DistributedPointFunction::GenerateNext(
   DPF_RETURN_IF_ERROR(
       prg_right_.Evaluate(seeds, absl::MakeSpan(expanded_seeds[1])));
   std::array<std::array<bool, 2>, 2> expanded_control_bits;
-  expanded_control_bits[0][0] = ExtractAndClearLowestBit(expanded_seeds[0][0]);
-  expanded_control_bits[0][1] = ExtractAndClearLowestBit(expanded_seeds[0][1]);
-  expanded_control_bits[1][0] = ExtractAndClearLowestBit(expanded_seeds[1][0]);
-  expanded_control_bits[1][1] = ExtractAndClearLowestBit(expanded_seeds[1][1]);
+  expanded_control_bits[0][0] =
+      dpf_internal::ExtractAndClearLowestBit(expanded_seeds[0][0]);
+  expanded_control_bits[0][1] =
+      dpf_internal::ExtractAndClearLowestBit(expanded_seeds[0][1]);
+  expanded_control_bits[1][0] =
+      dpf_internal::ExtractAndClearLowestBit(expanded_seeds[1][0]);
+  expanded_control_bits[1][1] =
+      dpf_internal::ExtractAndClearLowestBit(expanded_seeds[1][1]);
 
   // Lines 6-8: Assign keep/lose branch depending on current bit of `alpha`.
   bool current_bit = 0;
@@ -220,33 +219,27 @@ int DistributedPointFunction::DomainToBlockIndex(absl::uint128 domain_index,
                           ((absl::uint128{1} << block_index_bits) - 1));
 }
 
-absl::StatusOr<DistributedPointFunction::DpfExpansion>
-DistributedPointFunction::EvaluateSeeds(
-    DpfExpansion partial_evaluations, absl::Span<const absl::uint128> paths,
-    absl::Span<const CorrectionWord* const> correction_words) const {
-  if (partial_evaluations.seeds.size() !=
-          partial_evaluations.control_bits.size() ||
-      partial_evaluations.seeds.size() != paths.size()) {
+absl::Status DistributedPointFunction::EvaluateSeeds(
+    absl::Span<const absl::uint128> seeds, absl::Span<const bool> control_bits,
+    absl::Span<const absl::uint128> paths,
+    absl::Span<const CorrectionWord* const> correction_words,
+    absl::Span<absl::uint128> seeds_out,
+    absl::Span<bool> control_bits_out) const {
+  if (seeds.size() != control_bits.size() || seeds.size() != paths.size() ||
+      seeds.size() != seeds_out.size() ||
+      seeds.size() != control_bits_out.size()) {
     return absl::InvalidArgumentError(
-        "partial_evaluations.seeds.size(), "
-        "partial_evaluations.control_bits.size() and paths.size() must "
-        "all be equal");
+        "`seeds`, `control_bits`, `paths`, `seeds_out`, and `control_bits_out` "
+        "must all have equal sizes");
   }
-  auto num_seeds = static_cast<int64_t>(partial_evaluations.seeds.size());
+  auto num_seeds = static_cast<int64_t>(seeds.size());
   auto num_levels = static_cast<int>(correction_words.size());
-
-  constexpr int64_t max_batch_size = Aes128FixedKeyHash::kBatchSize;
-
-  // Allocate output and temporary buffers.
-  DpfExpansion result = std::move(partial_evaluations);
-  std::vector<absl::uint128> buffer_left, buffer_right;
-  buffer_left.resize(max_batch_size);
-  buffer_right.resize(max_batch_size);
-  BitVector path_bits(max_batch_size), control_bits(max_batch_size);
+  if (num_seeds == 0 || num_levels == 0) {
+    return absl::OkStatus();  // Nothing to do.
+  }
 
   // Parse correction words for each level.
-  std::vector<absl::uint128> correction_seeds;
-  correction_seeds.resize(num_levels);
+  auto correction_seeds = hwy::AllocateAligned<absl::uint128>(num_levels);
   BitVector correction_controls_left(num_levels),
       correction_controls_right(num_levels);
   for (int level = 0; level < num_levels; ++level) {
@@ -257,62 +250,18 @@ DistributedPointFunction::EvaluateSeeds(
     correction_controls_right[level] = correction.control_right();
   }
 
-  // Perform DPF evaluation in blocks.
-  for (int64_t start_block = 0; start_block < num_seeds;
-       start_block += max_batch_size) {
-    int64_t current_batch_size =
-        std::min<int64_t>(num_seeds - start_block, max_batch_size);
-
-    for (int level = 0; level < num_levels; ++level) {
-      // Evaluate PRG. We evaluate both left and right expansions, but only use
-      // one of them (depending on path_bits). This seems to be faster than
-      // first sorting the seeds by path_bits and then expanding.
-      absl::Span<const absl::uint128> seeds =
-          absl::MakeConstSpan(result.seeds)
-              .subspan(start_block, current_batch_size);
-      DPF_RETURN_IF_ERROR(prg_left_.Evaluate(
-          seeds, absl::MakeSpan(buffer_left).subspan(0, current_batch_size)));
-      DPF_RETURN_IF_ERROR(prg_right_.Evaluate(
-          seeds, absl::MakeSpan(buffer_right).subspan(0, current_batch_size)));
-
-      // Merge back into result.
-      const int bit_index = num_levels - level - 1;
-      for (int i = 0; i < current_batch_size; ++i) {
-        path_bits[i] = 0;
-        if (bit_index < 128) {
-          path_bits[i] =
-              (paths[start_block + i] & (absl::uint128{1} << bit_index)) != 0;
-        }
-        if (path_bits[i] == 0) {
-          result.seeds[start_block + i] = buffer_left[i];
-        } else {
-          result.seeds[start_block + i] = buffer_right[i];
-        }
-      }
-
-      // Compute correction. Making a copy here a copy here improves pipelining
-      // by not updating result.control_bits in place. Do benchmarks before
-      // removing this.
-      std::copy_n(&result.control_bits[start_block], current_batch_size,
-                  &control_bits[0]);
-      for (int i = 0; i < current_batch_size; ++i) {
-        if (control_bits[i]) {
-          result.seeds[start_block + i] ^= correction_seeds[level];
-        }
-        bool current_control_bit =
-            ExtractAndClearLowestBit(result.seeds[start_block + i]);
-        if (control_bits[i]) {
-          if (path_bits[i] == 0) {
-            current_control_bit ^= correction_controls_left[level];
-          } else {
-            current_control_bit ^= correction_controls_right[level];
-          }
-        }
-        result.control_bits[start_block + i] = current_control_bit;
-      }
-    }
-  }
-  return result;
+  DCHECK(seeds.size() == num_seeds);
+  DCHECK(control_bits.size() == num_seeds);
+  DCHECK(correction_controls_left.size() == num_levels);
+  DCHECK(correction_controls_right.size() == num_levels);
+  DCHECK(seeds_out.size() == num_seeds);
+  DCHECK(control_bits_out.size() == num_seeds);
+  DPF_RETURN_IF_ERROR(dpf_internal::EvaluateSeeds(
+      num_seeds, num_levels, seeds.data(), control_bits.data(), paths.data(),
+      correction_seeds.get(), correction_controls_left.data(),
+      correction_controls_right.data(), prg_left_, prg_right_, seeds_out.data(),
+      control_bits_out.data()));
+  return absl::OkStatus();
 }
 
 absl::StatusOr<DistributedPointFunction::DpfExpansion>
@@ -324,23 +273,25 @@ DistributedPointFunction::ExpandSeeds(
 
   // Allocate buffers with the correct size to avoid reallocations.
   auto current_level_size =
-      static_cast<int64_t>(partial_evaluations.seeds.size());
+      static_cast<int64_t>(partial_evaluations.control_bits.size());
   int64_t max_batch_size = Aes128FixedKeyHash::kBatchSize;
   int64_t output_size = current_level_size << num_expansions;
   std::vector<absl::uint128> prg_buffer_left(max_batch_size),
       prg_buffer_right(max_batch_size);
 
   // Copy seeds and control bits. We will swap these after every expansion.
-  DpfExpansion expansion = partial_evaluations;
-  expansion.seeds.reserve(output_size);
+  DpfExpansion expansion;
+  expansion.seeds = hwy::AllocateAligned<absl::uint128>(output_size);
+  std::copy_n(partial_evaluations.seeds.get(), current_level_size,
+              expansion.seeds.get());
+  expansion.control_bits = partial_evaluations.control_bits;
   expansion.control_bits.reserve(output_size);
   DpfExpansion next_level_expansion;
-  next_level_expansion.seeds.reserve(output_size);
+  next_level_expansion.seeds = hwy::AllocateAligned<absl::uint128>(output_size);
   next_level_expansion.control_bits.reserve(output_size);
 
   // We use an iterative expansion here to pipeline AES as much as possible.
   for (int i = 0; i < num_expansions; ++i) {
-    next_level_expansion.seeds.resize(0);
     next_level_expansion.control_bits.resize(0);
     absl::uint128 correction_seed = absl::MakeUint128(
         correction_words[i]->seed().high(), correction_words[i]->seed().low());
@@ -352,25 +303,27 @@ DistributedPointFunction::ExpandSeeds(
       int64_t batch_size =
           std::min<int64_t>(current_level_size - start_block, max_batch_size);
       DPF_RETURN_IF_ERROR(prg_left_.Evaluate(
-          absl::MakeConstSpan(expansion.seeds).subspan(start_block, batch_size),
+          absl::MakeConstSpan(expansion.seeds.get() + start_block, batch_size),
           absl::MakeSpan(prg_buffer_left).subspan(0, batch_size)));
       DPF_RETURN_IF_ERROR(prg_right_.Evaluate(
-          absl::MakeConstSpan(expansion.seeds).subspan(start_block, batch_size),
+          absl::MakeConstSpan(expansion.seeds.get() + start_block, batch_size),
           absl::MakeSpan(prg_buffer_right).subspan(0, batch_size)));
 
       // Merge results into next level of seeds and perform correction.
       for (int64_t j = 0; j < batch_size; ++j) {
-        int64_t index_expanded = 2 * (start_block + j);
+        const int64_t index_expanded = 2 * (start_block + j);
         if (expansion.control_bits[start_block + j]) {
           prg_buffer_left[j] ^= correction_seed;
           prg_buffer_right[j] ^= correction_seed;
         }
-        next_level_expansion.seeds.push_back(prg_buffer_left[j]);
-        next_level_expansion.seeds.push_back(prg_buffer_right[j]);
-        next_level_expansion.control_bits.push_back(ExtractAndClearLowestBit(
-            next_level_expansion.seeds[index_expanded]));
-        next_level_expansion.control_bits.push_back(ExtractAndClearLowestBit(
-            next_level_expansion.seeds[index_expanded + 1]));
+        next_level_expansion.seeds[index_expanded] = prg_buffer_left[j];
+        next_level_expansion.seeds[index_expanded + 1] = prg_buffer_right[j];
+        next_level_expansion.control_bits.push_back(
+            dpf_internal::ExtractAndClearLowestBit(
+                next_level_expansion.seeds[index_expanded]));
+        next_level_expansion.control_bits.push_back(
+            dpf_internal::ExtractAndClearLowestBit(
+                next_level_expansion.seeds[index_expanded + 1]));
         if (expansion.control_bits[start_block + j]) {
           next_level_expansion.control_bits[index_expanded] ^=
               correction_control_left;
@@ -419,8 +372,9 @@ DistributedPointFunction::ComputePartialEvaluations(
     }
     // Now select all partial evaluations from the map that correspond to
     // `prefixes`.
-    partial_evaluations.seeds.reserve(prefixes.size());
-    partial_evaluations.control_bits.reserve(prefixes.size());
+    partial_evaluations.seeds =
+        hwy::AllocateAligned<absl::uint128>(num_prefixes);
+    partial_evaluations.control_bits.reserve(num_prefixes);
     for (int64_t i = 0; i < num_prefixes; ++i) {
       absl::uint128 previous_prefix = 0;
       if (stop_level - start_level < 128) {
@@ -433,13 +387,17 @@ DistributedPointFunction::ComputePartialEvaluations(
             ctx.previous_hierarchy_level()));
       }
       std::pair<absl::uint128, bool> partial_evaluation = it->second;
-      partial_evaluations.seeds.push_back(partial_evaluation.first);
+      partial_evaluations.seeds[partial_evaluations.control_bits.size()] =
+          partial_evaluation.first;
       partial_evaluations.control_bits.push_back(partial_evaluation.second);
     }
   } else {
     // No partial evaluations in `ctx` -> Start from the beginning.
-    partial_evaluations.seeds.resize(
-        num_prefixes,
+    partial_evaluations.seeds =
+        hwy::AllocateAligned<absl::uint128>(num_prefixes);
+    auto seeds = absl::MakeSpan(partial_evaluations.seeds.get(), num_prefixes);
+    std::fill(
+        seeds.begin(), seeds.end(),
         absl::MakeUint128(ctx.key().seed().high(), ctx.key().seed().low()));
     partial_evaluations.control_bits.resize(
         num_prefixes, static_cast<bool>(ctx.key().party()));
@@ -447,11 +405,13 @@ DistributedPointFunction::ComputePartialEvaluations(
   }
 
   // Evaluate the DPF up to current_tree_level.
-  DPF_ASSIGN_OR_RETURN(
-      partial_evaluations,
-      EvaluateSeeds(std::move(partial_evaluations), prefixes,
+  auto seeds = absl::MakeSpan(partial_evaluations.seeds.get(),
+                              partial_evaluations.control_bits.size());
+  DPF_RETURN_IF_ERROR(
+      EvaluateSeeds(seeds, partial_evaluations.control_bits, prefixes,
                     absl::MakeConstSpan(ctx.key().correction_words())
-                        .subspan(start_level, stop_level - start_level)));
+                        .subspan(start_level, stop_level - start_level),
+                    seeds, absl::MakeSpan(partial_evaluations.control_bits)));
 
   // Update `partial_evaluations` in `ctx` if there are more evaluations to
   // come.
@@ -485,8 +445,9 @@ DistributedPointFunction::ExpandAndUpdateContext(
   int start_level = 0;
   if (prefixes.empty()) {
     // First expansion -> Expand seed of the DPF key.
-    selected_partial_evaluations.seeds = {
-        absl::MakeUint128(ctx.key().seed().high(), ctx.key().seed().low())};
+    selected_partial_evaluations.seeds = hwy::AllocateAligned<absl::uint128>(1);
+    selected_partial_evaluations.seeds[0] =
+        absl::MakeUint128(ctx.key().seed().high(), ctx.key().seed().low());
     selected_partial_evaluations.control_bits = {
         static_cast<bool>(ctx.key().party())};
   } else {
@@ -514,23 +475,25 @@ DistributedPointFunction::ExpandAndUpdateContext(
   return expansion;
 }
 
-absl::StatusOr<std::vector<absl::uint128>>
+absl::StatusOr<hwy::AlignedFreeUniquePtr<absl::uint128[]>>
 DistributedPointFunction::HashExpandedSeeds(
     int hierarchy_level, absl::Span<const absl::uint128> expansion) const {
   const auto expansion_size = static_cast<int64_t>(expansion.size());
   const int blocks_needed = blocks_needed_[hierarchy_level];
-  std::vector<absl::uint128> hashed_expansion;
-  hashed_expansion.reserve(expansion_size * blocks_needed);
+  auto hashed_expansion =
+      hwy::AllocateAligned<absl::uint128>(expansion_size * blocks_needed);
   for (int64_t i = 0; i < expansion_size; ++i) {
     for (int j = 0; j < blocks_needed; ++j) {
-      hashed_expansion.push_back(expansion[i] + j);
+      hashed_expansion[i * blocks_needed + j] = expansion[i] + j;
     }
   }
 
   // Evaluate PRG in place (this is safe as `Evaluate` creates a copy of the
   // input).
+  absl::Span<absl::uint128> hashed_expansion_span(
+      hashed_expansion.get(), expansion_size * blocks_needed);
   DPF_RETURN_IF_ERROR(
-      prg_value_.Evaluate(hashed_expansion, absl::MakeSpan(hashed_expansion)));
+      prg_value_.Evaluate(hashed_expansion_span, hashed_expansion_span));
 
   return hashed_expansion;
 }
