@@ -812,7 +812,7 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateAt(
     return status;
   }
   if (num_evaluation_points == 0) {
-    return absl::OkStatus();  // Nothing to do.
+    return std::vector<T>{};  // Nothing to do.
   }
 
   // Get output correction word from `key`.

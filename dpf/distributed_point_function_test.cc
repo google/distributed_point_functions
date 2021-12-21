@@ -885,25 +885,25 @@ TYPED_TEST(DpfEvaluationTest, TestBatchSinglePointEvaluation) {
   const int log_domain_size = 128;
   const int alpha = 23;
   this->SetUp(log_domain_size, alpha);
-  // Batch-evaluate key on the first 1000 points, which includes alpha.
-  const int num_evaluation_points = 1000;
-  std::vector<absl::uint128> evaluation_points(num_evaluation_points);
-  std::iota(evaluation_points.begin(), evaluation_points.end(), 0);
-  DPF_ASSERT_OK_AND_ASSIGN(std::vector<TypeParam> output_1,
-                           this->dpf_->template EvaluateAt<TypeParam>(
-                               this->keys_.first, 0, evaluation_points));
-  DPF_ASSERT_OK_AND_ASSIGN(std::vector<TypeParam> output_2,
-                           this->dpf_->template EvaluateAt<TypeParam>(
-                               this->keys_.second, 0, evaluation_points));
-  ASSERT_EQ(output_1.size(), output_2.size());
-  ASSERT_EQ(output_1.size(), num_evaluation_points);
+  for (int num_evaluation_points : {0, 1, 2, 100, 1000}) {
+    std::vector<absl::uint128> evaluation_points(num_evaluation_points);
+    std::iota(evaluation_points.begin(), evaluation_points.end(), 0);
+    DPF_ASSERT_OK_AND_ASSIGN(std::vector<TypeParam> output_1,
+                             this->dpf_->template EvaluateAt<TypeParam>(
+                                 this->keys_.first, 0, evaluation_points));
+    DPF_ASSERT_OK_AND_ASSIGN(std::vector<TypeParam> output_2,
+                             this->dpf_->template EvaluateAt<TypeParam>(
+                                 this->keys_.second, 0, evaluation_points));
+    ASSERT_EQ(output_1.size(), output_2.size());
+    ASSERT_EQ(output_1.size(), num_evaluation_points);
 
-  for (int i = 0; i < num_evaluation_points; ++i) {
-    TypeParam sum = output_1[i] + output_2[i];
-    if (i == this->alpha_) {
-      EXPECT_EQ(sum, this->beta_);
-    } else {
-      EXPECT_EQ(sum, TypeParam{});
+    for (int i = 0; i < num_evaluation_points; ++i) {
+      TypeParam sum = output_1[i] + output_2[i];
+      if (i == this->alpha_) {
+        EXPECT_EQ(sum, this->beta_);
+      } else {
+        EXPECT_EQ(sum, TypeParam{});
+      }
     }
   }
 }
