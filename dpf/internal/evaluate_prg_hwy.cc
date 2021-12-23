@@ -151,6 +151,7 @@ absl::Status EvaluateSeedsHwy(
   if (num_seeds == 0 || num_levels == 0) {
     return absl::OkStatus();
   }
+
   // Check if inputs and outputs are aligned.
   constexpr size_t kHwyAlignment = alignof(Aligned128);
   const bool is_aligned =
@@ -347,9 +348,19 @@ absl::Status EvaluateSeedsHwy(
   int remaining_blocks = num_seeds - i / sizeof(absl::uint128);
   if (remaining_blocks > 0) {
     const int remaining_bytes = num_bytes - i;
+    const int blocks_per_lane = hn::Lanes(d8) / sizeof(absl::uint128);
+    // Copy to a buffer first, to ensure we have at least hn::Lanes(d8) bytes
+    // to read. Calling MaskedLoad directly instead might lead to out-of-bounds
+    // accesses.
+    auto buffer = hwy::AllocateAligned<absl::uint128>(2 * blocks_per_lane);
+    auto buffer_ptr = reinterpret_cast<uint8_t*>(buffer.get());
+    std::copy_n(seeds_in + i / sizeof(absl::uint128), remaining_blocks,
+                buffer.get());
+    std::copy_n(paths + i / sizeof(absl::uint128), remaining_blocks,
+                buffer.get() + blocks_per_lane);
     const auto load_mask = hn::FirstN(d8, remaining_bytes);
-    auto vec = hn::MaskedLoad(load_mask, d8, seeds_in_ptr + i);
-    const auto path = hn::MaskedLoad(load_mask, d8, paths_ptr + i);
+    auto vec = hn::MaskedLoad(load_mask, d8, buffer_ptr);
+    const auto path = hn::MaskedLoad(load_mask, d8, buffer_ptr + hn::Lanes(d8));
     auto control_mask = MaskFromBools(
         d64, control_bits_in + i / sizeof(absl::uint128), remaining_blocks);
     for (int j = 0; j < num_levels; ++j) {
@@ -375,12 +386,9 @@ absl::Status EvaluateSeedsHwy(
       control_mask = hn::Xor(next_control_mask,
                              (hn::And(control_mask, correction_control_mask)));
     }
-    // Store to local variable first, since there is no MaskedStore.
-    auto out_remaining = hwy::AllocateAligned<absl::uint128>(
-        hn::Lanes(d8) / sizeof(absl::uint128));
-    auto out_remaining_ptr = reinterpret_cast<uint8_t*>(out_remaining.get());
-    hn::Store(vec, d8, out_remaining_ptr);
-    std::copy_n(out_remaining.get(), remaining_blocks,
+    // Store back into buffer, then copy to seeds_out.
+    hn::Store(vec, d8, buffer_ptr);
+    std::copy_n(buffer.get(), remaining_blocks,
                 seeds_out + i / sizeof(absl::uint128));
     BoolsFromMask(d64, control_mask,
                   control_bits_out + i / sizeof(absl::uint128),
