@@ -26,7 +26,10 @@
 #include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/meta/type_traits.h"
+#include "absl/numeric/int128.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "dpf/aes_128_fixed_key_hash.h"
 #include "dpf/distributed_point_function.pb.h"
@@ -410,8 +413,9 @@ class DistributedPointFunction {
   //
   // The output is written to `seeds_out` and `control_bits_out`. These may
   // overlap with `seeds` and `control_bits`. We use output spans instead of a
-  // return value to allow the caller to pre-allocate aligned output arrays.
-  // This is necessary for the vectorized implementation.
+  // return value to allow the caller to pre-allocate aligned output arrays,
+  // which is necessary for the vectorized implementation. The output is
+  // undefined if `correction_words.size() == 0`.
   //
   // Returns INVALID_ARGUMENT if the input sizes don't match.
   // Returns INTERNAL in case of OpenSSL errors.
@@ -798,7 +802,6 @@ template <typename T>
 absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateAt(
     const DpfKey& key, int hierarchy_level,
     absl::Span<const absl::uint128> evaluation_points) const {
-  auto num_evaluation_points = static_cast<int64_t>(evaluation_points.size());
   if (hierarchy_level < 0) {
     return absl::InvalidArgumentError("`hierarchy_level` must be non-negative");
   }
@@ -806,6 +809,23 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateAt(
     return absl::InvalidArgumentError(
         "`hierarchy_level` must be less than the number of parameters passed "
         "at construction");
+  }
+  const auto num_evaluation_points =
+      static_cast<int64_t>(evaluation_points.size());
+  const int log_domain_size = parameters_[hierarchy_level].log_domain_size();
+  absl::uint128 max_evaluation_point = absl::Uint128Max();
+  if (log_domain_size < 128) {
+    max_evaluation_point = (absl::uint128{1} << log_domain_size) - 1;
+  }
+  // Check if `evaluation_points` are inside the domain. This has minimal (~ 1%)
+  // performance impact.
+  for (int64_t i = 0; i < num_evaluation_points; ++i) {
+    if (evaluation_points[i] > max_evaluation_point) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("`evaluation_points[", i,
+                       "]` larger than the domain size at hierarchy level ",
+                       hierarchy_level));
+    }
   }
   absl::Status status = proto_validator_->ValidateDpfKey(key);
   if (!status.ok()) {

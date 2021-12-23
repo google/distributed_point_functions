@@ -17,6 +17,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "absl/numeric/int128.h"
 #include "absl/random/random.h"
 #include "absl/strings/str_format.h"
 #include "absl/utility/utility.h"
@@ -788,7 +789,7 @@ template <typename T>
 class DpfEvaluationTest : public ::testing::Test {
  protected:
   void SetUp() { SetUp(10, 23); }
-  void SetUp(int log_domain_size, int alpha) {
+  void SetUp(int log_domain_size, absl::uint128 alpha) {
     log_domain_size_ = log_domain_size;
     alpha_ = alpha;
     SetTo42(beta_);
@@ -818,7 +819,7 @@ class DpfEvaluationTest : public ::testing::Test {
   }
 
   int log_domain_size_;
-  int alpha_;
+  absl::uint128 alpha_;
   T beta_;
   DpfParameters parameters_;
   std::unique_ptr<DistributedPointFunction> dpf_;
@@ -882,27 +883,36 @@ TYPED_TEST(DpfEvaluationTest, TestRegularDpf) {
 
 TYPED_TEST(DpfEvaluationTest, TestBatchSinglePointEvaluation) {
   // Set Up with a large output domain, to make sure this works.
-  const int log_domain_size = 128;
-  const int alpha = 23;
-  this->SetUp(log_domain_size, alpha);
-  for (int num_evaluation_points : {0, 1, 2, 100, 1000}) {
-    std::vector<absl::uint128> evaluation_points(num_evaluation_points);
-    std::iota(evaluation_points.begin(), evaluation_points.end(), 0);
-    DPF_ASSERT_OK_AND_ASSIGN(std::vector<TypeParam> output_1,
-                             this->dpf_->template EvaluateAt<TypeParam>(
-                                 this->keys_.first, 0, evaluation_points));
-    DPF_ASSERT_OK_AND_ASSIGN(std::vector<TypeParam> output_2,
-                             this->dpf_->template EvaluateAt<TypeParam>(
-                                 this->keys_.second, 0, evaluation_points));
-    ASSERT_EQ(output_1.size(), output_2.size());
-    ASSERT_EQ(output_1.size(), num_evaluation_points);
+  for (int log_domain_size : {0, 1, 2, 32, 128}) {
+    absl::uint128 max_evaluation_point = absl::Uint128Max();
+    if (log_domain_size < 128) {
+      max_evaluation_point = (absl::uint128{1} << log_domain_size) - 1;
+    }
+    const absl::uint128 alpha = 23 & max_evaluation_point;
+    this->SetUp(log_domain_size, alpha);
+    for (int num_evaluation_points : {0, 1, 2, 100, 1000}) {
+      std::vector<absl::uint128> evaluation_points(num_evaluation_points);
+      for (int i = 0; i < num_evaluation_points; ++i) {
+        evaluation_points[i] = i & max_evaluation_point;
+      }
+      DPF_ASSERT_OK_AND_ASSIGN(std::vector<TypeParam> output_1,
+                               this->dpf_->template EvaluateAt<TypeParam>(
+                                   this->keys_.first, 0, evaluation_points));
+      DPF_ASSERT_OK_AND_ASSIGN(std::vector<TypeParam> output_2,
+                               this->dpf_->template EvaluateAt<TypeParam>(
+                                   this->keys_.second, 0, evaluation_points));
+      ASSERT_EQ(output_1.size(), output_2.size());
+      ASSERT_EQ(output_1.size(), num_evaluation_points);
 
-    for (int i = 0; i < num_evaluation_points; ++i) {
-      TypeParam sum = output_1[i] + output_2[i];
-      if (i == this->alpha_) {
-        EXPECT_EQ(sum, this->beta_);
-      } else {
-        EXPECT_EQ(sum, TypeParam{});
+      for (int i = 0; i < num_evaluation_points; ++i) {
+        TypeParam sum = output_1[i] + output_2[i];
+        if (evaluation_points[i] == this->alpha_) {
+          EXPECT_EQ(sum, this->beta_)
+              << "i=" << i << ", log_domain_size=" << log_domain_size;
+        } else {
+          EXPECT_EQ(sum, TypeParam{})
+              << "i=" << i << ", log_domain_size=" << log_domain_size;
+        }
       }
     }
   }

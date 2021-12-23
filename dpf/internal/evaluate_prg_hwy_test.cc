@@ -39,26 +39,38 @@ constexpr absl::uint128 kKey0 =
     absl::MakeUint128(0x0000000000000000, 0x0000000000000000);
 constexpr absl::uint128 kKey1 =
     absl::MakeUint128(0x1111111111111111, 0x1111111111111111);
-constexpr int kNumBlocks = 123;
 
-void TestOutputMatchesNoHwyVersion(int num_levels) {
+void TestOutputMatchesNoHwyVersion(int num_seeds, int num_levels) {
   // Generate seeds.
-  auto seeds_in = hwy::AllocateAligned<absl::uint128>(kNumBlocks);
-  auto control_bits_in = hwy::AllocateAligned<bool>(kNumBlocks);
-  auto paths = hwy::AllocateAligned<absl::uint128>(kNumBlocks);
-  for (int i = 0; i < kNumBlocks; ++i) {
+  hwy::AlignedFreeUniquePtr<absl::uint128[]> seeds_in, paths;
+  hwy::AlignedFreeUniquePtr<bool[]> control_bits_in;
+  if (num_seeds > 0) {
+    seeds_in = hwy::AllocateAligned<absl::uint128>(num_seeds);
+    paths = hwy::AllocateAligned<absl::uint128>(num_seeds);
+    control_bits_in = hwy::AllocateAligned<bool>(num_seeds);
+  }
+  for (int i = 0; i < num_seeds; ++i) {
     // All of these are arbitrary.
     seeds_in[i] = absl::MakeUint128(i, i + 1);
     paths[i] = absl::MakeUint128(23 * i + 42, 42 * i + 23);
     control_bits_in[i] = (i % 7 == 0);
   }
-  auto seeds_out = hwy::AllocateAligned<absl::uint128>(kNumBlocks);
-  auto control_bits_out = hwy::AllocateAligned<bool>(kNumBlocks);
+  hwy::AlignedFreeUniquePtr<absl::uint128[]> seeds_out;
+  hwy::AlignedFreeUniquePtr<bool[]> control_bits_out;
+  if (num_seeds > 0) {
+    seeds_out = hwy::AllocateAligned<absl::uint128>(num_seeds);
+    control_bits_out = hwy::AllocateAligned<bool>(num_seeds);
+  }
 
   // Generate correction words.
-  auto correction_seeds = hwy::AllocateAligned<absl::uint128>(num_levels);
-  auto correction_controls_left = hwy::AllocateAligned<bool>(num_levels);
-  auto correction_controls_right = hwy::AllocateAligned<bool>(num_levels);
+  hwy::AlignedFreeUniquePtr<absl::uint128[]> correction_seeds;
+  hwy::AlignedFreeUniquePtr<bool[]> correction_controls_left,
+      correction_controls_right;
+  if (num_levels > 0) {
+    correction_seeds = hwy::AllocateAligned<absl::uint128>(num_levels);
+    correction_controls_left = hwy::AllocateAligned<bool>(num_levels);
+    correction_controls_right = hwy::AllocateAligned<bool>(num_levels);
+  }
   for (int i = 0; i < num_levels; ++i) {
     correction_seeds[i] = absl::MakeUint128(i + 1, i);
     correction_controls_left[i] = (i % 23 == 0);
@@ -75,31 +87,38 @@ void TestOutputMatchesNoHwyVersion(int num_levels) {
 
   // Evaluate with Highway enabled.
   DPF_ASSERT_OK(EvaluateSeeds(
-      kNumBlocks, num_levels, seeds_in.get(), control_bits_in.get(),
-      paths.get(), correction_seeds.get(), correction_controls_left.get(),
+      num_seeds, num_levels, seeds_in.get(), control_bits_in.get(), paths.get(),
+      correction_seeds.get(), correction_controls_left.get(),
       correction_controls_right.get(), prg_left, prg_right, seeds_out.get(),
       control_bits_out.get()));
 
   // Evaluate without highway.
-  auto seeds_out_wanted = hwy::AllocateAligned<absl::uint128>(kNumBlocks);
-  auto control_bits_out_wanted = hwy::AllocateAligned<bool>(kNumBlocks);
+  hwy::AlignedFreeUniquePtr<absl::uint128[]> seeds_out_wanted;
+  hwy::AlignedFreeUniquePtr<bool[]> control_bits_out_wanted;
+  if (num_seeds > 0) {
+    seeds_out_wanted = hwy::AllocateAligned<absl::uint128>(num_seeds);
+    control_bits_out_wanted = hwy::AllocateAligned<bool>(num_seeds);
+  }
   DPF_ASSERT_OK(EvaluateSeedsNoHwy(
-      kNumBlocks, num_levels, seeds_in.get(), control_bits_in.get(),
-      paths.get(), correction_seeds.get(), correction_controls_left.get(),
+      num_seeds, num_levels, seeds_in.get(), control_bits_in.get(), paths.get(),
+      correction_seeds.get(), correction_controls_left.get(),
       correction_controls_right.get(), prg_left, prg_right,
       seeds_out_wanted.get(), control_bits_out_wanted.get()));
 
-  // Check that both evaluations are equal.
-  for (int i = 0; i < kNumBlocks; ++i) {
-    EXPECT_EQ(seeds_out[i], seeds_out_wanted[i]);
-    EXPECT_EQ(control_bits_out[i], control_bits_out_wanted[i]);
+  // Check that both evaluations are equal, if there was anything to evaluate.
+  if (num_levels > 0) {
+    for (int i = 0; i < num_seeds; ++i) {
+      EXPECT_EQ(seeds_out[i], seeds_out_wanted[i]);
+      EXPECT_EQ(control_bits_out[i], control_bits_out_wanted[i]);
+    }
   }
 }
 
 void TestAll() {
-  constexpr int kMaxLevels = 3;
-  for (int num_levels = 1; num_levels < kMaxLevels; ++num_levels) {
-    TestOutputMatchesNoHwyVersion(num_levels);
+  for (int num_seeds : {0, 1, 2, 101, 128, 1000}) {
+    for (int num_levels : {0, 1, 2, 32, 63, 64, 127}) {
+      TestOutputMatchesNoHwyVersion(num_seeds, num_levels);
+    }
   }
 }
 
