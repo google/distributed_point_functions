@@ -46,3 +46,19 @@ cc_test(
         "@com_google_absl//absl/utility",
     ],
 )
+
+cc_test(
+    name = "distributed_comparison_function_benchmark",
+    srcs = [
+        "distributed_comparison_function_benchmark.cc",
+    ],
+    tags = ["benchmark"],
+    deps = [
+        ":distributed_comparison_function",
+        ":distributed_comparison_function_cc_proto",
+        "//dpf:distributed_point_function",
+        "@com_github_google_benchmark//:benchmark_main",
+        "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/random",
+    ],
+)
