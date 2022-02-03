@@ -17,6 +17,7 @@ cc_library(
         "//dpf:distributed_point_function",
         "//dpf:distributed_point_function_cc_proto",
         "//dpf:status_macros",
+        "@com_github_google_highway//:hwy",
         "@com_google_absl//absl/meta:type_traits",
         "@com_google_absl//absl/status:statusor",
     ],

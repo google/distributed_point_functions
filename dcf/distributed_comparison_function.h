@@ -24,6 +24,7 @@
 #include "dcf/distributed_comparison_function.pb.h"
 #include "dpf/distributed_point_function.h"
 #include "dpf/distributed_point_function.pb.h"
+#include "hwy/base.h"
 
 namespace distributed_point_functions {
 
@@ -85,37 +86,22 @@ absl::StatusOr<T> DistributedComparisonFunction::Evaluate(const DcfKey& key,
   const int log_domain_size = parameters_.parameters().log_domain_size();
   T result{};
 
-  absl::StatusOr<EvaluationContext> ctx =
-      dpf_->CreateEvaluationContext(key.key());
-  if (!ctx.ok()) {
-    return ctx.status();
-  }
-
-  int previous_bit = 0;
+  absl::StatusOr<std::vector<T>> dpf_evaluation;
   for (int i = 0; i < log_domain_size; ++i) {
-    absl::StatusOr<std::vector<T>> expansion_i;
-    if (i == 0) {
-      expansion_i = dpf_->EvaluateNext<T>({}, *ctx);
-    } else {
-      absl::uint128 prefix = 0;
-      if (log_domain_size < 128) {
-        prefix = x >> (log_domain_size - i + 1);
-      }
-      expansion_i =
-          dpf_->EvaluateNext<T>(absl::MakeConstSpan(&prefix, 1), *ctx);
+    HWY_ALIGN_MAX absl::uint128 prefix = 0;
+    if (log_domain_size < 128) {
+      prefix = x >> (log_domain_size - i);
     }
-    if (!expansion_i.ok()) {
-      return expansion_i.status();
+    dpf_evaluation =
+        dpf_->EvaluateAt<T>(key.key(), i, absl::MakeConstSpan(&prefix, 1));
+    if (!dpf_evaluation.ok()) {
+      return dpf_evaluation.status();
     }
-
     int current_bit = static_cast<int>(
         (x & (absl::uint128{1} << (log_domain_size - i - 1))) != 0);
-    // We only add the current value along the path if the current bit of x is
-    // 0.
     if (current_bit == 0) {
-      result += (*expansion_i)[previous_bit];
+      result += (*dpf_evaluation)[0];
     }
-    previous_bit = current_bit;
   }
   return result;
 }
