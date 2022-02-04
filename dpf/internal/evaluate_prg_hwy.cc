@@ -95,7 +95,7 @@ void BoolsFromMask(D d, M mask, bool* output, int max_blocks = 0) {
   }
   constexpr int buffer_size = std::max(HWY_MAX_BYTES / 8, 64);
   uint8_t mask_bits[buffer_size] = {0};
-  hn::StoreMaskBits(mask, mask_bits);
+  hn::StoreMaskBits(d, mask, mask_bits);
   for (int i = 0; i < num_outputs; ++i) {
     int mask_idx = i * ints_per_block;
     output[i] = (mask_bits[mask_idx / 8] & (uint8_t{1} << (mask_idx % 8))) != 0;
