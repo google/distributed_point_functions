@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <fcntl.h>
 #include <glog/logging.h>
 
 #include "absl/container/btree_set.h"
@@ -115,7 +114,7 @@ absl::btree_set<absl::uint128> ReadUniqueValuesFromFile(
   absl::btree_set<absl::uint128> nonzeros;
   LOG(INFO) << "Reading input file...";
   int line_number = 0;
-  riegeli::FdReader reader(input_file, O_RDONLY);
+  riegeli::FdReader reader(input_file);
   absl::string_view line;
   while (riegeli::ReadLine(reader, line)) {
     std::vector<absl::string_view> fields =
@@ -127,7 +126,7 @@ absl::btree_set<absl::uint128> ReadUniqueValuesFromFile(
     nonzeros.insert(nonzero);
     ++line_number;
   }
-  QCHECK(reader.healthy());
+  QCHECK(reader.ok());
   LOG(INFO) << "Read " << nonzeros.size() << " nonzeros from " << line_number
             << " lines";
   return nonzeros;
