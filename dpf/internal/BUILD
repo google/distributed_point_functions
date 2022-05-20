@@ -156,9 +156,11 @@ cc_test(
         ":status_matchers",
         "//dpf:aes_128_fixed_key_hash",
         "@boringssl//:crypto",
+        "@com_github_google_glog//:glog",
         "@com_github_google_googletest//:gtest_main",
         "@com_github_google_highway//:hwy",
         "@com_github_google_highway//:hwy_test_util",
+        "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/numeric:int128",
     ],
 )

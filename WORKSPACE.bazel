@@ -137,10 +137,10 @@ http_archive(
 # Highway for SIMD operations.
 http_archive(
     name = "com_github_google_highway",
-    sha256 = "4319b782773538ff6f50695936c72d3b6be09d4d8ebcb88ab1472aa435ccaeb2",
-    strip_prefix = "highway-be16031e3637fe6c3ffba158124fbfdbc0329330",
+    sha256 = "2b11bd6356a425015c8f524cb3b3804784c0dc895fb7f3f1c48460f0327b5b1e",
+    strip_prefix = "highway-1c3c2bc6417f69ccb598c440678048ac6a8a561e",
     urls = [
-        "https://github.com/google/highway/archive/be16031e3637fe6c3ffba158124fbfdbc0329330.zip",
+        "https://github.com/google/highway/archive/1c3c2bc6417f69ccb598c440678048ac6a8a561e.zip",
     ],
 )
 
