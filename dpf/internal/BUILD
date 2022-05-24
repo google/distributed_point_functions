@@ -136,6 +136,16 @@ cc_test(
 )
 
 cc_library(
+    name = "get_hwy_mode",
+    srcs = ["get_hwy_mode.cc"],
+    hdrs = ["get_hwy_mode.h"],
+    deps = [
+        "@com_github_google_highway//:hwy",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
     name = "aes_128_fixed_key_hash_hwy",
     hdrs = [
         "aes_128_fixed_key_hash_hwy.h",
@@ -153,6 +163,7 @@ cc_test(
     ],
     deps = [
         ":aes_128_fixed_key_hash_hwy",
+        ":get_hwy_mode",
         ":status_matchers",
         "//dpf:aes_128_fixed_key_hash",
         "@boringssl//:crypto",

@@ -56,6 +56,7 @@ cc_library(
         ":distributed_point_function_cc_proto",
         ":status_macros",
         "//dpf/internal:evaluate_prg_hwy",
+        "//dpf/internal:get_hwy_mode",
         "//dpf/internal:proto_validator",
         "//dpf/internal:value_type_helpers",
         "@boringssl//:crypto",

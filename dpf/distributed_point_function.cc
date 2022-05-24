@@ -20,6 +20,7 @@
 #include <limits>
 
 #include "dpf/internal/evaluate_prg_hwy.h"
+#include "dpf/internal/get_hwy_mode.h"
 #include "dpf/status_macros.h"
 #include "google/protobuf/io/zero_copy_stream_impl_lite.h"
 #include "hwy/aligned_allocator.h"
@@ -541,6 +542,10 @@ DistributedPointFunction::Create(const DpfParameters& parameters) {
 absl::StatusOr<std::unique_ptr<DistributedPointFunction>>
 DistributedPointFunction::CreateIncremental(
     absl::Span<const DpfParameters> parameters) {
+  // Log Highway mode for debugging.
+  LOG_FIRST_N(INFO, 1) << "Highway is in " << dpf_internal::GetHwyModeAsString()
+                       << " mode";
+
   // Validate `parameters` and store validator for later.
   DPF_ASSIGN_OR_RETURN(
       std::unique_ptr<dpf_internal::ProtoValidator> proto_validator,

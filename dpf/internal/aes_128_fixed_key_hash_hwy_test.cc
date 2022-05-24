@@ -22,6 +22,7 @@
 #include "absl/flags/parse.h"
 #include "absl/numeric/int128.h"
 #include "dpf/aes_128_fixed_key_hash.h"
+#include "dpf/internal/get_hwy_mode.h"
 #include "dpf/internal/status_matchers.h"
 #include "hwy/aligned_allocator.h"
 #include "hwy/detect_targets.h"
@@ -41,56 +42,6 @@ HWY_BEFORE_NAMESPACE();
 namespace distributed_point_functions {
 namespace dpf_internal {
 namespace HWY_NAMESPACE {
-
-// Utility function for printing the mode selected by Highway.
-void LogHwyMode() {
-  switch (HWY_TARGET) {
-    case HWY_SCALAR:
-      LOG(INFO) << "Highway is in SCALAR mode";
-      break;
-    case HWY_AVX2:
-      LOG(INFO) << "Highway is in AVX2 mode";
-      break;
-    case HWY_AVX3:
-      LOG(INFO) << "Highway is in AVX3 mode";
-      break;
-    case HWY_AVX3_DL:
-      LOG(INFO) << "Highway is in AVX3_DL mode";
-      break;
-    case HWY_SSE4:
-      LOG(INFO) << "Highway is in SSE4 mode";
-      break;
-    case HWY_SSSE3:
-      LOG(INFO) << "Highway is in SSE3 mode";
-      break;
-    case HWY_SVE2:
-      LOG(INFO) << "Highway is in SVE2 mode";
-      break;
-    case HWY_SVE:
-      LOG(INFO) << "Highway is in SVE mode";
-      break;
-    case HWY_NEON:
-      LOG(INFO) << "Highway is in NEON mode";
-      break;
-    case HWY_PPC8:
-      LOG(INFO) << "Highway is in PPC8 mode";
-      break;
-    case HWY_WASM2:
-      LOG(INFO) << "Highway is in WASM2 mode";
-      break;
-    case HWY_WASM:
-      LOG(INFO) << "Highway is in WASM mode";
-      break;
-    case HWY_RVV:
-      LOG(INFO) << "Highway is in RVV mode";
-      break;
-    case HWY_EMU128:
-      LOG(INFO) << "Highway is in EMU128 mode";
-      break;
-    default:
-      LOG(INFO) << "Highway is in unknown mode";
-  }
-}
 
 #if HWY_TARGET == HWY_SCALAR
 
@@ -259,8 +210,9 @@ namespace dpf_internal {
 HWY_BEFORE_TEST(Aes128FixedKeyHashHwyTest);
 HWY_EXPORT_AND_TEST_P(Aes128FixedKeyHashHwyTest, TestAllAes);
 
-HWY_EXPORT(LogHwyMode);
-TEST(Aes128FixedKeyHashHwy, LogHwyMode) { HWY_DYNAMIC_DISPATCH(LogHwyMode)(); }
+TEST(Aes128FixedKeyHashHwy, LogHwyMode) {
+  LOG(INFO) << "Highway is in " << GetHwyModeAsString() << " mode";
+}
 
 }  // namespace dpf_internal
 }  // namespace distributed_point_functions
