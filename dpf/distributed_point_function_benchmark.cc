@@ -15,6 +15,7 @@
 #include <glog/logging.h>
 
 #include "absl/container/btree_set.h"
+#include "absl/numeric/int128.h"
 #include "absl/random/random.h"
 #include "benchmark/benchmark.h"
 #include "dpf/distributed_point_function.h"
@@ -347,6 +348,11 @@ void BM_BatchEvaluation(benchmark::State& state) {
   const int evaluation_points_per_key = state.range(1);
   constexpr int kLogDomainSize = 63 - 7;
 
+  absl::uint128 domain_mask = absl::Uint128Max();
+  if (kLogDomainSize < 128) {
+    domain_mask = (absl::uint128{1} << kLogDomainSize) - 1;
+  }
+
   DpfParameters parameters;
   parameters.set_log_domain_size(kLogDomainSize);
   *(parameters.mutable_value_type()) = ToValueType<T>();
@@ -361,18 +367,18 @@ void BM_BatchEvaluation(benchmark::State& state) {
       hwy::AllocateAligned<absl::uint128>(num_keys * evaluation_points_per_key);
   for (int i = 0; i < num_keys; ++i) {
     absl::uint128 alpha = absl::MakeUint128(absl::Uniform<uint64_t>(rng),
-                                            absl::Uniform<uint64_t>(rng));
-    if (kLogDomainSize < 128) {
-      alpha &= (absl::uint128{1} << kLogDomainSize) - 1;
-    }
+                                            absl::Uniform<uint64_t>(rng)) &
+                          domain_mask;
     T beta{};
     DpfKey* key = google::protobuf::Arena::CreateMessage<DpfKey>(&arena);
     *key = dpf->GenerateKeys(alpha, beta).value().first;
 
     for (int j = 0; j < evaluation_points_per_key; ++j) {
       key_pointers[i * evaluation_points_per_key + j] = key;
-      evaluation_points[i * evaluation_points_per_key + j] = absl::MakeUint128(
-          absl::Uniform<uint64_t>(rng), absl::Uniform<uint64_t>(rng));
+      evaluation_points[i * evaluation_points_per_key + j] =
+          absl::MakeUint128(absl::Uniform<uint64_t>(rng),
+                            absl::Uniform<uint64_t>(rng)) &
+          domain_mask;
     }
   }
 

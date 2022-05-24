@@ -116,6 +116,7 @@ cc_test(
         "@com_github_google_glog//:glog",
         "@com_github_google_highway//:hwy",
         "@com_google_absl//absl/container:btree",
+        "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/random",
     ],
 )
