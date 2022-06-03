@@ -49,7 +49,7 @@ const absl::string_view GetHwyModeAsString() {
       return "NEON";
     case HWY_PPC8:
       return "PPC8";
-    case HWY_WASM2:
+    case HWY_WASM_EMU256:
       return "WASM2";
     case HWY_WASM:
       return "WASM";
