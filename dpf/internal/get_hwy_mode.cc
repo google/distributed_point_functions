@@ -28,38 +28,7 @@ namespace dpf_internal {
 namespace HWY_NAMESPACE {
 
 const absl::string_view GetHwyModeAsString() {
-  switch (HWY_TARGET) {
-    case HWY_SCALAR:
-      return "SCALAR";
-    case HWY_AVX2:
-      return "AVX2";
-    case HWY_AVX3:
-      return "AVX3";
-    case HWY_AVX3_DL:
-      return "AVX3_DL";
-    case HWY_SSE4:
-      return "SSE4";
-    case HWY_SSSE3:
-      return "SSE3";
-    case HWY_SVE2:
-      return "SVE2";
-    case HWY_SVE:
-      return "SVE";
-    case HWY_NEON:
-      return "NEON";
-    case HWY_PPC8:
-      return "PPC8";
-    case HWY_WASM2:
-      return "WASM2";
-    case HWY_WASM:
-      return "WASM";
-    case HWY_RVV:
-      return "RVV";
-    case HWY_EMU128:
-      return "EMU128";
-    default:
-      return "unknown";
-  }
+  return hwy::TargetName(HWY_TARGET);
 }
 
 }  // namespace HWY_NAMESPACE
