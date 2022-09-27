@@ -80,6 +80,7 @@ cc_test(
     srcs = ["distributed_point_function_test.cc"],
     deps = [
         ":distributed_point_function",
+        ":distributed_point_function_cc_proto",
         "//dpf/internal:status_matchers",
         "@com_github_google_googletest//:gtest_main",
         "@com_google_absl//absl/numeric:int128",

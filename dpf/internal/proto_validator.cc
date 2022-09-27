@@ -238,10 +238,10 @@ absl::Status ProtoValidator::ValidateEvaluationContext(
         "This context has already been fully evaluated");
   }
   if (!ctx.partial_evaluations().empty() &&
-      ctx.partial_evaluations_level() >= ctx.previous_hierarchy_level()) {
+      ctx.partial_evaluations_level() > ctx.previous_hierarchy_level()) {
     return absl::InvalidArgumentError(
-        "ctx.previous_hierarchy_level must be less than "
-        "ctx.partial_evaluations_level");
+        "ctx.partial_evaluations_level must be less than or equal to "
+        "ctx.previous_hierarchy_level");
   }
   return absl::OkStatus();
 }

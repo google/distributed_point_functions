@@ -251,16 +251,17 @@ TEST_F(ProtoValidatorTest,
                        "This context has already been fully evaluated"));
 }
 
-TEST_F(
-    ProtoValidatorTest,
-    ValidateEvaluationContextFailsIfPreviousHierarchyLevelEqualsHierarchyLevel) {
-  ctx_.set_previous_hierarchy_level(ctx_.partial_evaluations_level());
+TEST_F(ProtoValidatorTest,
+       ValidateEvaluationContextFailsIfPartialEvaluationsLevelTooLarge) {
+  ctx_.set_previous_hierarchy_level(0);
+  ctx_.set_partial_evaluations_level(1);
   ctx_.add_partial_evaluations();
 
-  EXPECT_THAT(proto_validator_->ValidateEvaluationContext(ctx_),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       "ctx.previous_hierarchy_level must be less than "
-                       "ctx.partial_evaluations_level"));
+  EXPECT_THAT(
+      proto_validator_->ValidateEvaluationContext(ctx_),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               "ctx.partial_evaluations_level must be less than or equal to "
+               "ctx.previous_hierarchy_level"));
 }
 
 TEST_F(ProtoValidatorTest, ValidateValueFailsIfTypeNotInteger) {

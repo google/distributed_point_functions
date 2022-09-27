@@ -21,6 +21,7 @@
 #include "absl/random/random.h"
 #include "absl/strings/str_format.h"
 #include "absl/utility/utility.h"
+#include "dpf/distributed_point_function.pb.h"
 #include "dpf/internal/status_matchers.h"
 
 namespace distributed_point_functions {
@@ -151,6 +152,53 @@ TEST(DistributedPointFunction, EvaluationFailsIfOutputSizeTooLarge) {
               StatusIs(absl::StatusCode::kInvalidArgument,
                        "Output size would be larger than 2**62. Please "
                        "evaluate fewer hierarchy levels at once."));
+}
+
+TEST(DistributedPointFunction, TestSinglePointPartialEvaluation) {
+  // Two hierarchy levels: The first will be evaluated with only a single
+  // prefix, the second will be fully evaluated.
+  std::vector<DpfParameters> parameters(2);
+  parameters[0].set_log_domain_size(108);
+  parameters[0].mutable_value_type()->mutable_integer()->set_bitsize(32);
+  parameters[1].set_log_domain_size(128);
+  parameters[1].mutable_value_type()->mutable_integer()->set_bitsize(32);
+
+  DPF_ASSERT_OK_AND_ASSIGN(
+      auto dpf, DistributedPointFunction::CreateIncremental(parameters));
+  absl::uint128 prefix = 0xdeadbeef;
+  absl::uint128 suffix = 23;
+  absl::uint128 alpha = (prefix << 20) + suffix;
+  uint32_t beta = 42;
+  DpfKey key_a, key_b;
+  DPF_ASSERT_OK_AND_ASSIGN(std::tie(key_a, key_b),
+                           dpf->GenerateKeysIncremental(alpha, {beta, beta}));
+
+  // First evaluate directly up to `prefix`
+  DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx_a,
+                           dpf->CreateEvaluationContext(key_a));
+  DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx_b,
+                           dpf->CreateEvaluationContext(key_b));
+  std::vector<uint32_t> result_a, result_b;
+  DPF_ASSERT_OK_AND_ASSIGN(result_a,
+                           dpf->EvaluateAt<uint32_t>(0, {prefix}, ctx_a));
+  DPF_ASSERT_OK_AND_ASSIGN(result_b,
+                           dpf->EvaluateAt<uint32_t>(0, {prefix}, ctx_b));
+  EXPECT_EQ(result_a[0] + result_b[0], beta);
+
+  // Now fully evaluate the second level.
+  DPF_ASSERT_OK_AND_ASSIGN(result_a,
+                           dpf->EvaluateUntil<uint32_t>(1, {prefix}, ctx_a));
+  DPF_ASSERT_OK_AND_ASSIGN(result_b,
+                           dpf->EvaluateUntil<uint32_t>(1, {prefix}, ctx_b));
+  EXPECT_EQ(result_a.size(), result_b.size());
+  EXPECT_EQ(result_a.size(), 1 << 20);
+  for (int i = 0; i < static_cast<int>(result_a.size()); ++i) {
+    if (i == suffix) {
+      EXPECT_EQ(result_a[i] + result_b[i], beta);
+    } else {
+      EXPECT_EQ(result_a[i] + result_b[i], 0);
+    }
+  }
 }
 
 class RegularDpfKeyGenerationTest
