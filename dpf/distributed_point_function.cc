@@ -341,13 +341,13 @@ DistributedPointFunction::ExpandSeeds(
 
 absl::StatusOr<DistributedPointFunction::DpfExpansion>
 DistributedPointFunction::ComputePartialEvaluations(
-    absl::Span<const absl::uint128> prefixes, bool update_ctx,
-    EvaluationContext& ctx) const {
+    absl::Span<const absl::uint128> prefixes, int hierarchy_level,
+    bool update_ctx, EvaluationContext& ctx) const {
   int64_t num_prefixes = static_cast<int64_t>(prefixes.size());
 
   DpfExpansion partial_evaluations;
   int start_level = hierarchy_to_tree_[ctx.partial_evaluations_level()];
-  int stop_level = hierarchy_to_tree_[ctx.previous_hierarchy_level()];
+  int stop_level = hierarchy_to_tree_[hierarchy_level];
   if (ctx.partial_evaluations_size() > 0 && start_level <= stop_level) {
     // We have partial evaluations from a tree level before the current one.
     // Parse `ctx.partial_evaluations` into a btree_map for quick lookups up by
@@ -359,16 +359,17 @@ DistributedPointFunction::ComputePartialEvaluations(
       absl::uint128 prefix =
           absl::MakeUint128(element.prefix().high(), element.prefix().low());
       // Try inserting `(seed, control_bit)` at `prefix` into
-      // partial_evaluations. Return an error if `prefix` is already present.
-      int64_t previous_size = previous_partial_evaluations.size();
-      previous_partial_evaluations.try_emplace(
-          previous_partial_evaluations.end(), prefix,
-          std::make_pair(
-              absl::MakeUint128(element.seed().high(), element.seed().low()),
-              element.control_bit()));
-      if (previous_partial_evaluations.size() <= previous_size) {
+      // partial_evaluations. Return an error if `prefix` is already present
+      // with a different seed or control bit.
+      auto value = std::make_pair(
+          absl::MakeUint128(element.seed().high(), element.seed().low()),
+          element.control_bit());
+      auto it = previous_partial_evaluations.try_emplace(
+          previous_partial_evaluations.end(), prefix, value);
+      if (it->second != value) {
         return absl::InvalidArgumentError(
-            "Duplicate prefix in `ctx.partial_evaluations()`");
+            "Duplicate prefix in `ctx.partial_evaluations()` with mismatching "
+            "seed or control bit");
       }
     }
     // Now select all partial evaluations from the map that correspond to
@@ -385,9 +386,9 @@ DistributedPointFunction::ComputePartialEvaluations(
       if (it == previous_partial_evaluations.end()) {
         return absl::InvalidArgumentError(absl::StrCat(
             "Prefix not present in ctx.partial_evaluations at hierarchy level ",
-            ctx.previous_hierarchy_level()));
+            hierarchy_level));
       }
-      std::pair<absl::uint128, bool> partial_evaluation = it->second;
+      const std::pair<absl::uint128, bool>& partial_evaluation = it->second;
       partial_evaluations.seeds[partial_evaluations.control_bits.size()] =
           partial_evaluation.first;
       partial_evaluations.control_bits.push_back(partial_evaluation.second);
@@ -432,7 +433,7 @@ DistributedPointFunction::ComputePartialEvaluations(
       current_element->set_control_bit(partial_evaluations.control_bits[i]);
     }
   }
-  ctx.set_partial_evaluations_level(ctx.previous_hierarchy_level());
+  ctx.set_partial_evaluations_level(hierarchy_level);
   return partial_evaluations;
 }
 
@@ -457,9 +458,11 @@ DistributedPointFunction::ExpandAndUpdateContext(
     // evaluation.
     bool update_ctx =
         (hierarchy_level < static_cast<int>(parameters_.size()) - 1);
-    DPF_ASSIGN_OR_RETURN(selected_partial_evaluations,
-                         ComputePartialEvaluations(prefixes, update_ctx, ctx));
     DCHECK(ctx.previous_hierarchy_level() >= 0);
+    DPF_ASSIGN_OR_RETURN(
+        selected_partial_evaluations,
+        ComputePartialEvaluations(prefixes, ctx.previous_hierarchy_level(),
+                                  update_ctx, ctx));
     start_level = hierarchy_to_tree_[ctx.previous_hierarchy_level()];
   }
 

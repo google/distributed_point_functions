@@ -241,7 +241,8 @@ class IncrementalDpfTest : public testing::TestWithParam<
                                           std::vector<DpfTestParameters>,
                                           /*alpha*/ absl::uint128,
                                           /*beta*/ std::vector<absl::uint128>,
-                                          /*level_step*/ int>> {
+                                          /*level_step*/ int,
+                                          /*single_point*/ bool>> {
  protected:
   void SetUp() {
     const std::vector<DpfTestParameters>& parameters = std::get<0>(GetParam());
@@ -259,6 +260,7 @@ class IncrementalDpfTest : public testing::TestWithParam<
                              dpf_->GenerateKeysIncremental(alpha_, beta_));
     level_step_ = std::get<3>(
         GetParam());  // Number of hierarchy level to evaluate at once.
+    single_point_ = std::get<4>(GetParam());
     DPF_ASSERT_OK_AND_ASSIGN(proto_validator_,
                              dpf_internal::ProtoValidator::Create(parameters_));
   }
@@ -278,7 +280,9 @@ class IncrementalDpfTest : public testing::TestWithParam<
   // appropriate prefixes of `evaluation_points`. Checks that the expansion of
   // both keys form correct DPF shares, i.e., they add up to
   // `beta_[ctx.hierarchy_level()]` under prefixes of `alpha_`, and to 0
-  // otherwise.
+  // otherwise. If `singl_point == true`, only evaluates at the prefixes of the
+  // given `evaluation_points`. Otherwise, fully expands the given
+  // `hierarchy_level`.
   template <typename T>
   void EvaluateAndCheckLevel(int hierarchy_level,
                              absl::Span<const absl::uint128> evaluation_points,
@@ -289,9 +293,17 @@ class IncrementalDpfTest : public testing::TestWithParam<
     int previous_log_domain_size = 0;
     int num_expansions = 1;
     bool is_first_evaluation = previous_hierarchy_level < 0;
-    // Generate prefixes if we're not on the first level.
     std::vector<absl::uint128> prefixes;
-    if (!is_first_evaluation) {
+    if (single_point_) {
+      // Single point evaluation: Generate prefixes for the current hierarchy
+      // level.
+      prefixes.resize(evaluation_points.size());
+      for (int i = 0; i < static_cast<int>(evaluation_points.size()); ++i) {
+        prefixes[i] = GetPrefixForLevel(hierarchy_level, evaluation_points[i]);
+      }
+    } else if (!is_first_evaluation) {
+      // Full expansion: Generate prefixes for the previous hierarchy level if
+      // we're not on the first level.
       num_expansions = static_cast<int>(evaluation_points.size());
       prefixes.resize(evaluation_points.size());
       previous_log_domain_size =
@@ -302,56 +314,90 @@ class IncrementalDpfTest : public testing::TestWithParam<
       }
     }
 
-    absl::StatusOr<std::vector<T>> result_0 =
-        dpf_->EvaluateUntil<T>(hierarchy_level, prefixes, ctx0);
-    absl::StatusOr<std::vector<T>> result_1 =
-        dpf_->EvaluateUntil<T>(hierarchy_level, prefixes, ctx1);
+    absl::StatusOr<std::vector<T>> result_0, result_1;
+    if (single_point_) {
+      result_0 = dpf_->EvaluateAt<T>(hierarchy_level, prefixes, ctx0);
+      result_1 = dpf_->EvaluateAt<T>(hierarchy_level, prefixes, ctx1);
+    } else {
+      result_0 = dpf_->EvaluateUntil<T>(hierarchy_level, prefixes, ctx0);
+      result_1 = dpf_->EvaluateUntil<T>(hierarchy_level, prefixes, ctx1);
+    }
 
     // Check results are ok.
-    DPF_EXPECT_OK(result_0);
+    DPF_EXPECT_OK(result_0)
+        << "hierarchy_level=" << hierarchy_level << "\nparameters={\n"
+        << parameters_[hierarchy_level].DebugString() << "}\n";
     DPF_EXPECT_OK(result_1);
     if (result_0.ok() && result_1.ok()) {
       // Check output sizes match.
       ASSERT_EQ(result_0->size(), result_1->size());
-      int64_t outputs_per_prefix =
-          int64_t{1} << (current_log_domain_size - previous_log_domain_size);
-      int64_t expected_output_size = num_expansions * outputs_per_prefix;
-      ASSERT_EQ(result_0->size(), expected_output_size);
 
-      // Iterate over the outputs and check that they sum up to 0 or to
-      // beta_[current_hierarchy_level].
-      absl::uint128 previous_alpha_prefix = 0;
-      if (!is_first_evaluation) {
-        previous_alpha_prefix =
-            GetPrefixForLevel(previous_hierarchy_level, alpha_);
-      }
-      absl::uint128 current_alpha_prefix =
-          GetPrefixForLevel(hierarchy_level, alpha_);
-      for (int64_t i = 0; i < expected_output_size; ++i) {
-        int prefix_index = i / outputs_per_prefix;
-        int prefix_expansion_index = i % outputs_per_prefix;
-        // The output is on the path to alpha, if we're at the first level or
-        // under a prefix of alpha, and the current block in the expansion of
-        // the prefix is also on the path to alpha.
-        if ((is_first_evaluation ||
-             prefixes[prefix_index] == previous_alpha_prefix) &&
-            prefix_expansion_index ==
-                (current_alpha_prefix % outputs_per_prefix)) {
-          // We need to static_cast here since otherwise operator+ returns an
-          // unsigned int without doing a modular reduction, which causes the
-          // test to fail on types with sizeof(T) < sizeof(unsigned).
-          EXPECT_EQ(static_cast<T>((*result_0)[i] + (*result_1)[i]),
-                    beta_[hierarchy_level])
-              << "i=" << i << ", hierarchy_level=" << hierarchy_level
-              << "\nparameters={\n"
-              << parameters_[hierarchy_level].DebugString() << "}\n"
-              << "previous_alpha_prefix=" << previous_alpha_prefix << "\n"
-              << "current_alpha_prefix=" << current_alpha_prefix << "\n";
-        } else {
-          EXPECT_EQ(static_cast<T>((*result_0)[i] + (*result_1)[i]), 0)
-              << "i=" << i << ", hierarchy_level=" << hierarchy_level
-              << "\nparameters={\n"
-              << parameters_[hierarchy_level].DebugString() << "}\n";
+      if (single_point_) {
+        absl::uint128 current_alpha_prefix =
+            GetPrefixForLevel(hierarchy_level, alpha_);
+        for (int i = 0; i < result_0->size(); ++i) {
+          if (prefixes[i] == current_alpha_prefix) {
+            EXPECT_EQ(static_cast<T>((*result_0)[i] + (*result_1)[i]),
+                      beta_[hierarchy_level])
+                << "i=" << i << ", hierarchy_level=" << hierarchy_level
+                << "\nparameters={\n"
+                << parameters_[hierarchy_level].DebugString() << "}\n"
+                << "current_alpha_prefix=" << current_alpha_prefix << "\n"
+                << "prefixes[" << i << "]=" << prefixes[i] << "\n"
+                << "evaluation_points[" << i << "]=" << evaluation_points[i]
+                << "\n";
+          } else {
+            EXPECT_EQ(static_cast<T>((*result_0)[i] + (*result_1)[i]), 0)
+                << "i=" << i << ", hierarchy_level=" << hierarchy_level
+                << "\nparameters={\n"
+                << parameters_[hierarchy_level].DebugString() << "}\n"
+                << "current_alpha_prefix=" << current_alpha_prefix << "\n"
+                << "prefixes[" << i << "]=" << prefixes[i] << "\n"
+                << "evaluation_points[" << i << "]=" << evaluation_points[i]
+                << "\n";
+          }
+        }
+      } else {
+        int64_t outputs_per_prefix =
+            int64_t{1} << (current_log_domain_size - previous_log_domain_size);
+        int64_t expected_output_size = num_expansions * outputs_per_prefix;
+        ASSERT_EQ(result_0->size(), expected_output_size);
+
+        // Iterate over the outputs and check that they sum up to 0 or to
+        // beta_[current_hierarchy_level].
+        absl::uint128 previous_alpha_prefix = 0;
+        if (!is_first_evaluation) {
+          previous_alpha_prefix =
+              GetPrefixForLevel(previous_hierarchy_level, alpha_);
+        }
+        absl::uint128 current_alpha_prefix =
+            GetPrefixForLevel(hierarchy_level, alpha_);
+        for (int64_t i = 0; i < expected_output_size; ++i) {
+          int prefix_index = i / outputs_per_prefix;
+          int prefix_expansion_index = i % outputs_per_prefix;
+          // The output is on the path to alpha, if we're at the first level or
+          // under a prefix of alpha, and the current block in the expansion of
+          // the prefix is also on the path to alpha.
+          if ((is_first_evaluation ||
+               prefixes[prefix_index] == previous_alpha_prefix) &&
+              prefix_expansion_index ==
+                  (current_alpha_prefix % outputs_per_prefix)) {
+            // We need to static_cast here since otherwise operator+ returns an
+            // unsigned int without doing a modular reduction, which causes the
+            // test to fail on types with sizeof(T) < sizeof(unsigned).
+            EXPECT_EQ(static_cast<T>((*result_0)[i] + (*result_1)[i]),
+                      beta_[hierarchy_level])
+                << "i=" << i << ", hierarchy_level=" << hierarchy_level
+                << "\nparameters={\n"
+                << parameters_[hierarchy_level].DebugString() << "}\n"
+                << "previous_alpha_prefix=" << previous_alpha_prefix << "\n"
+                << "current_alpha_prefix=" << current_alpha_prefix << "\n";
+          } else {
+            EXPECT_EQ(static_cast<T>((*result_0)[i] + (*result_1)[i]), 0)
+                << "i=" << i << ", hierarchy_level=" << hierarchy_level
+                << "\nparameters={\n"
+                << parameters_[hierarchy_level].DebugString() << "}\n";
+          }
         }
       }
     }
@@ -363,6 +409,7 @@ class IncrementalDpfTest : public testing::TestWithParam<
   std::vector<absl::uint128> beta_;
   std::pair<DpfKey, DpfKey> keys_;
   int level_step_;
+  bool single_point_;
   std::unique_ptr<dpf_internal::ProtoValidator> proto_validator_;
 };
 
@@ -405,16 +452,22 @@ TEST_P(IncrementalDpfTest, FailsIfDuplicatePrefixInCtx) {
   DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx,
                            dpf_->CreateEvaluationContext(keys_.first));
 
-  // Evaluate on prefixes 0 and 1, then delete partial evaluations for prefix 0.
+  // Evaluate on prefixes 0 and 1, then add duplicate prefix for 0 with
+  // different seed.
   DPF_ASSERT_OK(dpf_->EvaluateNext<absl::uint128>({}, ctx));
   DPF_ASSERT_OK(dpf_->EvaluateNext<absl::uint128>({0, 1}, ctx));
   *(ctx.add_partial_evaluations()) = ctx.partial_evaluations(0);
+  Block changed_seed = ctx.partial_evaluations(0).seed();
+  changed_seed.set_low(changed_seed.low() + 1);
+  *((ctx.mutable_partial_evaluations()->end() - 1)->mutable_seed()) =
+      changed_seed;
 
   // The missing prefix corresponds to hierarchy level 1, even though we
   // evaluate at level 2.
   EXPECT_THAT(dpf_->EvaluateNext<absl::uint128>({0}, ctx),
               StatusIs(absl::StatusCode::kInvalidArgument,
-                       "Duplicate prefix in `ctx.partial_evaluations()`"));
+                       "Duplicate prefix in `ctx.partial_evaluations()` with "
+                       "mismatching seed or control bit"));
 }
 
 TEST_P(IncrementalDpfTest, EvaluationFailsOnEmptyContext) {
@@ -516,11 +569,6 @@ TEST_P(IncrementalDpfTest, EvaluationFailsIfPrefixOutOfRange) {
 }
 
 TEST_P(IncrementalDpfTest, TestCorrectness) {
-  DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx0,
-                           dpf_->CreateEvaluationContext(keys_.first));
-  DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx1,
-                           dpf_->CreateEvaluationContext(keys_.second));
-
   // Generate a random set of evaluation points. The library should be able to
   // handle duplicates, so fixing the size to 1000 works even for smaller
   // domains.
@@ -538,6 +586,11 @@ TEST_P(IncrementalDpfTest, TestCorrectness) {
   evaluation_points.back() = alpha_;  // Always evaluate on alpha_.
 
   int num_levels = static_cast<int>(parameters_.size());
+  DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx0,
+                           dpf_->CreateEvaluationContext(keys_.first));
+  DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx1,
+                           dpf_->CreateEvaluationContext(keys_.second));
+
   for (int i = level_step_ - 1; i < num_levels; i += level_step_) {
     switch (parameters_[i].value_type().integer().bitsize()) {
       case 8:
@@ -592,7 +645,9 @@ INSTANTIATE_TEST_SUITE_P(
         testing::Values(std::vector<absl::uint128>(1, 1),
                         std::vector<absl::uint128>(1, 100),
                         std::vector<absl::uint128>(1, 255)),  // beta
-        testing::Values(1)));                                 // level_step
+        testing::Values(1),                                   // level_step
+        testing::Values(false, true)                          // single_point
+        ));
 
 INSTANTIATE_TEST_SUITE_P(
     OneHierarchyLevelVaryDomainSizes, IncrementalDpfTest,
@@ -666,7 +721,9 @@ INSTANTIATE_TEST_SUITE_P(
         testing::Values(std::vector<absl::uint128>(1, 1),
                         std::vector<absl::uint128>(1, 100),
                         std::vector<absl::uint128>(1, 255)),  // beta
-        testing::Values(1)));                                 // level_step
+        testing::Values(1),                                   // level_step
+        testing::Values(false, true)                          // single_point
+        ));
 
 INSTANTIATE_TEST_SUITE_P(
     TwoHierarchyLevels, IncrementalDpfTest,
@@ -709,7 +766,9 @@ INSTANTIATE_TEST_SUITE_P(
         testing::Values(std::vector<absl::uint128>({1, 2}),
                         std::vector<absl::uint128>({80, 90}),
                         std::vector<absl::uint128>({255, 255})),  // beta
-        testing::Values(1, 2)));                                  // level_step
+        testing::Values(1, 2),                                    // level_step
+        testing::Values(false, true)  // single_point
+        ));
 
 INSTANTIATE_TEST_SUITE_P(
     ThreeHierarchyLevels, IncrementalDpfTest,
@@ -765,7 +824,9 @@ INSTANTIATE_TEST_SUITE_P(
                 {.log_domain_size = 2, .element_bitsize = 128}}),
         testing::Values(0, 1),                                   // alpha
         testing::Values(std::vector<absl::uint128>({1, 2, 3})),  // beta
-        testing::Values(1, 2)));                                 // level_step
+        testing::Values(1, 2),                                   // level_step
+        testing::Values(false, true)                             // single_point
+        ));
 
 INSTANTIATE_TEST_SUITE_P(
     MaximumOutputDomainSize, IncrementalDpfTest,
@@ -783,7 +844,9 @@ INSTANTIATE_TEST_SUITE_P(
         }()),
         testing::Values(absl::MakeUint128(23, 42)),                 // alpha
         testing::Values(std::vector<absl::uint128>(129, 1234567)),  // beta
-        testing::Values(1, 2, 3, 5, 7)));  // level_step
+        testing::Values(1, 2, 3, 5, 7),  // level_step
+        testing::Values(false, true)     // single_point
+        ));
 
 template <typename T>
 class DpfEvaluationTest : public ::testing::Test {
