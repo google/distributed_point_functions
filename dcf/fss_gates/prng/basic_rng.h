@@ -17,6 +17,8 @@
 
 #include <openssl/rand.h>
 
+#include <memory>
+
 #include "absl/base/casts.h"
 #include "absl/memory/memory.h"
 #include "absl/numeric/int128.h"
@@ -33,7 +35,7 @@ class BasicRng : public SecurePrng {
   // Returns an INTERNAL error code if the creation fails.
   static absl::StatusOr<std::unique_ptr<BasicRng>> Create(
       absl::string_view seed) {
-    return absl::make_unique<BasicRng>();
+    return std::make_unique<BasicRng>();
   }
 
   // Sample 8 bits of randomness using OpenSSL RAND_bytes.
