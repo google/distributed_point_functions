@@ -283,6 +283,9 @@ DistributedPointFunction::ExpandSeeds(
   // Copy seeds and control bits. We will swap these after every expansion.
   DpfExpansion expansion;
   expansion.seeds = hwy::AllocateAligned<absl::uint128>(output_size);
+  if (expansion.seeds == nullptr) {
+    return absl::ResourceExhaustedError("Out of memory");
+  }
   std::copy_n(partial_evaluations.seeds.get(), current_level_size,
               expansion.seeds.get());
   expansion.control_bits = partial_evaluations.control_bits;
