@@ -19,6 +19,7 @@
 
 #include <limits>
 
+#include "absl/log/log.h"
 #include "dpf/internal/evaluate_prg_hwy.h"
 #include "dpf/internal/get_hwy_mode.h"
 #include "dpf/status_macros.h"
