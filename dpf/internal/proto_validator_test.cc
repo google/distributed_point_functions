@@ -75,6 +75,15 @@ TEST_F(ProtoValidatorTest, CreateFailsWhenDomainSizeNegative) {
                        "`log_domain_size` must be non-negative"));
 }
 
+TEST_F(ProtoValidatorTest, CreateFailsWhenDomainSizeTooLarge) {
+  parameters_.resize(1);
+  parameters_[0].set_log_domain_size(129);
+
+  EXPECT_THAT(ProtoValidator::Create(parameters_),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       "`log_domain_size` must be <= 128"));
+}
+
 TEST_F(ProtoValidatorTest, CreateFailsWhenElementBitsizeNegative) {
   parameters_.resize(1);
   parameters_[0].mutable_value_type()->mutable_integer()->set_bitsize(-1);
