@@ -75,13 +75,16 @@ class TestOutputMatchesOpenSSL {
  private:
   void Reset() {
     inputs_ = hwy::AllocateAligned<absl::uint128>(kNumBlocks);
+    ASSERT_NE(inputs_, nullptr);
     masks_ = hwy::AllocateAligned<uint64_t>(2 * kNumBlocks);
+    ASSERT_NE(masks_, nullptr);
     for (int i = 0; i < kNumBlocks; ++i) {
       inputs_[i] = absl::MakeUint128(i, i + 1);
       masks_[2 * i] = masks_[2 * i + 1] =
           (i % 3 == 0) ? std::numeric_limits<uint64_t>::max() : 0;
     }
     outputs_ = hwy::AllocateAligned<absl::uint128>(kNumBlocks);
+    ASSERT_NE(outputs_, nullptr);
     ASSERT_EQ(0, AES_set_encrypt_key(reinterpret_cast<const uint8_t*>(&kKey0),
                                      128, &expanded_key_0_));
     ASSERT_EQ(0, AES_set_encrypt_key(reinterpret_cast<const uint8_t*>(&kKey1),

@@ -365,6 +365,7 @@ void BM_BatchEvaluation(benchmark::State& state) {
   std::vector<const DpfKey*> key_pointers(num_keys * evaluation_points_per_key);
   auto evaluation_points =
       hwy::AllocateAligned<absl::uint128>(num_keys * evaluation_points_per_key);
+  CHECK(evaluation_points != nullptr);
   for (int i = 0; i < num_keys; ++i) {
     absl::uint128 alpha = absl::MakeUint128(absl::Uniform<uint64_t>(rng),
                                             absl::Uniform<uint64_t>(rng)) &

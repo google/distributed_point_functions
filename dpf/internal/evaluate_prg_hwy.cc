@@ -353,6 +353,9 @@ absl::Status EvaluateSeedsHwy(
     // to read. Calling MaskedLoad directly instead might lead to out-of-bounds
     // accesses.
     auto buffer = hwy::AllocateAligned<absl::uint128>(2 * blocks_per_lane);
+    if (buffer == nullptr) {
+      return absl::ResourceExhaustedError("Memory allocation error");
+    }
     auto buffer_ptr = reinterpret_cast<uint8_t*>(buffer.get());
     std::copy_n(seeds_in + i / sizeof(absl::uint128), remaining_blocks,
                 buffer.get());

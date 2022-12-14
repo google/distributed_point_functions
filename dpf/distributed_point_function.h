@@ -909,6 +909,9 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateAtImpl(
   if (elements_per_block > 1) {
     maybe_recomputed_tree_indices =
         hwy::AllocateAligned<absl::uint128>(num_evaluation_points);
+    if (maybe_recomputed_tree_indices == nullptr) {
+      return absl::ResourceExhaustedError("Memory allocation error");
+    }
     for (int64_t i = 0; i < num_evaluation_points; ++i) {
       maybe_recomputed_tree_indices[i] =
           DomainToTreeIndex(evaluation_points[i], hierarchy_level);
@@ -932,6 +935,9 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateAtImpl(
     bool party = key.party();
     selected_partial_evaluations->seeds =
         hwy::AllocateAligned<absl::uint128>(num_evaluation_points);
+    if (selected_partial_evaluations->seeds == nullptr) {
+      return absl::ResourceExhaustedError("Memory allocation error");
+    }
     auto seeds = absl::MakeSpan(selected_partial_evaluations->seeds.get(),
                                 num_evaluation_points);
     std::fill(seeds.begin(), seeds.end(), seed);
