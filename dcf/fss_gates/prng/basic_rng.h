@@ -15,8 +15,6 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_PRNG_BASIC_RNG_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_PRNG_BASIC_RNG_H_
 
-#include <openssl/rand.h>
-
 #include <memory>
 
 #include "absl/base/casts.h"
@@ -24,6 +22,7 @@
 #include "absl/numeric/int128.h"
 #include "absl/strings/string_view.h"
 #include "dcf/fss_gates/prng/prng.h"
+#include "openssl/rand.h"
 
 namespace distributed_point_functions {
 

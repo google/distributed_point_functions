@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <glog/logging.h>
-
 #include "absl/container/btree_set.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
@@ -27,6 +25,7 @@
 #include "benchmark/benchmark.h"  // third_party/benchmark
 #include "dpf/distributed_point_function.h"
 #include "dpf/distributed_point_function.pb.h"
+#include "glog/logging.h"
 #include "imap.hpp"
 #include "riegeli/bytes/fd_reader.h"
 #include "riegeli/lines/line_reading.h"

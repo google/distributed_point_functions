@@ -14,9 +14,6 @@
 
 #include "dcf/fss_gates/multiple_interval_containment.h"
 
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
-
 #include <cstdint>
 #include <vector>
 
@@ -27,6 +24,8 @@
 #include "dpf/internal/status_matchers.h"
 #include "dpf/internal/value_type_helpers.h"
 #include "dpf/status_macros.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
 
 namespace distributed_point_functions {
 namespace fss_gates {

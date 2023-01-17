@@ -14,11 +14,10 @@
 
 #include "dcf/fss_gates/prng/basic_rng.h"
 
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
-
 #include "absl/numeric/int128.h"
 #include "dpf/internal/status_matchers.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
 
 namespace distributed_point_functions {
 namespace {

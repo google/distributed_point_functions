@@ -14,11 +14,10 @@
 
 #include "dpf/internal/evaluate_prg_hwy.h"
 
-#include <gtest/gtest.h>
-
 #include "absl/numeric/int128.h"
 #include "dpf/aes_128_fixed_key_hash.h"
 #include "dpf/internal/status_matchers.h"
+#include "gtest/gtest.h"
 #include "hwy/aligned_allocator.h"
 
 // clang-format off

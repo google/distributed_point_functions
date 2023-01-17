@@ -17,9 +17,6 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_DPF_DISTRIBUTED_POINT_FUNCTION_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_DPF_DISTRIBUTED_POINT_FUNCTION_H_
 
-#include <glog/logging.h>
-#include <openssl/cipher.h>
-
 #include <memory>
 #include <type_traits>
 
@@ -35,7 +32,9 @@
 #include "dpf/distributed_point_function.pb.h"
 #include "dpf/internal/proto_validator.h"
 #include "dpf/internal/value_type_helpers.h"
+#include "glog/logging.h"
 #include "hwy/aligned_allocator.h"
+#include "openssl/cipher.h"
 
 namespace distributed_point_functions {
 

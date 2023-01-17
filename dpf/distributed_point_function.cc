@@ -14,16 +14,15 @@
 
 #include "dpf/distributed_point_function.h"
 
-#include <glog/logging.h>
-#include <openssl/rand.h>
-
 #include <limits>
 
 #include "dpf/internal/evaluate_prg_hwy.h"
 #include "dpf/internal/get_hwy_mode.h"
 #include "dpf/status_macros.h"
+#include "glog/logging.h"
 #include "google/protobuf/io/zero_copy_stream_impl_lite.h"
 #include "hwy/aligned_allocator.h"
+#include "openssl/rand.h"
 
 namespace distributed_point_functions {
 

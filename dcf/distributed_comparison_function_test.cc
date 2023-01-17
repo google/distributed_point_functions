@@ -14,12 +14,11 @@
 
 #include "dcf/distributed_comparison_function.h"
 
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
-
 #include "absl/random/random.h"
 #include "absl/utility/utility.h"
 #include "dpf/internal/status_matchers.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
 
 namespace distributed_point_functions {
 

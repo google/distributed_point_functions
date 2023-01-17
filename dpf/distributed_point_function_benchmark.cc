@@ -12,13 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <glog/logging.h>
-
 #include "absl/container/btree_set.h"
 #include "absl/numeric/int128.h"
 #include "absl/random/random.h"
 #include "benchmark/benchmark.h"
 #include "dpf/distributed_point_function.h"
+#include "glog/logging.h"
 #include "hwy/aligned_allocator.h"
 
 namespace distributed_point_functions {

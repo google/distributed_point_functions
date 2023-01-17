@@ -14,9 +14,6 @@
 
 #include "dpf/internal/evaluate_prg_hwy.h"
 
-#include <glog/logging.h>
-#include <openssl/aes.h>
-
 #include <cstdint>
 #include <limits>
 
@@ -25,7 +22,9 @@
 #include "absl/numeric/int128.h"
 #include "absl/status/status.h"
 #include "dpf/status_macros.h"
+#include "glog/logging.h"
 #include "hwy/aligned_allocator.h"
+#include "openssl/aes.h"
 
 // clang-format off
 #undef HWY_TARGET_INCLUDE
