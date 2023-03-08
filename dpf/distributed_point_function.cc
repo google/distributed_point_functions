@@ -16,6 +16,7 @@
 
 #include <limits>
 
+#include "absl/status/status.h"
 #include "dpf/internal/evaluate_prg_hwy.h"
 #include "dpf/internal/get_hwy_mode.h"
 #include "dpf/status_macros.h"
@@ -272,7 +273,12 @@ DistributedPointFunction::ExpandSeeds(
     const DpfExpansion& partial_evaluations,
     absl::Span<const CorrectionWord* const> correction_words) const {
   int num_expansions = static_cast<int>(correction_words.size());
-  DCHECK(num_expansions < 63);
+  if (num_expansions >= 63) {
+    return absl::InvalidArgumentError(
+        "Trying to expand more than 62 tree levels at once. Please insert "
+        "intermediate hierarchy levels, or evaluate fewer hierarchy levels at "
+        "once.");
+  }
 
   // Allocate buffers with the correct size to avoid reallocations.
   auto current_level_size =
