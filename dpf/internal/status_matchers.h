@@ -122,6 +122,7 @@
 #include "absl/status/statusor.h"
 #include "dpf/status_macros.h"
 #include "gmock/gmock.h"
+#include "tink/util/statusor.h"
 
 namespace distributed_point_functions {
 namespace dpf_internal {
@@ -134,6 +135,16 @@ template <typename T>
 inline const absl::Status& GetStatus(const absl::StatusOr<T>& status) {
   return status.status();
 }
+
+#ifndef TINK_USE_ABSL_STATUS
+// Overload GetStatus() to work with the StatusOr<T> template in tink,
+// which may not be an alias of absl::StatusOr<T>.
+template <typename T>
+inline const absl::Status& GetStatus(
+    const crypto::tink::util::StatusOr<T>& status) {
+  return static_cast<absl::StatusOr<T>>(status).status();
+}
+#endif
 
 ////////////////////////////////////////////////////////////
 // Implementation of IsOkAndHolds().
@@ -296,7 +307,7 @@ class MonoIsOkMatcherImpl : public ::testing::MatcherInterface<T> {
   bool MatchAndExplain(
       T actual_value,
       ::testing::MatchResultListener* result_listener) const override {
-    if (!GetStatus(actual_value).ok()) {
+    if (!actual_value.ok()) {
       *result_listener << "whose status is "
                        << GetStatus(actual_value).message();
       return false;

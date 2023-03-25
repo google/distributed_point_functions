@@ -1,0 +1,32 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package distributed_point_functions;
+
+// HashFamily configuration. Used with the helper function
+// CreateHashFamilyFromConfig in hashing/hash_family_config.h to generate actual
+// HashFamily objects.
+message HashFamilyConfig {
+  enum HashFamily {
+    HASH_FAMILY_UNSPECIFIED = 0;
+    HASH_FAMILY_SHA256 = 1;
+    // Add more hash functions that we might want to support. Make sure to also
+    // add a case to hash_family_config.cc if you do.
+  }
+
+  HashFamily hash_family = 1;
+  bytes seed = 2;
+}

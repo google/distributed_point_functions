@@ -30,7 +30,7 @@ cc_binary(
         "@com_github_google_glog//:glog",
         "@com_github_google_riegeli//riegeli/bytes:fd_reader",
         "@com_github_google_riegeli//riegeli/lines:line_reading",
-        "@com_github_ryanhaining_cppitertools//:cppitertools",
+        "@com_github_ryanhaining_cppitertools//cppitertools",
         "@com_google_absl//absl/container:btree",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",

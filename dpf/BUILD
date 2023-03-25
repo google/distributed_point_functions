@@ -55,7 +55,8 @@ cc_test(
     deps = [
         ":int_mod_n",
         "@boringssl//:crypto",
-        "@com_github_google_benchmark//:benchmark_main",
+        "@com_github_google_benchmark//:benchmark",
+        "@com_github_google_googletest//:gtest_main",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/types:span",
     ],
@@ -128,8 +129,9 @@ cc_test(
     tags = ["benchmark"],
     deps = [
         ":distributed_point_function",
-        "@com_github_google_benchmark//:benchmark_main",
+        "@com_github_google_benchmark//:benchmark",
         "@com_github_google_glog//:glog",
+        "@com_github_google_googletest//:gtest_main",
         "@com_github_google_highway//:hwy",
         "@com_google_absl//absl/container:btree",
         "@com_google_absl//absl/numeric:int128",
