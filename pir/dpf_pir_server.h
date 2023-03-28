@@ -120,7 +120,7 @@ class DpfPirServer : public PirServer {
   // requests, without special handling via the `HandleRequest` interface.
   using DecryptHelperRequestFn =
       std::function<crypto::tink::util::StatusOr<std::string>(
-          absl::string_view encrypted_helper_requesst,
+          absl::string_view encrypted_helper_request,
           absl::string_view encryption_context_info)>;
 
   // Protected constructor for derived classes.
