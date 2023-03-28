@@ -69,7 +69,7 @@ CuckooHashingSparseDpfPirServer::CreateLeader(
 absl::StatusOr<std::unique_ptr<CuckooHashingSparseDpfPirServer>>
 CuckooHashingSparseDpfPirServer::CreateHelper(
     CuckooHashingParams params, std::unique_ptr<Database> database,
-    std::unique_ptr<const crypto::tink::HybridDecrypt> decrypter) {
+    DecryptHelperRequestFn decrypter) {
   DPF_ASSIGN_OR_RETURN(auto helper, CreatePlain(params, std::move(database)));
   DPF_RETURN_IF_ERROR(
       helper->MakeHelper(std::move(decrypter), kEncryptionContextInfo));

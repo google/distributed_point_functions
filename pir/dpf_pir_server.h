@@ -107,6 +107,22 @@ class DpfPirServer : public PirServer {
   using ForwardHelperRequestFn = std::function<absl::StatusOr<PirResponse>(
       const PirRequest& helper_request, std::function<void()> while_waiting)>;
 
+  // Function type for the helper to decrypt the encrypted helper request. This
+  // function has the same parameter and return types as
+  // `crypto::tink::HybridDecrypt::Decrypt()`: it takes a byte array
+  // `encrypted_helper_request` storing the request ciphertext, and
+  // `encryption_context_info` that must match the context info used by the
+  // client side, and it should return the result of the decryption.
+  //
+  // The helper server stores a function object of this type because in some
+  // cases a HybridDecrypt object may have shorter lifespan than the PIR server,
+  // Using this wrapper allows the underlying HybridDecrypt to change between
+  // requests, without special handling via the `HandleRequest` interface.
+  using DecryptHelperRequestFn =
+      std::function<crypto::tink::util::StatusOr<std::string>(
+          absl::string_view encrypted_helper_requesst,
+          absl::string_view encryption_context_info)>;
+
   // Protected constructor for derived classes.
   DpfPirServer();
 
@@ -126,16 +142,15 @@ class DpfPirServer : public PirServer {
   absl::Status MakeLeader(ForwardHelperRequestFn sender);
 
   // To be called by the derived class if this server should act as a Helper.
-  // `decrypter` should point to an implementation of
-  // crypto::tink::HybridDecrypt for which the client has the public key, which
-  // is used to encrypt the helper's request. `encryption_context_info` is
-  // passed as the second argument to decrypter->Decrypt and must match the
-  // context info used on the client side.
+  // `decrypter` should be a lambda that creates a `crypto::tink::HybridDecrypt`
+  // object, for which the client has the public key, and calls `Decrypt()` on
+  // the helper's request. `encryption_context_info` is passed as the second
+  // argument to `decrypter` and must match the context info used on the client
+  // side.
   //
   // Returns INVALID_ARGUMENT if `decrypter` is NULL.
-  absl::Status MakeHelper(
-      std::unique_ptr<const crypto::tink::HybridDecrypt> decrypter,
-      absl::string_view encryption_context_info);
+  absl::Status MakeHelper(DecryptHelperRequestFn decrypter,
+                          absl::string_view encryption_context_info);
 
  private:
   struct DpfPirPlain {};
@@ -143,7 +158,7 @@ class DpfPirServer : public PirServer {
     ForwardHelperRequestFn sender;
   };
   struct DpfPirHelper {
-    std::unique_ptr<const crypto::tink::HybridDecrypt> decrypter;
+    DecryptHelperRequestFn decrypter;
     absl::string_view encryption_context_info;
   };
 

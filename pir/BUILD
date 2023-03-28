@@ -147,6 +147,7 @@ cc_test(
         "//dpf:distributed_point_function_cc_proto",
         "//dpf:xor_wrapper",
         "//dpf/internal:status_matchers",
+        "//pir/testing:encrypt_decrypt",
         "//pir/testing:mock_pir_database",
         "@com_github_google_googletest//:gtest_main",
         "@com_google_absl//absl/numeric:int128",

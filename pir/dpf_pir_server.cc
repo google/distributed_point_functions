@@ -33,9 +33,9 @@ absl::Status DpfPirServer::MakeLeader(ForwardHelperRequestFn sender) {
 }
 
 absl::Status DpfPirServer::MakeHelper(
-    std::unique_ptr<const crypto::tink::HybridDecrypt> decrypter,
+    DecryptHelperRequestFn decrypter,
     absl::string_view encryption_context_info) {
-  if (!decrypter) {
+  if (decrypter == nullptr) {
     return absl::InvalidArgumentError("`decrypter` may not be null");
   }
   role_storage_ = DpfPirHelper{std::move(decrypter), encryption_context_info};
@@ -150,12 +150,11 @@ absl::StatusOr<PirResponse> DpfPirServer::HandleHelperRequest(
   }
 
   // Decrypt the request.
-  DPF_ASSIGN_OR_RETURN(
-      std::string decrypted_request,
-      helper->decrypter->Decrypt(request.dpf_pir_request()
-                                     .encrypted_helper_request()
-                                     .encrypted_request(),
-                                 helper->encryption_context_info));
+  DPF_ASSIGN_OR_RETURN(std::string decrypted_request,
+                       helper->decrypter(request.dpf_pir_request()
+                                             .encrypted_helper_request()
+                                             .encrypted_request(),
+                                         helper->encryption_context_info));
   DpfPirRequest::HelperRequest inner_request;
   if (!inner_request.ParseFromString(decrypted_request)) {
     return absl::InvalidArgumentError(

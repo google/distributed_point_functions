@@ -99,7 +99,7 @@ class DpfPirServerTestBase : public DpfPirServer {
 
 class DpfPirServerTest : public ::testing::Test, public DpfPirServerTestBase {};
 
-TEST_F(DpfPirServerTest, MakeLeaderFailsIfDecrypterIsNull) {
+TEST_F(DpfPirServerTest, MakeLeaderFailsIfSenderIsNull) {
   EXPECT_THAT(this->MakeLeader(nullptr),
               StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("null")));
 }
@@ -122,9 +122,14 @@ TEST_F(DpfPirServerTest, MakeHelperFailsIfDecrypterIsNull) {
 
 TEST_F(DpfPirServerTest, MakeHelperSucceeds) {
   DPF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<const crypto::tink::HybridDecrypt> decrypter,
+      std::unique_ptr<const crypto::tink::HybridDecrypt> hybrid_decrypt,
       pir_testing::CreateFakeHybridDecrypt());
-  EXPECT_THAT(this->MakeHelper(std::move(decrypter), kEncryptionContextInfo),
+  auto decrypter = [&hybrid_decrypt](absl::string_view ciphertext,
+                                     absl::string_view context_info) {
+    return hybrid_decrypt->Decrypt(ciphertext, context_info);
+  };
+
+  EXPECT_THAT(this->MakeHelper(decrypter, kEncryptionContextInfo),
               StatusIs(absl::StatusCode::kOk));
   EXPECT_EQ(this->role(), Role::kHelper);
 }
@@ -133,11 +138,13 @@ class DpfPirLeaderTest : public DpfPirServerTest {
  protected:
   void SetUp() override {
     helper_ = std::make_unique<DpfPirServerTestBase>();
-    DPF_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<const crypto::tink::HybridDecrypt> decrypter,
-        pir_testing::CreateFakeHybridDecrypt());
-    DPF_ASSERT_OK(
-        helper_->MakeHelper(std::move(decrypter), kEncryptionContextInfo));
+    DPF_ASSERT_OK_AND_ASSIGN(hybrid_decrypt_,
+                             pir_testing::CreateFakeHybridDecrypt());
+    auto decrypter = [this](absl::string_view ciphertext,
+                            absl::string_view context_info) {
+      return hybrid_decrypt_->Decrypt(ciphertext, context_info);
+    };
+    DPF_ASSERT_OK(helper_->MakeHelper(decrypter, kEncryptionContextInfo));
     auto default_sender = [this](const PirRequest& request,
                                  std::function<void()> while_waiting) {
       while_waiting();
@@ -174,6 +181,7 @@ class DpfPirLeaderTest : public DpfPirServerTest {
     DPF_ASSERT_OK(this->MakeLeader(sender));
   }
 
+  std::unique_ptr<const crypto::tink::HybridDecrypt> hybrid_decrypt_;
   std::unique_ptr<DpfPirServerTestBase> helper_;
   std::unique_ptr<pir_testing::RequestGenerator> request_generator_;
 };
@@ -331,12 +339,16 @@ TEST_F(DpfPirLeaderTest, HandleRequestSucceeds) {
 class DpfPirHelperTest : public DpfPirServerTest {
  protected:
   void SetUp() override {
-    DPF_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<const crypto::tink::HybridDecrypt> decrypter,
-        pir_testing::CreateFakeHybridDecrypt());
-    DPF_ASSERT_OK(
-        this->MakeHelper(std::move(decrypter), kEncryptionContextInfo));
+    DPF_ASSERT_OK_AND_ASSIGN(hybrid_decrypt_,
+                             pir_testing::CreateFakeHybridDecrypt());
+    auto decrypter = [this](absl::string_view ciphertext,
+                            absl::string_view context_info) {
+      return hybrid_decrypt_->Decrypt(ciphertext, context_info);
+    };
+    DPF_ASSERT_OK(this->MakeHelper(decrypter, kEncryptionContextInfo));
   }
+
+  std::unique_ptr<const crypto::tink::HybridDecrypt> hybrid_decrypt_;
 };
 
 TEST_F(DpfPirHelperTest,

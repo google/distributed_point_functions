@@ -197,11 +197,15 @@ TEST_F(CuckooHashingSparseDpfPirServerTest, CreateLeaderSucceeds) {
 TEST_F(CuckooHashingSparseDpfPirServerTest, CreateHelperSucceeds) {
   SetUpDatabase();
   DPF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<const crypto::tink::HybridDecrypt> decrypter,
+      std::unique_ptr<const crypto::tink::HybridDecrypt> hybrid_decrypt,
       pir_testing::CreateFakeHybridDecrypt());
+  auto decrypter = [&hybrid_decrypt](absl::string_view ciphertext,
+                                     absl::string_view context_info) {
+    return hybrid_decrypt->Decrypt(ciphertext, context_info);
+  };
 
   EXPECT_THAT(CuckooHashingSparseDpfPirServer::CreateHelper(
-                  params_, std::move(database_), std::move(decrypter)),
+                  params_, std::move(database_), decrypter),
               IsOkAndHolds(NotNull()));
 }
 

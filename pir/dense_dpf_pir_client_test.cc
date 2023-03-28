@@ -105,14 +105,17 @@ class DenseDpfPirClientTest : public ::testing::Test {
     DPF_ASSERT_OK_AND_ASSIGN(
         auto database2,
         pir_testing::CreateFakeDatabase<DenseDpfPirDatabase>(elements));
-    DPF_ASSERT_OK_AND_ASSIGN(
-        std::unique_ptr<const crypto::tink::HybridDecrypt> decrypter,
-        CreateFakeHybridDecrypt());
+    DPF_ASSERT_OK_AND_ASSIGN(hybrid_decrypt_, CreateFakeHybridDecrypt());
+    auto decrypter = [this](absl::string_view ciphertext,
+                            absl::string_view context_info) {
+      return hybrid_decrypt_->Decrypt(ciphertext, context_info);
+    };
     DPF_ASSERT_OK_AND_ASSIGN(
         helper_, DenseDpfPirServer::CreateHelper(config, std::move(database2),
-                                                 std::move(decrypter)));
+                                                 decrypter));
   }
 
+  std::unique_ptr<const crypto::tink::HybridDecrypt> hybrid_decrypt_;
   std::unique_ptr<DenseDpfPirClient> client_;
   std::unique_ptr<DenseDpfPirServer> leader_;
   std::unique_ptr<DenseDpfPirServer> helper_;

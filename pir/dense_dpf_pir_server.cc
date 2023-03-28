@@ -39,9 +39,9 @@ DenseDpfPirServer::CreateLeader(const PirConfig& config,
 }
 
 absl::StatusOr<std::unique_ptr<DenseDpfPirServer>>
-DenseDpfPirServer::CreateHelper(
-    const PirConfig& config, std::unique_ptr<Database> database,
-    std::unique_ptr<const crypto::tink::HybridDecrypt> decrypter) {
+DenseDpfPirServer::CreateHelper(const PirConfig& config,
+                                std::unique_ptr<Database> database,
+                                DecryptHelperRequestFn decrypter) {
   DPF_ASSIGN_OR_RETURN(auto helper, CreatePlain(config, std::move(database)));
   DPF_RETURN_IF_ERROR(
       helper->MakeHelper(std::move(decrypter), kEncryptionContextInfo));

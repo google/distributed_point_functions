@@ -42,6 +42,10 @@ class CuckooHashingSparseDpfPirServer : public DpfPirServer {
   // DpfPirServer documentation for details.
   using DpfPirServer::ForwardHelperRequestFn;
 
+  // Function type for the `decrypter` argument passed to CreateHelper. See
+  // DpfPirServer documentation for details.
+  using DpfPirServer::DecryptHelperRequestFn;
+
   // Context Info passed to the decrypter when created as Helper. Should be the
   // same as used on the client for encryption.
   static inline constexpr absl::string_view kEncryptionContextInfo =
@@ -66,16 +70,18 @@ class CuckooHashingSparseDpfPirServer : public DpfPirServer {
                ForwardHelperRequestFn sender);
 
   // Creates a new DenseDpfPirServer instance with the given CuckooHashingParams
-  // and Database, acting as a Helper server. `decrypter` should point to an
-  // implementation of crypto::tink::HybridDecrypt for which the client has the
-  // public key, which is used to encrypt the helper's request. For correctness,
-  // `params` must match the parameters used to construct `database`.
+  // and Database, acting as a Helper server. `decrypter` should wrap around an
+  // implementation of crypto::tink::HybridDecrypt::Decrypt for which the client
+  // has the public key that is used to encrypt the helper's request.
+  // For correctness, `params` must match the parameters used to construct
+  // `database`.
+  // See DpfPirServer documentation for more details.
   //
   // Returns INVALID_ARGUMENT if `decrypter` or `database` is NULL, or if
   // `params` is invalid.
   static absl::StatusOr<std::unique_ptr<CuckooHashingSparseDpfPirServer>>
   CreateHelper(CuckooHashingParams params, std::unique_ptr<Database> database,
-               std::unique_ptr<const crypto::tink::HybridDecrypt> decrypter);
+               DecryptHelperRequestFn decrypter);
 
   // Creates a new DenseDpfPirServer instance with the given CuckooHashingParams
   // and Database, acting as a plain server. For correctness, `params` must

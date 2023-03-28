@@ -27,13 +27,16 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "pir/private_information_retrieval.pb.h"
+#include "pir/testing/encrypt_decrypt.h"
 #include "pir/testing/mock_pir_database.h"
 
 namespace distributed_point_functions {
 namespace {
 
+using dpf_internal::IsOkAndHolds;
 using dpf_internal::StatusIs;
 using ::testing::HasSubstr;
+using ::testing::NotNull;
 using ::testing::Return;
 using MockDenseDpfPirDatbase =
     pir_testing::MockPirDatabase<XorWrapper<absl::uint128>, std::string>;
@@ -53,6 +56,46 @@ TEST(DenseDpfPirServer, CreateSucceeds) {
       DenseDpfPirServer::CreatePlain(config, std::move(database));
 
   DPF_EXPECT_OK(server);
+}
+
+TEST(DenseDpfPirServer, CreateLeaderSucceeds) {
+  PirConfig config;
+  config.mutable_dense_dpf_pir_config()->set_num_elements(
+      kTestDatabaseElements);
+  auto database = std::make_unique<MockDenseDpfPirDatbase>();
+
+  EXPECT_CALL(*database, size()).WillOnce(Return(kTestDatabaseElements));
+
+  auto dummy_sender =
+      [](const PirRequest& request,
+         std::function<void()> while_waiting) -> absl::StatusOr<PirResponse> {
+    return absl::UnimplementedError("Dummy");
+  };
+
+  EXPECT_THAT(DenseDpfPirServer::CreateLeader(config, std::move(database),
+                                              dummy_sender),
+              IsOkAndHolds(NotNull()));
+}
+
+TEST(DenseDpfPirServer, CreateHelperSucceeds) {
+  PirConfig config;
+  config.mutable_dense_dpf_pir_config()->set_num_elements(
+      kTestDatabaseElements);
+  auto database = std::make_unique<MockDenseDpfPirDatbase>();
+
+  EXPECT_CALL(*database, size()).WillOnce(Return(kTestDatabaseElements));
+
+  DPF_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<const crypto::tink::HybridDecrypt> hybrid_decrypt,
+      pir_testing::CreateFakeHybridDecrypt());
+  auto decrypter = [&hybrid_decrypt](absl::string_view ciphertext,
+                                     absl::string_view context_info) {
+    return hybrid_decrypt->Decrypt(ciphertext, context_info);
+  };
+
+  EXPECT_THAT(
+      DenseDpfPirServer::CreateHelper(config, std::move(database), decrypter),
+      IsOkAndHolds(NotNull()));
 }
 
 TEST(DenseDpfPirServer, CreateFailsIfConfigUninitialized) {
