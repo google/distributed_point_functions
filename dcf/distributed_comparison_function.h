@@ -80,12 +80,56 @@ class DistributedComparisonFunction {
 
 // Implementation details.
 
+namespace dpf_internal {
+
+// Returns the level at which it's worth saving the evaluation context.
+// Default: always save it.
+template <typename T>
+struct EvaluationContextCutoff {
+  static constexpr int kValue = -1;
+};
+// Integer types: Informed by benchmarks.
+template <>
+struct EvaluationContextCutoff<uint8_t> {
+  static constexpr int kValue = 50;
+};
+template <>
+struct EvaluationContextCutoff<uint16_t> {
+  static constexpr int kValue = 34;
+};
+template <>
+struct EvaluationContextCutoff<uint32_t> {
+  static constexpr int kValue = 28;
+};
+template <>
+struct EvaluationContextCutoff<uint64_t> {
+  static constexpr int kValue = 24;
+};
+template <>
+struct EvaluationContextCutoff<absl::uint128> {
+  static constexpr int kValue = 22;
+};
+// XorWrapper: Same as the underlying type.
+template <typename T>
+struct EvaluationContextCutoff<XorWrapper<T>> {
+  static constexpr int kValue = EvaluationContextCutoff<T>::kValue;
+};
+
+}  // namespace dpf_internal
+
 template <typename T>
 absl::StatusOr<T> DistributedComparisonFunction::Evaluate(const DcfKey& key,
                                                           absl::uint128 x) {
   const int log_domain_size = parameters_.parameters().log_domain_size();
   T result{};
 
+  absl::StatusOr<EvaluationContext> ctx;
+  if (log_domain_size > dpf_internal::EvaluationContextCutoff<T>::kValue) {
+    ctx = dpf_->CreateEvaluationContext(key.key());
+    if (!ctx.ok()) {
+      return ctx.status();
+    }
+  }
   absl::StatusOr<std::vector<T>> dpf_evaluation;
   for (int i = 0; i < log_domain_size; ++i) {
     int current_bit = static_cast<int>(
@@ -98,8 +142,13 @@ absl::StatusOr<T> DistributedComparisonFunction::Evaluate(const DcfKey& key,
       if (log_domain_size < 128) {
         prefix = x >> (log_domain_size - i);
       }
-      dpf_evaluation =
-          dpf_->EvaluateAt<T>(key.key(), i, absl::MakeConstSpan(&prefix, 1));
+      if (log_domain_size >= dpf_internal::EvaluationContextCutoff<T>::kValue) {
+        dpf_evaluation =
+            dpf_->EvaluateAt<T>(i, absl::MakeConstSpan(&prefix, 1), *ctx);
+      } else {
+        dpf_evaluation =
+            dpf_->EvaluateAt<T>(key.key(), i, absl::MakeConstSpan(&prefix, 1));
+      }
       if (!dpf_evaluation.ok()) {
         return dpf_evaluation.status();
       }
