@@ -47,10 +47,12 @@ void BM_EvaluateDcf(benchmark::State& state) {
     benchmark::DoNotOptimize(evaluation);
   }
 }
-BENCHMARK_TEMPLATE(BM_EvaluateDcf, uint8_t)->DenseRange(2, 24, 2);
-BENCHMARK_TEMPLATE(BM_EvaluateDcf, uint16_t)->DenseRange(2, 24, 2);
-BENCHMARK_TEMPLATE(BM_EvaluateDcf, uint32_t)->DenseRange(2, 24, 2);
-BENCHMARK_TEMPLATE(BM_EvaluateDcf, uint64_t)->DenseRange(2, 24, 2);
-BENCHMARK_TEMPLATE(BM_EvaluateDcf, absl::uint128)->DenseRange(2, 24, 2);
+BENCHMARK_TEMPLATE(BM_EvaluateDcf, uint8_t)->RangeMultiplier(2)->Range(2, 64);
+BENCHMARK_TEMPLATE(BM_EvaluateDcf, uint16_t)->RangeMultiplier(2)->Range(2, 64);
+BENCHMARK_TEMPLATE(BM_EvaluateDcf, uint32_t)->RangeMultiplier(2)->Range(2, 64);
+BENCHMARK_TEMPLATE(BM_EvaluateDcf, uint64_t)->RangeMultiplier(2)->Range(2, 64);
+BENCHMARK_TEMPLATE(BM_EvaluateDcf, absl::uint128)
+    ->RangeMultiplier(2)
+    ->Range(2, 64);
 
 }  // namespace distributed_point_functions
