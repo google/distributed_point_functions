@@ -88,18 +88,21 @@ absl::StatusOr<T> DistributedComparisonFunction::Evaluate(const DcfKey& key,
 
   absl::StatusOr<std::vector<T>> dpf_evaluation;
   for (int i = 0; i < log_domain_size; ++i) {
-    HWY_ALIGN_MAX absl::uint128 prefix = 0;
-    if (log_domain_size < 128) {
-      prefix = x >> (log_domain_size - i);
-    }
-    dpf_evaluation =
-        dpf_->EvaluateAt<T>(key.key(), i, absl::MakeConstSpan(&prefix, 1));
-    if (!dpf_evaluation.ok()) {
-      return dpf_evaluation.status();
-    }
     int current_bit = static_cast<int>(
         (x & (absl::uint128{1} << (log_domain_size - i - 1))) != 0);
+    // Only evaluate the DPF when we actually need it. This leaks information
+    // about x through a timing side-channel. However, we don't protect against
+    // this anyway, and in many cases x is public.
     if (current_bit == 0) {
+      HWY_ALIGN_MAX absl::uint128 prefix = 0;
+      if (log_domain_size < 128) {
+        prefix = x >> (log_domain_size - i);
+      }
+      dpf_evaluation =
+          dpf_->EvaluateAt<T>(key.key(), i, absl::MakeConstSpan(&prefix, 1));
+      if (!dpf_evaluation.ok()) {
+        return dpf_evaluation.status();
+      }
       result += (*dpf_evaluation)[0];
     }
   }
