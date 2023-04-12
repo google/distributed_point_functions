@@ -29,14 +29,13 @@ namespace distributed_point_functions {
 
 DenseDpfPirClient::DenseDpfPirClient(
     std::unique_ptr<DistributedPointFunction> dpf,
-    std::unique_ptr<crypto::tink::HybridEncrypt> encrypter, int database_size)
+    EncryptHelperRequestFn encrypter, int database_size)
     : dpf_(std::move(dpf)),
       encrypter_(std::move(encrypter)),
       database_size_(database_size) {}
 
 absl::StatusOr<std::unique_ptr<DenseDpfPirClient>> DenseDpfPirClient::Create(
-    const PirConfig& config,
-    std::unique_ptr<crypto::tink::HybridEncrypt> encrypter) {
+    const PirConfig& config, EncryptHelperRequestFn encrypter) {
   if (config.wrapped_pir_config_case() != PirConfig::kDenseDpfPirConfig) {
     return absl::InvalidArgumentError(
         "`config` does not contain a valid DenseDpfPirConfig");
@@ -93,11 +92,10 @@ DenseDpfPirClient::CreateRequest(absl::Span<const int> query_indices) const {
                        Aes128CtrSeededPrng::GenerateSeed());
 
   // Encrypt helper_request.
-  DPF_ASSIGN_OR_RETURN(
-      *(leader_request.mutable_encrypted_helper_request()
-            ->mutable_encrypted_request()),
-      encrypter_->Encrypt(helper_request.SerializeAsString(),
-                          DenseDpfPirServer::kEncryptionContextInfo));
+  DPF_ASSIGN_OR_RETURN(*(leader_request.mutable_encrypted_helper_request()
+                             ->mutable_encrypted_request()),
+                       encrypter_(helper_request.SerializeAsString(),
+                                  DenseDpfPirServer::kEncryptionContextInfo));
 
   // Assemble result.
   std::pair<PirRequest, PirRequestPrivateKey> result;

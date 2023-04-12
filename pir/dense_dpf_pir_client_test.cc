@@ -61,11 +61,15 @@ TEST(DenseDpfPirClient, CreateFailsIfConfigNotValid) {
 TEST(DenseDpfPirClient, CreateFailsIfNumElementsIsZero) {
   PirConfig config;
   config.mutable_dense_dpf_pir_config()->set_num_elements(0);
-  DPF_ASSERT_OK_AND_ASSIGN(auto encrypter,
+  DPF_ASSERT_OK_AND_ASSIGN(auto hybrid_encrypt,
                            pir_testing::CreateFakeHybridEncrypt());
+  auto encrypter = [&hybrid_encrypt](absl::string_view plain_pir_request,
+                                     absl::string_view context_info) {
+    return hybrid_encrypt->Encrypt(plain_pir_request, context_info);
+  };
 
   EXPECT_THAT(
-      DenseDpfPirClient::Create(config, std::move(encrypter)),
+      DenseDpfPirClient::Create(config, encrypter),
       StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("positive")));
 }
 
@@ -73,9 +77,13 @@ TEST(DenseDpfPirClient, CreateSucceeds) {
   PirConfig config;
   config.mutable_dense_dpf_pir_config()->set_num_elements(
       kTestDatabaseElements);
-  DPF_ASSERT_OK_AND_ASSIGN(auto encrypter, CreateFakeHybridEncrypt());
+  DPF_ASSERT_OK_AND_ASSIGN(auto hybrid_encrypt, CreateFakeHybridEncrypt());
+  auto encrypter = [&hybrid_encrypt](absl::string_view plain_pir_request,
+                                     absl::string_view context_info) {
+    return hybrid_encrypt->Encrypt(plain_pir_request, context_info);
+  };
 
-  EXPECT_THAT(DenseDpfPirClient::Create(config, std::move(encrypter)),
+  EXPECT_THAT(DenseDpfPirClient::Create(config, encrypter),
               IsOkAndHolds(NotNull()));
 }
 
@@ -85,9 +93,14 @@ class DenseDpfPirClientTest : public ::testing::Test {
     PirConfig config;
     config.mutable_dense_dpf_pir_config()->set_num_elements(
         kTestDatabaseElements);
-    DPF_ASSERT_OK_AND_ASSIGN(auto encrypter, CreateFakeHybridEncrypt());
-    DPF_ASSERT_OK_AND_ASSIGN(
-        client_, DenseDpfPirClient::Create(config, std::move(encrypter)));
+    DPF_ASSERT_OK_AND_ASSIGN(hybrid_decrypt_, CreateFakeHybridDecrypt());
+    DPF_ASSERT_OK_AND_ASSIGN(hybrid_encrypt_, CreateFakeHybridEncrypt());
+    auto encrypter = [this](absl::string_view plain_pir_request,
+                            absl::string_view context_info) {
+      return hybrid_encrypt_->Encrypt(plain_pir_request, context_info);
+    };
+    DPF_ASSERT_OK_AND_ASSIGN(client_,
+                             DenseDpfPirClient::Create(config, encrypter));
     DPF_ASSERT_OK_AND_ASSIGN(std::vector<std::string> elements,
                              pir_testing::GenerateCountingStrings(
                                  kTestDatabaseElements, "Element "));
@@ -105,7 +118,6 @@ class DenseDpfPirClientTest : public ::testing::Test {
     DPF_ASSERT_OK_AND_ASSIGN(
         auto database2,
         pir_testing::CreateFakeDatabase<DenseDpfPirDatabase>(elements));
-    DPF_ASSERT_OK_AND_ASSIGN(hybrid_decrypt_, CreateFakeHybridDecrypt());
     auto decrypter = [this](absl::string_view ciphertext,
                             absl::string_view context_info) {
       return hybrid_decrypt_->Decrypt(ciphertext, context_info);
@@ -116,6 +128,7 @@ class DenseDpfPirClientTest : public ::testing::Test {
   }
 
   std::unique_ptr<const crypto::tink::HybridDecrypt> hybrid_decrypt_;
+  std::unique_ptr<const crypto::tink::HybridEncrypt> hybrid_encrypt_;
   std::unique_ptr<DenseDpfPirClient> client_;
   std::unique_ptr<DenseDpfPirServer> leader_;
   std::unique_ptr<DenseDpfPirServer> helper_;

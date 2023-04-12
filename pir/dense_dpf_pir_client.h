@@ -31,9 +31,31 @@ namespace distributed_point_functions {
 class DenseDpfPirClient
     : public PirClient<absl::Span<const int>, std::vector<std::string>> {
  public:
+  // Function type for the client to encrypt a PIR request to the helper.
+  // This function has the same parameter and return types as
+  // `crypto::tink::HybridEncrypt::Encrypt()`: it takes `plain_helper_request`
+  // storing the PIR request and `encryption_context_info` to be passed to the
+  // helper to correctly decrypt the encrypted PIR request, and it returns the
+  // result of the encryption.
+  //
+  // The client stores a function object of this type because in some cases a
+  // HybridEncrypt object may have to be refreshed before being invoked on a
+  // PIR request.
+  // Using this wrapper allows the underlying HybridEncrypt to change between
+  // creation of a client and a call to `CreateRequest`.
+  using EncryptHelperRequestFn =
+      std::function<crypto::tink::util::StatusOr<std::string>(
+          absl::string_view plain_helper_request,
+          absl::string_view encryption_context_info)>;
+
+  // Creates a new DenseDpfPirClient instance with the given PirConfig and
+  // an `encrypter` function that should wrap around an implementation of
+  // `crypto::tink::HybridEncrypt::Encrypt()`. See above for more details about
+  // the type of `encrypter`.
+  //
+  // Returns INVALID_ARGUMENT if `config` is invalid, or if `encrypter` is NULL.
   static absl::StatusOr<std::unique_ptr<DenseDpfPirClient>> Create(
-      const PirConfig& config,
-      std::unique_ptr<crypto::tink::HybridEncrypt> encrypter);
+      const PirConfig& config, EncryptHelperRequestFn encrypter);
 
   virtual ~DenseDpfPirClient() = default;
 
@@ -53,11 +75,10 @@ class DenseDpfPirClient
   static constexpr int kBitsPerBlock = 8 * sizeof(absl::uint128);
 
   DenseDpfPirClient(std::unique_ptr<DistributedPointFunction> dpf,
-                    std::unique_ptr<crypto::tink::HybridEncrypt> encrypter,
-                    int database_size);
+                    EncryptHelperRequestFn encrypter, int database_size);
 
   std::unique_ptr<DistributedPointFunction> dpf_;
-  std::unique_ptr<crypto::tink::HybridEncrypt> encrypter_;
+  EncryptHelperRequestFn encrypter_;
   int database_size_;
 };
 
