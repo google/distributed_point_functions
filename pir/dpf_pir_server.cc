@@ -96,8 +96,9 @@ absl::StatusOr<PirResponse> DpfPirServer::HandleLeaderRequest(
 
   // Call the sender function with the helper request and the callback. Ensure
   // that `while_waiting` is called, and check both statuses.
-  DPF_ASSIGN_OR_RETURN(PirResponse helper_response,
-                       leader->sender(helper_request, while_waiting));
+  DPF_ASSIGN_OR_RETURN(
+      PirResponse helper_response,
+      leader->sender(helper_request, std::move(while_waiting)));
   if (!has_run) {
     return absl::FailedPreconditionError(
         "HandleRequest: `while_waiting` was not called from `sender` passed at "

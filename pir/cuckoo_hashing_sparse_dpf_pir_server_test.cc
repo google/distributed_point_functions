@@ -183,9 +183,9 @@ TEST_F(CuckooHashingSparseDpfPirServerTest,
 
 TEST_F(CuckooHashingSparseDpfPirServerTest, CreateLeaderSucceeds) {
   SetUpDatabase();
-  auto dummy_sender =
-      [](const PirRequest& request,
-         std::function<void()> while_waiting) -> absl::StatusOr<PirResponse> {
+  auto dummy_sender = [](const PirRequest& request,
+                         absl::AnyInvocable<void()> while_waiting)
+      -> absl::StatusOr<PirResponse> {
     return absl::UnimplementedError("Dummy");
   };
 

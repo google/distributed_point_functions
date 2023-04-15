@@ -19,6 +19,7 @@
 
 #include <memory>
 
+#include "absl/functional/any_invocable.h"
 #include "absl/numeric/int128.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
@@ -44,9 +45,9 @@ class DenseDpfPirClient
   // Using this wrapper allows the underlying HybridEncrypt to change between
   // creation of a client and a call to `CreateRequest`.
   using EncryptHelperRequestFn =
-      std::function<crypto::tink::util::StatusOr<std::string>(
+      absl::AnyInvocable<crypto::tink::util::StatusOr<std::string>(
           absl::string_view plain_helper_request,
-          absl::string_view encryption_context_info)>;
+          absl::string_view encryption_context_info) const>;
 
   // Creates a new DenseDpfPirClient instance with the given PirConfig and
   // an `encrypter` function that should wrap around an implementation of

@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
 #include "dpf/internal/status_matchers.h"
 #include "gmock/gmock.h"
@@ -108,13 +109,13 @@ class DenseDpfPirClientTest : public ::testing::Test {
         auto database1,
         pir_testing::CreateFakeDatabase<DenseDpfPirDatabase>(elements));
     auto sender = [this](const PirRequest& helper_request,
-                         std::function<void()> while_waiting) {
+                         absl::AnyInvocable<void()> while_waiting) {
       while_waiting();
       return helper_->HandleRequest(helper_request);
     };
     DPF_ASSERT_OK_AND_ASSIGN(
-        leader_,
-        DenseDpfPirServer::CreateLeader(config, std::move(database1), sender));
+        leader_, DenseDpfPirServer::CreateLeader(config, std::move(database1),
+                                                 std::move(sender)));
     DPF_ASSERT_OK_AND_ASSIGN(
         auto database2,
         pir_testing::CreateFakeDatabase<DenseDpfPirDatabase>(elements));
@@ -124,7 +125,7 @@ class DenseDpfPirClientTest : public ::testing::Test {
     };
     DPF_ASSERT_OK_AND_ASSIGN(
         helper_, DenseDpfPirServer::CreateHelper(config, std::move(database2),
-                                                 decrypter));
+                                                 std::move(decrypter)));
   }
 
   std::unique_ptr<const crypto::tink::HybridDecrypt> hybrid_decrypt_;

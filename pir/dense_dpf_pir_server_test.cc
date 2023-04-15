@@ -66,14 +66,14 @@ TEST(DenseDpfPirServer, CreateLeaderSucceeds) {
 
   EXPECT_CALL(*database, size()).WillOnce(Return(kTestDatabaseElements));
 
-  auto dummy_sender =
-      [](const PirRequest& request,
-         std::function<void()> while_waiting) -> absl::StatusOr<PirResponse> {
+  auto dummy_sender = [](const PirRequest& request,
+                         absl::AnyInvocable<void()> while_waiting)
+      -> absl::StatusOr<PirResponse> {
     return absl::UnimplementedError("Dummy");
   };
 
   EXPECT_THAT(DenseDpfPirServer::CreateLeader(config, std::move(database),
-                                              dummy_sender),
+                                              std::move(dummy_sender)),
               IsOkAndHolds(NotNull()));
 }
 
@@ -93,9 +93,9 @@ TEST(DenseDpfPirServer, CreateHelperSucceeds) {
     return hybrid_decrypt->Decrypt(ciphertext, context_info);
   };
 
-  EXPECT_THAT(
-      DenseDpfPirServer::CreateHelper(config, std::move(database), decrypter),
-      IsOkAndHolds(NotNull()));
+  EXPECT_THAT(DenseDpfPirServer::CreateHelper(config, std::move(database),
+                                              std::move(decrypter)),
+              IsOkAndHolds(NotNull()));
 }
 
 TEST(DenseDpfPirServer, CreateFailsIfConfigUninitialized) {

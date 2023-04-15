@@ -19,6 +19,7 @@
 
 #include <memory>
 
+#include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/types/variant.h"
@@ -82,6 +83,32 @@ class DpfPirServer : public PirServer {
     kHelper,
   };
 
+  // Function type for the `sender` argument to `MakeLeader`. Takes a PirRequest
+  // to be sent to the Helper, as well as a callback that should be called while
+  // waiting for the response. The callback `while_waiting` is provided by this
+  // class, whereas the the `sender` function should be provided by the caller
+  // of `MakeLeader` (or the factory function of the derived class). Should
+  // return the result of the RPC call to the Helper's HandleRequest.
+  using ForwardHelperRequestFn = absl::AnyInvocable<absl::StatusOr<PirResponse>(
+      const PirRequest& helper_request,
+      absl::AnyInvocable<void()> while_waiting) const>;
+
+  // Function type for the helper to decrypt the encrypted helper request. This
+  // function has the same parameter and return types as
+  // `crypto::tink::HybridDecrypt::Decrypt()`: it takes a byte array
+  // `encrypted_helper_request` storing the request ciphertext, and
+  // `encryption_context_info` that must match the context info used by the
+  // client side, and it should return the result of the decryption.
+  //
+  // The helper server stores a function object of this type because in some
+  // cases a HybridDecrypt object may have shorter lifespan than the PIR server,
+  // Using this wrapper allows the underlying HybridDecrypt to change between
+  // requests, without special handling via the `HandleRequest` interface.
+  using DecryptHelperRequestFn =
+      absl::AnyInvocable<crypto::tink::util::StatusOr<std::string>(
+          absl::string_view encrypted_helper_request,
+          absl::string_view encryption_context_info) const>;
+
   // Returns this server's role.
   inline Role role() { return role_; }
 
@@ -98,31 +125,6 @@ class DpfPirServer : public PirServer {
       const PirRequest& request) const final;
 
  protected:
-  // Function type for the `sender` argument to `MakeLeader`. Takes a PirRequest
-  // to be sent to the Helper, as well as a callback that should be called while
-  // waiting for the response. The callback `while_waiting` is provided by this
-  // class, whereas the the `sender` function should be provided by the caller
-  // of `MakeLeader` (or the factory function of the derived class). Should
-  // return the result of the RPC call to the Helper's HandleRequest.
-  using ForwardHelperRequestFn = std::function<absl::StatusOr<PirResponse>(
-      const PirRequest& helper_request, std::function<void()> while_waiting)>;
-
-  // Function type for the helper to decrypt the encrypted helper request. This
-  // function has the same parameter and return types as
-  // `crypto::tink::HybridDecrypt::Decrypt()`: it takes a byte array
-  // `encrypted_helper_request` storing the request ciphertext, and
-  // `encryption_context_info` that must match the context info used by the
-  // client side, and it should return the result of the decryption.
-  //
-  // The helper server stores a function object of this type because in some
-  // cases a HybridDecrypt object may have shorter lifespan than the PIR server,
-  // Using this wrapper allows the underlying HybridDecrypt to change between
-  // requests, without special handling via the `HandleRequest` interface.
-  using DecryptHelperRequestFn =
-      std::function<crypto::tink::util::StatusOr<std::string>(
-          absl::string_view encrypted_helper_request,
-          absl::string_view encryption_context_info)>;
-
   // Protected constructor for derived classes.
   DpfPirServer();
 

@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "dpf/internal/status_matchers.h"
@@ -106,12 +107,13 @@ TEST_F(DpfPirServerTest, MakeLeaderFailsIfSenderIsNull) {
 
 TEST_F(DpfPirServerTest, MakeLeaderSucceeds) {
   ForwardHelperRequestFn dummy_sender =
-      [](const PirRequest& request,
-         std::function<void()> while_waiting) -> absl::StatusOr<PirResponse> {
+      [](const PirRequest& request, absl::AnyInvocable<void()> while_waiting)
+      -> absl::StatusOr<PirResponse> {
     return absl::UnimplementedError("Dummy");
   };
 
-  EXPECT_THAT(this->MakeLeader(dummy_sender), StatusIs(absl::StatusCode::kOk));
+  EXPECT_THAT(this->MakeLeader(std::move(dummy_sender)),
+              StatusIs(absl::StatusCode::kOk));
   EXPECT_EQ(this->role(), Role::kLeader);
 }
 
@@ -146,11 +148,11 @@ class DpfPirLeaderTest : public DpfPirServerTest {
     };
     DPF_ASSERT_OK(helper_->MakeHelper(decrypter, kEncryptionContextInfo));
     auto default_sender = [this](const PirRequest& request,
-                                 std::function<void()> while_waiting) {
+                                 absl::AnyInvocable<void()> while_waiting) {
       while_waiting();
       return helper_->HandleRequest(request);
     };
-    SetSender(default_sender);
+    SetSender(std::move(default_sender));
     DPF_ASSERT_OK_AND_ASSIGN(
         request_generator_, pir_testing::RequestGenerator::Create(
                                 kTestDatabaseElements, kEncryptionContextInfo));
@@ -178,7 +180,7 @@ class DpfPirLeaderTest : public DpfPirServerTest {
   }
 
   void SetSender(ForwardHelperRequestFn sender) {
-    DPF_ASSERT_OK(this->MakeLeader(sender));
+    DPF_ASSERT_OK(this->MakeLeader(std::move(sender)));
   }
 
   std::unique_ptr<const crypto::tink::HybridDecrypt> hybrid_decrypt_;
@@ -228,12 +230,12 @@ TEST_F(DpfPirLeaderTest, HandleRequestFailsIfProcessPlainRequestNotCalled) {
   // Dummy sender that does not actually call `while_waiting`. Create should
   // succeed, but HandleRequest should not.
   ForwardHelperRequestFn dummy_sender =
-      [this](
-          const PirRequest& request,
-          std::function<void()> while_waiting) -> absl::StatusOr<PirResponse> {
+      [this](const PirRequest& request,
+             absl::AnyInvocable<void()> while_waiting)
+      -> absl::StatusOr<PirResponse> {
     return helper_->HandleRequest(request);
   };
-  SetSender(dummy_sender);
+  SetSender(std::move(dummy_sender));
 
   // Require this to fail, to ensure the class is used correctly.
   EXPECT_THAT(this->HandleRequest(request),
@@ -251,9 +253,9 @@ TEST_F(DpfPirLeaderTest, HandleRequestFailsIfNumbersOfResponsesDontMatch) {
       request_generator_->CreateDpfPirLeaderRequest(indices));
 
   ForwardHelperRequestFn corrupted_sender =
-      [this](
-          const PirRequest& helper_request,
-          std::function<void()> while_waiting) -> absl::StatusOr<PirResponse> {
+      [this](const PirRequest& helper_request,
+             absl::AnyInvocable<void()> while_waiting)
+      -> absl::StatusOr<PirResponse> {
     while_waiting();
     DPF_ASSIGN_OR_RETURN(PirResponse helper_response,
                          helper_->HandleRequest(helper_request));
@@ -263,7 +265,7 @@ TEST_F(DpfPirLeaderTest, HandleRequestFailsIfNumbersOfResponsesDontMatch) {
         ->RemoveLast();
     return helper_response;
   };
-  SetSender(corrupted_sender);
+  SetSender(std::move(corrupted_sender));
 
   // Handle the request, and check that the internal error is caught.
   EXPECT_THAT(
@@ -282,9 +284,9 @@ TEST_F(DpfPirLeaderTest, HandleRequestFailsIfResponseSizeDoesntMatch) {
       request_generator_->CreateDpfPirLeaderRequest(indices));
 
   ForwardHelperRequestFn corrupted_sender =
-      [this](
-          const PirRequest& helper_request,
-          std::function<void()> while_waiting) -> absl::StatusOr<PirResponse> {
+      [this](const PirRequest& helper_request,
+             absl::AnyInvocable<void()> while_waiting)
+      -> absl::StatusOr<PirResponse> {
     while_waiting();
     DPF_ASSIGN_OR_RETURN(PirResponse helper_response,
                          helper_->HandleRequest(helper_request));
@@ -294,7 +296,7 @@ TEST_F(DpfPirLeaderTest, HandleRequestFailsIfResponseSizeDoesntMatch) {
         ->pop_back();
     return helper_response;
   };
-  SetSender(corrupted_sender);
+  SetSender(std::move(corrupted_sender));
 
   // Handle the request, and check that the internal error is caught.
   EXPECT_THAT(this->HandleRequest(request),
