@@ -17,8 +17,7 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_PIR_PIR_CLIENT_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_PIR_PIR_CLIENT_H_
 
-#include <memory>
-#include <vector>
+#include <utility>
 
 #include "absl/status/statusor.h"
 #include "pir/private_information_retrieval.pb.h"
