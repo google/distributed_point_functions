@@ -27,7 +27,6 @@ cc_library(
     hdrs = ["pir_client.h"],
     deps = [
         ":private_information_retrieval_cc_proto",
-        "@com_google_absl//absl/log:absl_check",
         "@com_google_absl//absl/status:statusor",
     ],
 )

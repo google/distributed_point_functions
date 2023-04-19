@@ -14,34 +14,32 @@
  * limitations under the License.
  */
 
-#ifndef DISTRIBUTED_POINT_FUNCTIONS_PIR_PIR_CLIENT_H_
-#define DISTRIBUTED_POINT_FUNCTIONS_PIR_PIR_CLIENT_H_
+#ifndef DISTRIBUTED_POINT_FUNCTIONS_PIR_TESTING_MOCK_PIR_CLIENT_H_
+#define DISTRIBUTED_POINT_FUNCTIONS_PIR_TESTING_MOCK_PIR_CLIENT_H_
 
 #include <utility>
 
 #include "absl/status/statusor.h"
+#include "gmock/gmock.h"
+#include "pir/pir_client.h"
 #include "pir/private_information_retrieval.pb.h"
 
 namespace distributed_point_functions {
+namespace pir_testing {
 
 template <typename QueryType, typename ResponseType>
-class PirClient {
+class MockPirClient : public PirClient<QueryType, ResponseType> {
  public:
-  virtual ~PirClient() = default;
+  MOCK_METHOD((absl::StatusOr<std::pair<PirRequest, PirRequestClientState>>),
+              CreateRequest, (QueryType), (const, override));
 
-  // Creates a new PIR request for the given `query`. If successful, returns the
-  // request together with the private key needed to decrypt the server's
-  // response.
-  virtual absl::StatusOr<std::pair<PirRequest, PirRequestClientState>>
-  CreateRequest(QueryType query) const = 0;
-
-  // Handles the server's `pir_response`. `request_client_state` is the
-  // per-request client state corresponding to the request sent to the server.
-  virtual absl::StatusOr<ResponseType> HandleResponse(
-      const PirResponse& pir_response,
-      const PirRequestClientState& request_client_state) const = 0;
+  MOCK_METHOD(absl::StatusOr<ResponseType>, HandleResponse,
+              (const distributed_point_functions::PirResponse&,
+               const PirRequestClientState&),
+              (const, override));
 };
 
+}  // namespace pir_testing
 }  // namespace distributed_point_functions
 
-#endif  // DISTRIBUTED_POINT_FUNCTIONS_PIR_PIR_CLIENT_H_
+#endif  // DISTRIBUTED_POINT_FUNCTIONS_PIR_TESTING_MOCK_PIR_CLIENT_H_

@@ -35,6 +35,17 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "mock_pir_client",
+    hdrs = ["mock_pir_client.h"],
+    deps = [
+        "//pir:pir_client",
+        "//pir:private_information_retrieval_cc_proto",
+        "@com_github_google_googletest//:gtest",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
 cc_test(
     name = "mock_pir_database_test",
     srcs = ["mock_pir_database_test.cc"],
