@@ -126,7 +126,6 @@
 #include "dpf/status_macros.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "tink/util/statusor.h"
 
 namespace distributed_point_functions {
 namespace dpf_internal {
@@ -139,16 +138,6 @@ template <typename T>
 inline const absl::Status& GetStatus(const absl::StatusOr<T>& status) {
   return status.status();
 }
-
-#ifndef TINK_USE_ABSL_STATUS
-// Overload GetStatus() to work with the StatusOr<T> template in tink,
-// which may not be an alias of absl::StatusOr<T>.
-template <typename T>
-inline const absl::Status& GetStatus(
-    const crypto::tink::util::StatusOr<T>& status) {
-  return static_cast<absl::StatusOr<T>>(status).status();
-}
-#endif
 
 ////////////////////////////////////////////////////////////
 // Implementation of IsOkAndHolds().

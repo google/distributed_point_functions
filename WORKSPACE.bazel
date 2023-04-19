@@ -4,10 +4,10 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # https://github.com/bazelbuild/rules_proto
 http_archive(
     name = "rules_proto",
-    sha256 = "435ae8bf6fd47062deaf147b5e570e4df90571baa8d09d71100a6e247249c8ab",
-    strip_prefix = "rules_proto-e51f588e5932966ab9e63e0b0f6de6f740cf04c4",
+    sha256 = "5bc47cecbc756b40f88ec13029864ffe582bcb2688c17587e4a23a0bd009a268",
+    strip_prefix = "rules_proto-71c4fc69900946093ac5c82d81efd19fa522d060",
     urls = [
-        "https://github.com/bazelbuild/rules_proto/archive/e51f588e5932966ab9e63e0b0f6de6f740cf04c4.zip",
+        "https://github.com/bazelbuild/rules_proto/archive/71c4fc69900946093ac5c82d81efd19fa522d060.zip",
     ],
 )
 
@@ -93,28 +93,6 @@ http_archive(
     ],
 )
 
-# gflags needed for glog.
-# https://github.com/gflags/gflags
-http_archive(
-    name = "com_github_gflags_gflags",
-    sha256 = "017e0a91531bfc45be9eaf07e4d8fed33c488b90b58509dbd2e33a33b2648ae6",
-    strip_prefix = "gflags-a738fdf9338412f83ab3f26f31ac11ed3f3ec4bd",
-    urls = [
-        "https://github.com/gflags/gflags/archive/a738fdf9338412f83ab3f26f31ac11ed3f3ec4bd.zip",
-    ],
-)
-
-# glog for logging
-# https://github.com/google/glog
-http_archive(
-    name = "com_github_google_glog",
-    sha256 = "0f91ee6cc1edc3b1c53a286382e69a37e5d172ce208b7e5b305be8770d8c21b1",
-    strip_prefix = "glog-f545ff5e7d7f3df95f6e86c8cb987d9d9d4bd481",
-    urls = [
-        "https://github.com/google/glog/archive/f545ff5e7d7f3df95f6e86c8cb987d9d9d4bd481.zip",
-    ],
-)
-
 # IREE for cc_embed_data.
 # https://github.com/google/iree
 http_archive(
@@ -173,10 +151,10 @@ http_archive(
 # Tink for hybrid encryption.
 http_archive(
     name = "tink_cc",
-    sha256 = "9083e649602b8d3605d32484a7e9606f1491c1ad01e616ae139266f4dec66854",
-    strip_prefix = "tink-27b061bb9ed1af1a6f538410bff443290e427e66/cc",
+    sha256 = "b7d2d13345fb2c6b45daeabe1be8fc8a5ba76c35b35e8b0a46d7b724febe3ad1",
+    strip_prefix = "tink-6f74b99a2bfe6677e3670799116a57268fd067fa/cc",
     urls = [
-        "https://github.com/google/tink/archive/27b061bb9ed1af1a6f538410bff443290e427e66.zip",
+        "https://github.com/google/tink/archive/6f74b99a2bfe6677e3670799116a57268fd067fa.zip",
     ],
 )
 
@@ -196,6 +174,28 @@ http_archive(
     strip_prefix = "farmhash-0d859a811870d10f53a594927d0d0b97573ad06d/src",
     urls = [
         "https://github.com/google/farmhash/archive/0d859a811870d10f53a594927d0d0b97573ad06d.zip",
+    ],
+)
+
+# gflags needed for glog.
+# https://github.com/gflags/gflags
+http_archive(
+    name = "com_github_gflags_gflags",
+    sha256 = "017e0a91531bfc45be9eaf07e4d8fed33c488b90b58509dbd2e33a33b2648ae6",
+    strip_prefix = "gflags-a738fdf9338412f83ab3f26f31ac11ed3f3ec4bd",
+    urls = [
+        "https://github.com/gflags/gflags/archive/a738fdf9338412f83ab3f26f31ac11ed3f3ec4bd.zip",
+    ],
+)
+
+# glog needed by SHELL
+# https://github.com/google/glog
+http_archive(
+    name = "com_github_google_glog",
+    sha256 = "0f91ee6cc1edc3b1c53a286382e69a37e5d172ce208b7e5b305be8770d8c21b1",
+    strip_prefix = "glog-f545ff5e7d7f3df95f6e86c8cb987d9d9d4bd481",
+    urls = [
+        "https://github.com/google/glog/archive/f545ff5e7d7f3df95f6e86c8cb987d9d9d4bd481.zip",
     ],
 )
 
