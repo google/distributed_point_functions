@@ -22,7 +22,6 @@
 #include "absl/functional/any_invocable.h"
 #include "absl/strings/string_view.h"
 #include "pir/pir_client.h"
-#include "tink/util/statusor.h"
 
 namespace distributed_point_functions {
 
@@ -41,10 +40,9 @@ class DpfPirClient : public PirClient<QueryType, ResponseType> {
   // PIR request.
   // Using this wrapper allows the underlying HybridEncrypt to change between
   // creation of a client and a call to `CreateRequest`.
-  using EncryptHelperRequestFn =
-      absl::AnyInvocable<crypto::tink::util::StatusOr<std::string>(
-          absl::string_view plain_helper_request,
-          absl::string_view encryption_context_info) const>;
+  using EncryptHelperRequestFn = absl::AnyInvocable<absl::StatusOr<std::string>(
+      absl::string_view plain_helper_request,
+      absl::string_view encryption_context_info) const>;
 
   virtual ~DpfPirClient() = default;
 };

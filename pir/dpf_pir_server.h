@@ -26,7 +26,6 @@
 #include "absl/types/variant.h"
 #include "pir/pir_server.h"
 #include "pir/private_information_retrieval.pb.h"
-#include "tink/hybrid_decrypt.h"
 
 namespace distributed_point_functions {
 
@@ -105,10 +104,9 @@ class DpfPirServer : public PirServer {
   // cases a HybridDecrypt object may have shorter lifespan than the PIR server,
   // Using this wrapper allows the underlying HybridDecrypt to change between
   // requests, without special handling via the `HandleRequest` interface.
-  using DecryptHelperRequestFn =
-      absl::AnyInvocable<crypto::tink::util::StatusOr<std::string>(
-          absl::string_view encrypted_helper_request,
-          absl::string_view encryption_context_info) const>;
+  using DecryptHelperRequestFn = absl::AnyInvocable<absl::StatusOr<std::string>(
+      absl::string_view encrypted_helper_request,
+      absl::string_view encryption_context_info) const>;
 
   // Returns this server's role.
   inline Role role() { return role_; }

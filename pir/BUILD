@@ -362,7 +362,6 @@ cc_library(
         ":pir_client",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/strings",
-        "@tink_cc//util:statusor",
     ],
 )
 
