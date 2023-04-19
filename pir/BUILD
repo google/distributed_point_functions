@@ -27,6 +27,7 @@ cc_library(
     hdrs = ["pir_client.h"],
     deps = [
         ":private_information_retrieval_cc_proto",
+        "@com_google_absl//absl/log:absl_check",
         "@com_google_absl//absl/status:statusor",
     ],
 )
@@ -65,7 +66,6 @@ cc_library(
     hdrs = ["pir_database_interface.h"],
     deps = [
         "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
     ],
 )
@@ -83,6 +83,7 @@ cc_library(
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
     ],
@@ -98,6 +99,8 @@ cc_test(
         "//pir/testing:pir_selection_bits",
         "@com_github_google_googletest//:gtest_main",
         "@com_google_absl//absl/random",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
     ],
@@ -113,9 +116,7 @@ cc_test(
         "//pir/testing:mock_pir_database",
         "//pir/testing:pir_selection_bits",
         "@com_github_google_benchmark//:benchmark",
-        "@com_github_google_googletest//:gtest",
-        "@com_google_absl//absl/random",
-        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/types:span",
     ],
 )
@@ -130,9 +131,11 @@ cc_library(
         ":private_information_retrieval_cc_proto",
         "//dpf:distributed_point_function",
         "//dpf:status_macros",
+        "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -150,7 +153,12 @@ cc_test(
         "//pir/testing:encrypt_decrypt",
         "//pir/testing:mock_pir_database",
         "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -161,7 +169,6 @@ cc_library(
     deps = [
         ":dense_dpf_pir_server",
         ":dpf_pir_client",
-        ":pir_client",
         ":private_information_retrieval_cc_proto",
         "//dpf:distributed_point_function",
         "//dpf:distributed_point_function_cc_proto",
@@ -172,8 +179,8 @@ cc_library(
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
-        "@tink_cc//:hybrid_encrypt",
     ],
 )
 
@@ -192,6 +199,9 @@ cc_test(
         "@com_github_google_googletest//:gtest_main",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -207,6 +217,7 @@ cc_library(
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:variant",
         "@tink_cc//:hybrid_decrypt",
     ],
@@ -228,7 +239,9 @@ cc_test(
         "@com_github_google_googletest//:gtest_main",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -246,10 +259,12 @@ cc_library(
         "//pir/hashing:hash_family",
         "//pir/hashing:hash_family_config",
         "@com_google_absl//absl/container:btree",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -265,7 +280,10 @@ cc_test(
         "//pir/testing:mock_pir_database",
         "//pir/testing:pir_selection_bits",
         "@com_github_google_googletest//:gtest_main",
-        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -283,8 +301,11 @@ cc_library(
         "//dpf:xor_wrapper",
         "//pir/hashing:hash_family_config_cc_proto",
         "@boringssl//:crypto",
+        "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -305,7 +326,10 @@ cc_test(
         "//pir/testing:request_generator",
         "@com_github_google_googletest//:gtest_main",
         "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
     ],
 )
 
@@ -321,8 +345,10 @@ cc_library(
         "//dpf:status_macros",
         "//pir/hashing:hash_family",
         "//pir/hashing:hash_family_config",
+        "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",
         "@com_google_absl//absl/types:span",
@@ -353,6 +379,8 @@ cc_test(
         "//pir/testing:encrypt_decrypt",
         "//pir/testing:mock_pir_database",
         "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",
         "@tink_cc//:hybrid_encrypt",

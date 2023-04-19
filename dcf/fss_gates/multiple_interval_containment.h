@@ -14,6 +14,8 @@
 
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_DCF_FSS_GATES_MULTIPLE_INTERVAL_CONTAINMENT_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_DCF_FSS_GATES_MULTIPLE_INTERVAL_CONTAINMENT_H_
+#include <memory>
+#include <utility>
 #include <vector>
 
 #include "absl/numeric/int128.h"

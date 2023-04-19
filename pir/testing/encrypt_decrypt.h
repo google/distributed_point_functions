@@ -17,6 +17,9 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_PIR_TESTING_FAKE_HYBRID_DECRYPT_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_PIR_TESTING_FAKE_HYBRID_DECRYPT_H_
 
+#include <memory>
+
+#include "absl/status/statusor.h"
 #include "tink/hybrid_decrypt.h"
 #include "tink/hybrid_encrypt.h"
 

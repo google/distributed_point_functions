@@ -39,9 +39,11 @@ cc_library(
         "//dcf/fss_gates/prng:basic_rng",
         "//dpf:distributed_point_function_cc_proto",
         "//dpf:status_macros",
+        "@com_google_absl//absl/memory",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
     ],
 )
 
@@ -72,5 +74,8 @@ cc_test(
         "//dpf/internal:value_type_helpers",
         "@com_github_google_googletest//:gtest_main",
         "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
     ],
 )

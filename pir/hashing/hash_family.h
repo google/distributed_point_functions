@@ -21,8 +21,8 @@
 #ifndef PRIVACY_PRIVATE_MEMBERSHIP_INTERNAL_HASHING_HASH_FAMILY_H_
 #define PRIVACY_PRIVATE_MEMBERSHIP_INTERNAL_HASHING_HASH_FAMILY_H_
 
-#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "absl/functional/any_invocable.h"

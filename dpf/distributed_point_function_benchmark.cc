@@ -12,12 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <algorithm>
+#include <cmath>
+#include <memory>
+#include <numeric>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "absl/container/btree_set.h"
+#include "absl/log/check.h"
 #include "absl/numeric/int128.h"
 #include "absl/random/random.h"
+#include "absl/random/uniform_int_distribution.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "absl/types/span.h"
 #include "benchmark/benchmark.h"
 #include "dpf/distributed_point_function.h"
-#include "glog/logging.h"
+#include "google/protobuf/arena.h"
 #include "hwy/aligned_allocator.h"
 
 namespace distributed_point_functions {

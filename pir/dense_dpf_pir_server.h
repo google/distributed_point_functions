@@ -18,8 +18,11 @@
 #define DISTRIBUTED_POINT_FUNCTIONS_PIR_DENSE_DPF_PIR_SERVER_H_
 
 #include <memory>
+#include <string>
 
+#include "absl/functional/any_invocable.h"
 #include "absl/numeric/int128.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "dpf/distributed_point_function.h"
 #include "pir/dpf_pir_server.h"

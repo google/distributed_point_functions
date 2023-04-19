@@ -14,11 +14,24 @@
 
 #include "dpf/distributed_point_function.h"
 
+#include <memory>
+#include <ostream>
+#include <string>
+#include <tuple>
+#include <utility>
+#include <vector>
+
+#include "absl/base/config.h"
 #include "absl/numeric/int128.h"
 #include "absl/random/random.h"
+#include "absl/random/uniform_int_distribution.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
+#include "absl/types/span.h"
 #include "absl/utility/utility.h"
 #include "dpf/distributed_point_function.pb.h"
+#include "dpf/internal/proto_validator.h"
 #include "dpf/internal/status_matchers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"

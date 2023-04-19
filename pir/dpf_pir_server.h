@@ -17,11 +17,12 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_PIR_DPF_PIR_SERVER_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_PIR_DPF_PIR_SERVER_H_
 
-#include <memory>
+#include <string>
 
 #include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "absl/types/variant.h"
 #include "pir/pir_server.h"
 #include "pir/private_information_retrieval.pb.h"

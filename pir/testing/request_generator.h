@@ -18,8 +18,11 @@
 #define DISTRIBUTED_POINT_FUNCTIONS_PIR_TESTING_REQUEST_GENERATOR_H_
 
 #include <memory>
+#include <string>
+#include <utility>
 
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "dpf/distributed_point_function.h"
 #include "pir/private_information_retrieval.pb.h"

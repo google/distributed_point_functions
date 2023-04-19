@@ -116,12 +116,16 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_DPF_UTIL_STATUS_MATCHERS_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_DPF_UTIL_STATUS_MATCHERS_H_
 
+#include <ostream>
 #include <string>
+#include <type_traits>
+#include <utility>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "dpf/status_macros.h"
 #include "gmock/gmock.h"
+#include "gtest/gtest.h"
 #include "tink/util/statusor.h"
 
 namespace distributed_point_functions {

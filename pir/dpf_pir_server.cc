@@ -14,7 +14,16 @@
 
 #include "pir/dpf_pir_server.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+
+#include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
+#include "absl/types/variant.h"
 #include "dpf/status_macros.h"
 #include "pir/prng/aes_128_ctr_seeded_prng.h"
 #include "tink/hybrid_decrypt.h"

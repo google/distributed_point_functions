@@ -14,11 +14,16 @@
 
 #include "dcf/fss_gates/multiple_interval_containment.h"
 
+#include <memory>
+#include <tuple>
 #include <utility>
+#include <vector>
 
+#include "absl/memory/memory.h"
 #include "absl/numeric/int128.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "dcf/distributed_comparison_function.h"
 #include "dcf/fss_gates/multiple_interval_containment.pb.h"
 #include "dcf/fss_gates/prng/basic_rng.h"

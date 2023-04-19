@@ -14,6 +14,7 @@
 
 #include "pir/internal/inner_product_hwy.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -21,11 +22,13 @@
 #include "absl/numeric/int128.h"
 #include "absl/random/random.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "dpf/internal/status_matchers.h"
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "hwy/aligned_allocator.h"
-#include "hwy/detect_targets.h"
 
 // clang-format off
 #define HWY_IS_TEST 1

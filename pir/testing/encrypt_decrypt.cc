@@ -14,9 +14,15 @@
 
 #include "pir/testing/encrypt_decrypt.h"
 
+#include <memory>
+#include <utility>
+
 #include "absl/base/attributes.h"
 #include "absl/base/call_once.h"
 #include "absl/log/check.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "dpf/status_macros.h"
 #include "pir/testing/data/embedded_private_key.h"
 #include "pir/testing/data/embedded_public_key.h"

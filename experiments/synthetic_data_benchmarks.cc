@@ -12,21 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <algorithm>
+#include <cmath>
+#include <memory>
+#include <string>
+#include <tuple>
+#include <utility>
+#include <vector>
+
 #include "absl/container/btree_set.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
-#include "absl/flags/usage.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
+#include "absl/numeric/int128.h"
 #include "absl/random/random.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/numbers.h"
-#include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_split.h"
+#include "absl/strings/string_view.h"
 #include "absl/time/clock.h"
+#include "absl/time/time.h"
+#include "absl/types/span.h"
 #include "benchmark/benchmark.h"  // third_party/benchmark
 #include "cppitertools/imap.hpp"
 #include "dpf/distributed_point_function.h"
 #include "dpf/distributed_point_function.pb.h"
-#include "glog/logging.h"
 #include "riegeli/bytes/fd_reader.h"
 #include "riegeli/lines/line_reading.h"
 
@@ -208,10 +220,7 @@ void RunBatchedSinglePointEvaluation(
 }  // namespace
 
 int main(int argc, char* argv[]) {
-  google::InitGoogleLogging(argv[0]);
-  absl::SetProgramUsageMessage(Usage());
   absl::ParseCommandLine(argc, argv);
-  FLAGS_logtostderr = 1;
   ValidateFlags();
 
   // Read nonzeros from input file, compute prefixes,

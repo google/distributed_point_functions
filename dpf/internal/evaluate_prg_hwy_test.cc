@@ -14,7 +14,11 @@
 
 #include "dpf/internal/evaluate_prg_hwy.h"
 
+#include <memory>
+
 #include "absl/numeric/int128.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "dpf/aes_128_fixed_key_hash.h"
 #include "dpf/internal/status_matchers.h"
 #include "gtest/gtest.h"
@@ -27,7 +31,7 @@
 #include "hwy/foreach_target.h"
 // clang-format on
 #include "hwy/highway.h"
-#include "hwy/tests/test_util-inl.h"
+#include "hwy/tests/hwy_gtest.h"
 
 HWY_BEFORE_NAMESPACE();
 namespace distributed_point_functions {

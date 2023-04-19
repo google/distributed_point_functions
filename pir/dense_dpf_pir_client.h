@@ -18,16 +18,18 @@
 #define DISTRIBUTED_POINT_FUNCTIONS_PIR_DENSE_DPF_PIR_CLIENT_H_
 
 #include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
-#include "absl/functional/any_invocable.h"
 #include "absl/numeric/int128.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "dpf/distributed_point_function.h"
 #include "pir/dense_dpf_pir_server.h"
 #include "pir/dpf_pir_client.h"
-#include "pir/pir_client.h"
-#include "tink/hybrid_encrypt.h"
+#include "pir/private_information_retrieval.pb.h"
 
 namespace distributed_point_functions {
 

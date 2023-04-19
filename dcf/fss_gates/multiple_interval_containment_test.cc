@@ -15,9 +15,14 @@
 #include "dcf/fss_gates/multiple_interval_containment.h"
 
 #include <cstdint>
+#include <memory>
+#include <tuple>
 #include <vector>
 
 #include "absl/numeric/int128.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "dcf/fss_gates/multiple_interval_containment.pb.h"
 #include "dcf/fss_gates/prng/basic_rng.h"
 #include "dpf/distributed_point_function.pb.h"

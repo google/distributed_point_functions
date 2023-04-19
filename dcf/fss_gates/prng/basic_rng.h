@@ -15,11 +15,16 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_PRNG_BASIC_RNG_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_PRNG_BASIC_RNG_H_
 
+#include <stdint.h>
+
+#include <array>
 #include <memory>
+#include <string>
 
 #include "absl/base/casts.h"
-#include "absl/memory/memory.h"
 #include "absl/numeric/int128.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "dcf/fss_gates/prng/prng.h"
 #include "openssl/rand.h"

@@ -14,6 +14,15 @@
 
 #include "dcf/distributed_comparison_function.h"
 
+#include <memory>
+#include <tuple>
+#include <utility>
+#include <vector>
+
+#include "absl/memory/memory.h"
+#include "absl/numeric/int128.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "dpf/status_macros.h"
 
 namespace distributed_point_functions {

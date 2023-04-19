@@ -15,6 +15,11 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_PRNG_PRNG_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_PRNG_PRNG_H_
 
+#include <stdint.h>
+
+#include <memory>
+#include <string>
+
 #include "absl/numeric/int128.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"

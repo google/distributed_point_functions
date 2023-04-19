@@ -18,7 +18,6 @@
 #define DISTRIBUTED_POINT_FUNCTIONS_PIR_HASHING_HASH_FAMILY_CONFIG_H_
 
 #include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
 #include "pir/hashing/hash_family.h"
 #include "pir/hashing/hash_family_config.pb.h"
 

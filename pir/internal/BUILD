@@ -27,7 +27,9 @@ cc_library(
     deps = [
         "//dpf:xor_wrapper",
         "@com_github_google_highway//:hwy",
+        "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
@@ -46,7 +48,9 @@ cc_test(
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/random",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -59,7 +63,9 @@ cc_library(
     deps = [
         "//dpf:xor_wrapper",
         "@com_github_google_highway//:hwy",
+        "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
@@ -79,6 +85,8 @@ cc_test(
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/random",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
     ],
 )

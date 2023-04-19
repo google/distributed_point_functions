@@ -17,9 +17,10 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_PIR_TESTING_MOCK_PIR_DATABASE_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_PIR_TESTING_MOCK_PIR_DATABASE_H_
 
+#include <stddef.h>
+
 #include <memory>
 #include <string>
-#include <type_traits>
 #include <vector>
 
 #include "absl/status/statusor.h"

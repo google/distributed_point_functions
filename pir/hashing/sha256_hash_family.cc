@@ -14,8 +14,13 @@
 
 #include "pir/hashing/sha256_hash_family.h"
 
-#include <algorithm>
+#include <stdint.h>
 
+#include <algorithm>
+#include <cstring>
+
+#include "absl/numeric/int128.h"
+#include "absl/strings/string_view.h"
 #include "openssl/sha.h"
 
 namespace distributed_point_functions {

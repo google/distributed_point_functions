@@ -18,9 +18,14 @@
 #define DISTRIBUTED_POINT_FUNCTIONS_DCF_DISTRIBUTED_COMPARISON_FUNCTION_H_
 
 #include <memory>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 #include "absl/meta/type_traits.h"
+#include "absl/numeric/int128.h"
 #include "absl/status/statusor.h"
+#include "absl/types/span.h"
 #include "dcf/distributed_comparison_function.pb.h"
 #include "dpf/distributed_point_function.h"
 #include "dpf/distributed_point_function.pb.h"

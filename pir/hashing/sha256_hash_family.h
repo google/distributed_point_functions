@@ -17,6 +17,7 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_PIR_HASHING_SHA256_HASH_FAMILY_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_PIR_HASHING_SHA256_HASH_FAMILY_H_
 
+#include "absl/strings/string_view.h"
 #include "openssl/sha.h"
 #include "pir/hashing/hash_family.h"
 

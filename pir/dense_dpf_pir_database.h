@@ -17,11 +17,17 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_PIR_DENSE_DPF_PIR_DATABASE_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_PIR_DENSE_DPF_PIR_DATABASE_H_
 
+#include <stddef.h>
+
 #include <cstdint>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "absl/numeric/int128.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "dpf/xor_wrapper.h"

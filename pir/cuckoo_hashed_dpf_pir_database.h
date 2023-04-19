@@ -20,12 +20,13 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "absl/container/btree_map.h"
-#include "absl/status/status.h"
+#include "absl/numeric/int128.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "dpf/xor_wrapper.h"
 #include "pir/pir_database_interface.h"
 #include "pir/private_information_retrieval.pb.h"

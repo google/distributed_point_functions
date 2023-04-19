@@ -19,6 +19,7 @@
 
 #include <utility>
 
+#include "absl/log/absl_check.h"
 #include "absl/status/statusor.h"
 #include "pir/private_information_retrieval.pb.h"
 

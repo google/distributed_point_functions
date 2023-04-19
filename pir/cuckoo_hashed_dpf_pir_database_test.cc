@@ -14,11 +14,19 @@
 
 #include "pir/cuckoo_hashed_dpf_pir_database.h"
 
+#include <stddef.h>
+
+#include <algorithm>
 #include <memory>
 #include <string>
+#include <tuple>
+#include <utility>
 #include <vector>
 
-#include "absl/strings/string_view.h"
+#include "absl/numeric/int128.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/types/span.h"
 #include "dpf/internal/status_matchers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"

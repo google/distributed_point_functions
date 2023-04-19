@@ -12,8 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <memory>
+#include <tuple>
+
 #include "absl/numeric/int128.h"
 #include "absl/random/random.h"
+#include "absl/status/statusor.h"
 #include "benchmark/benchmark.h"
 #include "dcf/distributed_comparison_function.h"
 #include "dcf/distributed_comparison_function.pb.h"

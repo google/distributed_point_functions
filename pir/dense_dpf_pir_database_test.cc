@@ -14,12 +14,17 @@
 
 #include "pir/dense_dpf_pir_database.h"
 
+#include <stddef.h>
+
 #include <memory>
 #include <string>
-#include <utility>
+#include <tuple>
+#include <type_traits>
 #include <vector>
 
 #include "absl/random/random.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "dpf/internal/status_matchers.h"

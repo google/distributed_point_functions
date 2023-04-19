@@ -32,8 +32,12 @@ cc_library(
         "//dpf:distributed_point_function_cc_proto",
         "//dpf:status_macros",
         "@com_github_google_highway//:hwy",
+        "@com_google_absl//absl/memory",
         "@com_google_absl//absl/meta:type_traits",
+        "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -57,7 +61,11 @@ cc_test(
         ":distributed_comparison_function",
         "//dpf/internal:status_matchers",
         "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/random",
+        "@com_google_absl//absl/random:distributions",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/utility",
     ],
 )
@@ -76,5 +84,6 @@ cc_test(
         "@com_github_google_googletest//:gtest_main",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/random",
+        "@com_google_absl//absl/status:statusor",
     ],
 )

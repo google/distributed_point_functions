@@ -17,14 +17,31 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_DPF_INTERNAL_VALUE_TYPE_HELPERS_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_DPF_INTERNAL_VALUE_TYPE_HELPERS_H_
 
+#include <stdint.h>
+
+#include <algorithm>
+#include <array>
+#include <limits>
+#include <string>
+#include <tuple>
+#include <type_traits>
+#include <vector>
+
+#include "absl/base/config.h"
+#include "absl/log/check.h"
 #include "absl/meta/type_traits.h"
 #include "absl/numeric/int128.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
+#include "absl/strings/string_view.h"
 #include "absl/utility/utility.h"
 #include "dpf/distributed_point_function.pb.h"
 #include "dpf/int_mod_n.h"
 #include "dpf/tuple.h"
 #include "dpf/xor_wrapper.h"
+#include "google/protobuf/repeated_field.h"
 
 // Contains a collection of helper functions for different DPF value types. This
 // includes functions for converting between Value protos and the corresponding

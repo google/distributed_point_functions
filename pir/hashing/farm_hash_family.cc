@@ -14,6 +14,11 @@
 
 #include "pir/hashing/farm_hash_family.h"
 
+#include <utility>
+
+#include "absl/numeric/int128.h"
+#include "absl/strings/string_view.h"
+
 namespace distributed_point_functions {
 
 int FarmHashFunction::operator()(absl::string_view input,

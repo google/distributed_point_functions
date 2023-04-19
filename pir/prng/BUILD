@@ -26,7 +26,7 @@ cc_library(
     hdrs = ["aes_128_ctr_seeded_prng.h"],
     deps = [
         "@boringssl//:crypto",
-        "@com_google_absl//absl/base:config",
+        "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
@@ -42,5 +42,7 @@ cc_test(
         "@boringssl//:crypto",
         "@com_github_google_benchmark//:benchmark",
         "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
     ],
 )

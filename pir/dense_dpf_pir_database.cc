@@ -14,16 +14,20 @@
 
 #include "pir/dense_dpf_pir_database.h"
 
+#include <stddef.h>
+
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <string>
-#include <tuple>
+#include <utility>
 #include <vector>
 
 #include "absl/memory/memory.h"
+#include "absl/numeric/int128.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "dpf/status_macros.h"
 #include "pir/internal/inner_product_hwy.h"
 

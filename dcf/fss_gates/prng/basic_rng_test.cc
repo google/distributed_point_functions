@@ -14,9 +14,17 @@
 
 #include "dcf/fss_gates/prng/basic_rng.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "absl/numeric/int128.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "dpf/internal/status_matchers.h"
-#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
 namespace distributed_point_functions {

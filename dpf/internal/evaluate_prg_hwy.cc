@@ -14,15 +14,20 @@
 
 #include "dpf/internal/evaluate_prg_hwy.h"
 
+#include <algorithm>
 #include <cstdint>
-#include <limits>
+#include <memory>
+#include <vector>
 
 #include "absl/base/config.h"
 #include "absl/base/optimization.h"
+#include "absl/container/inlined_vector.h"
+#include "absl/log/check.h"
 #include "absl/numeric/int128.h"
 #include "absl/status/status.h"
+#include "absl/types/span.h"
+#include "dpf/aes_128_fixed_key_hash.h"
 #include "dpf/status_macros.h"
-#include "glog/logging.h"
 #include "hwy/aligned_allocator.h"
 #include "openssl/aes.h"
 

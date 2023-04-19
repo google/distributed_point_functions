@@ -17,10 +17,12 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_PIR_PIR_DATABASE_INTERFACE_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_PIR_PIR_DATABASE_INTERFACE_H_
 
+#include <stddef.h>
+
 #include <memory>
+#include <vector>
 
 #include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 
 namespace distributed_point_functions {

@@ -38,8 +38,9 @@ cc_library(
         ":prng",
         "@boringssl//:crypto",
         "@com_google_absl//absl/base",
-        "@com_google_absl//absl/memory",
         "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -52,5 +53,7 @@ cc_test(
         "//dpf/internal:status_matchers",
         "@com_github_google_googletest//:gtest_main",
         "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
     ],
 )

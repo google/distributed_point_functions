@@ -17,22 +17,31 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_DPF_DISTRIBUTED_POINT_FUNCTION_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_DPF_DISTRIBUTED_POINT_FUNCTION_H_
 
+#include <algorithm>
+#include <array>
 #include <memory>
+#include <string>
+#include <tuple>
 #include <type_traits>
+#include <utility>
+#include <vector>
 
 #include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/inlined_vector.h"
+#include "absl/log/check.h"
 #include "absl/meta/type_traits.h"
 #include "absl/numeric/int128.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "dpf/aes_128_fixed_key_hash.h"
 #include "dpf/distributed_point_function.pb.h"
 #include "dpf/internal/proto_validator.h"
 #include "dpf/internal/value_type_helpers.h"
-#include "glog/logging.h"
 #include "hwy/aligned_allocator.h"
 #include "openssl/cipher.h"
 

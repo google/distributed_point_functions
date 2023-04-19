@@ -14,10 +14,17 @@
 
 #include "pir/cuckoo_hashing_sparse_dpf_pir_server.h"
 
+#include <cmath>
+#include <memory>
+#include <new>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/memory/memory.h"
+#include "absl/numeric/int128.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "dpf/distributed_point_function.pb.h"
 #include "dpf/status_macros.h"
 #include "openssl/rand.h"

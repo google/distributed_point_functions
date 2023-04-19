@@ -17,9 +17,10 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_DPF_INTERNAL_EXPAND_SEEDS_HWY_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_DPF_INTERNAL_EXPAND_SEEDS_HWY_H_
 
+#include <stdint.h>
+
 #include "absl/numeric/int128.h"
 #include "absl/status/status.h"
-#include "absl/types/span.h"
 #include "dpf/aes_128_fixed_key_hash.h"
 
 namespace distributed_point_functions {

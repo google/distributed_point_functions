@@ -17,9 +17,13 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_PIR_TESTING_PIR_SELECTION_BITS_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_PIR_TESTING_PIR_SELECTION_BITS_H_
 
-#include <limits>
+#include <string>
+#include <vector>
 
+#include "absl/numeric/int128.h"
 #include "absl/random/random.h"
+#include "absl/status/statusor.h"
+#include "absl/types/span.h"
 #include "pir/dense_dpf_pir_database.h"
 
 namespace distributed_point_functions {

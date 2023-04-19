@@ -16,7 +16,16 @@
 
 #include "dpf/aes_128_fixed_key_hash.h"
 
-#include <vector>
+#include <stdint.h>
+
+#include <algorithm>
+#include <array>
+#include <utility>
+
+#include "absl/numeric/int128.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/types/span.h"
 
 namespace distributed_point_functions {
 

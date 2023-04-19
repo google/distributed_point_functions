@@ -31,10 +31,14 @@ cc_library(
     deps = [
         ":hash_family",
         "//dpf:status_macros",
-        "@com_google_absl//absl/random",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/random:distributions",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -65,8 +69,11 @@ cc_library(
     deps = [
         ":hash_family",
         "//dpf:status_macros",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",
     ],
 )
@@ -82,9 +89,13 @@ cc_library(
     deps = [
         ":hash_family",
         "//dpf:status_macros",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -101,7 +112,9 @@ cc_test(
         "//dpf/internal:status_matchers",
         "@com_github_google_benchmark//:benchmark",
         "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -116,7 +129,9 @@ cc_test(
         ":hash_family",
         "//dpf/internal:status_matchers",
         "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -135,6 +150,8 @@ cc_test(
         "@com_github_google_benchmark//:benchmark",
         "@com_github_google_googletest//:gtest_main",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
     ],
 )
 
@@ -152,6 +169,7 @@ cc_test(
         "@com_github_google_benchmark//:benchmark",
         "@com_github_google_googletest//:gtest_main",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -163,6 +181,8 @@ cc_library(
     deps = [
         ":hash_family",
         "@boringssl//:crypto",
+        "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/strings",
     ],
 )
 
@@ -174,6 +194,7 @@ cc_test(
         "@com_github_google_benchmark//:benchmark",
         "@com_github_google_googletest//:gtest_main",
         "@com_github_google_shell-encryption//shell_encryption:int256",
+        "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -185,6 +206,7 @@ cc_library(
     deps = [
         ":hash_family",
         "@com_github_google_farmhash//:farmhash",
+        "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -197,6 +219,7 @@ cc_test(
         "@com_github_google_benchmark//:benchmark",
         "@com_github_google_farmhash//:farmhash",
         "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/strings",
     ],
@@ -220,8 +243,8 @@ cc_library(
         ":hash_family",
         ":hash_family_config_cc_proto",
         ":sha256_hash_family",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
     ],
 )
 
@@ -235,5 +258,9 @@ cc_test(
         ":sha256_hash_family",
         "//dpf/internal:status_matchers",
         "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
     ],
 )

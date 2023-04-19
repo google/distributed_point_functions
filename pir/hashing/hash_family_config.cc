@@ -14,6 +14,11 @@
 
 #include "pir/hashing/hash_family_config.h"
 
+#include <string>
+#include <utility>
+
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "pir/hashing/hash_family.h"
 #include "pir/hashing/sha256_hash_family.h"
 

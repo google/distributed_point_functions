@@ -27,12 +27,15 @@ cc_library(
     srcs = ["int_mod_n.cc"],
     hdrs = ["int_mod_n.h"],
     deps = [
-        "@com_github_google_glog//:glog",
+        "@com_google_absl//absl/base:config",
         "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -43,8 +46,11 @@ cc_test(
         ":int_mod_n",
         "//dpf/internal:status_matchers",
         "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/base:config",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/types:span",
     ],
 )
@@ -57,7 +63,8 @@ cc_test(
         "@boringssl//:crypto",
         "@com_github_google_benchmark//:benchmark",
         "@com_github_google_googletest//:gtest_main",
-        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
     ],
 )
@@ -75,16 +82,20 @@ cc_library(
         "//dpf/internal:proto_validator",
         "//dpf/internal:value_type_helpers",
         "@boringssl//:crypto",
-        "@com_github_google_glog//:glog",
         "@com_github_google_highway//:hwy",
         "@com_google_absl//absl/container:btree",
         "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/memory",
         "@com_google_absl//absl/meta:type_traits",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/types:span",
         "@com_google_protobuf//:protobuf",
     ],
 )
@@ -96,11 +107,17 @@ cc_test(
     deps = [
         ":distributed_point_function",
         ":distributed_point_function_cc_proto",
+        "//dpf/internal:proto_validator",
         "//dpf/internal:status_matchers",
         "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/base:config",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/random",
+        "@com_google_absl//absl/random:distributions",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/types:span",
         "@com_google_absl//absl/utility",
     ],
 )
@@ -130,12 +147,18 @@ cc_test(
     deps = [
         ":distributed_point_function",
         "@com_github_google_benchmark//:benchmark",
-        "@com_github_google_glog//:glog",
         "@com_github_google_googletest//:gtest_main",
         "@com_github_google_highway//:hwy",
         "@com_google_absl//absl/container:btree",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/random",
+        "@com_google_absl//absl/random:distributions",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+        "@com_google_protobuf//:protobuf",
     ],
 )
 
@@ -153,6 +176,7 @@ cc_library(
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -163,15 +187,16 @@ cc_test(
         ":aes_128_fixed_key_hash",
         "//dpf/internal:status_matchers",
         "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
 cc_library(
     name = "tuple",
     hdrs = ["tuple.h"],
-    deps = [
-        ":distributed_point_function_cc_proto",
-    ],
 )
 
 cc_test(

@@ -14,10 +14,15 @@
 
 #include "pir/testing/mock_pir_database.h"
 
+#include <stdint.h>
+
+#include <string>
 #include <vector>
 
 #include "absl/random/random.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "openssl/rand.h"

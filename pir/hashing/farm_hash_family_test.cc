@@ -14,9 +14,10 @@
 
 #include "pir/hashing/farm_hash_family.h"
 
+#include "absl/functional/any_invocable.h"
 #include "absl/numeric/int128.h"
 #include "absl/strings/string_view.h"
-#include "benchmark/benchmark.h"
+#include "benchmark/benchmark.h"  // third_party/benchmark
 #include "farmhash/farmhash.h"
 #include "gtest/gtest.h"
 

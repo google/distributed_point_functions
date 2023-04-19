@@ -14,13 +14,31 @@
 
 #include "dpf/distributed_point_function.h"
 
-#include <limits>
+#include <algorithm>
+#include <array>
+#include <memory>
+#include <numeric>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include "absl/container/btree_map.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/inlined_vector.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
+#include "absl/memory/memory.h"
+#include "absl/numeric/int128.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "dpf/internal/evaluate_prg_hwy.h"
 #include "dpf/internal/get_hwy_mode.h"
+#include "dpf/internal/proto_validator.h"
+#include "dpf/internal/value_type_helpers.h"
 #include "dpf/status_macros.h"
-#include "glog/logging.h"
 #include "google/protobuf/io/zero_copy_stream_impl_lite.h"
 #include "hwy/aligned_allocator.h"
 #include "openssl/rand.h"

@@ -14,10 +14,26 @@
 
 #include "dpf/internal/proto_validator.h"
 
+#include <algorithm>
+#include <cmath>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "absl/container/flat_hash_map.h"
+#include "absl/log/check.h"
+#include "absl/memory/memory.h"
+#include "absl/numeric/int128.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
+#include "absl/types/span.h"
+#include "dpf/distributed_point_function.pb.h"
 #include "dpf/internal/value_type_helpers.h"
 #include "dpf/status_macros.h"
+#include "google/protobuf/repeated_field.h"
 
 namespace distributed_point_functions {
 namespace dpf_internal {

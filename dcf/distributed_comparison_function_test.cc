@@ -14,7 +14,15 @@
 
 #include "dcf/distributed_comparison_function.h"
 
+#include <memory>
+#include <tuple>
+#include <vector>
+
+#include "absl/numeric/int128.h"
 #include "absl/random/random.h"
+#include "absl/random/uniform_int_distribution.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/utility/utility.h"
 #include "dpf/internal/status_matchers.h"
 #include "gmock/gmock.h"

@@ -14,7 +14,13 @@
 
 #include "pir/hashing/sha256_hash_family.h"
 
+#include <stdint.h>
+
+#include <string>
+
+#include "absl/functional/any_invocable.h"
 #include "absl/strings/escaping.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "benchmark/benchmark.h"
 #include "gtest/gtest.h"

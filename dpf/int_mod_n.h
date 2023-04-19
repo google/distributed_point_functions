@@ -17,13 +17,19 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_DPF_INTERNAL_INT_MOD_N_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_DPF_INTERNAL_INT_MOD_N_H_
 
+#include <algorithm>
+#include <string>
+#include <type_traits>
+
+#include "absl/base/config.h"
 #include "absl/container/inlined_vector.h"
+#include "absl/log/check.h"
 #include "absl/numeric/int128.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
-#include "absl/strings/str_format.h"
-#include "glog/logging.h"
+#include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 
 namespace distributed_point_functions {
 

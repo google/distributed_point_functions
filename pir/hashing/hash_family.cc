@@ -14,12 +14,13 @@
 
 #include "pir/hashing/hash_family.h"
 
-#include <memory>
 #include <string>
 #include <vector>
 
+#include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 
 namespace distributed_point_functions {
 

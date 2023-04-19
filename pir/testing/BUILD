@@ -44,6 +44,8 @@ cc_test(
         "//pir:dense_dpf_pir_database",
         "@com_github_google_googletest//:gtest_main",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -53,7 +55,11 @@ cc_library(
     hdrs = ["pir_selection_bits.h"],
     deps = [
         "//pir:dense_dpf_pir_database",
+        "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/random",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -65,6 +71,9 @@ cc_test(
         "//dpf/internal:status_matchers",
         "//pir:dense_dpf_pir_database",
         "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -79,6 +88,9 @@ cc_library(
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@tink_cc//:cleartext_keyset_handle",
         "@tink_cc//:hybrid_decrypt",
         "@tink_cc//:json_keyset_reader",
@@ -95,6 +107,7 @@ cc_test(
         ":encrypt_decrypt",
         "//dpf/internal:status_matchers",
         "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -111,8 +124,10 @@ cc_library(
         "//pir:private_information_retrieval_cc_proto",
         "//pir/prng:aes_128_ctr_seeded_prng",
         "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
     ],
 )
@@ -127,6 +142,10 @@ cc_test(
         "//dpf/internal:status_matchers",
         "//pir:private_information_retrieval_cc_proto",
         "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
     ],
 )

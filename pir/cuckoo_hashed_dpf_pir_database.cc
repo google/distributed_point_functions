@@ -14,12 +14,21 @@
 
 #include "pir/cuckoo_hashed_dpf_pir_database.h"
 
+#include <stdint.h>
+
 #include <cstddef>
 #include <memory>
+#include <string>
 #include <utility>
+#include <vector>
 
+#include "absl/container/btree_map.h"
+#include "absl/memory/memory.h"
+#include "absl/numeric/int128.h"
 #include "absl/status/status.h"
-#include "absl/strings/string_view.h"
+#include "absl/status/statusor.h"
+#include "absl/types/optional.h"
+#include "absl/types/span.h"
 #include "dpf/status_macros.h"
 #include "pir/dense_dpf_pir_database.h"
 #include "pir/hashing/cuckoo_hash_table.h"

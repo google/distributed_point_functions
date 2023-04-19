@@ -17,6 +17,9 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_PIR_INTERNAL_INNER_PRODUCT_HWY_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_PIR_INTERNAL_INNER_PRODUCT_HWY_H_
 
+#include <stdint.h>
+
+#include <string>
 #include <vector>
 
 #include "absl/numeric/int128.h"

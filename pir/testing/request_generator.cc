@@ -14,8 +14,18 @@
 
 #include "pir/testing/request_generator.h"
 
+#include <cmath>
+#include <memory>
+#include <string>
+#include <tuple>
+#include <utility>
+
 #include "absl/memory/memory.h"
+#include "absl/numeric/int128.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "dpf/distributed_point_function.h"
 #include "dpf/distributed_point_function.pb.h"
 #include "dpf/status_macros.h"

@@ -17,6 +17,13 @@
 #ifndef DISTRIBUTED_POINT_FUNCTIONS_PIR_PRNG_AES_128_CTR_SEEDED_PRNG_H_
 #define DISTRIBUTED_POINT_FUNCTIONS_PIR_PRNG_AES_128_CTR_SEEDED_PRNG_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "openssl/aes.h"

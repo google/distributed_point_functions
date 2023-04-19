@@ -14,6 +14,12 @@
 
 #include "pir/testing/pir_selection_bits.h"
 
+#include <string>
+#include <vector>
+
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/types/span.h"
 #include "dpf/internal/status_matchers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"

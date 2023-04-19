@@ -19,7 +19,11 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
+#include "absl/functional/any_invocable.h"
+#include "absl/numeric/int128.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "dpf/distributed_point_function.h"
 #include "dpf/xor_wrapper.h"
