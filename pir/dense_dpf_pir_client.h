@@ -24,62 +24,60 @@
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "dpf/distributed_point_function.h"
+#include "pir/dense_dpf_pir_server.h"
+#include "pir/dpf_pir_client.h"
 #include "pir/pir_client.h"
 #include "tink/hybrid_encrypt.h"
 
 namespace distributed_point_functions {
 
 class DenseDpfPirClient
-    : public PirClient<absl::Span<const int>, std::vector<std::string>> {
+    : public DpfPirClient<absl::Span<const int>, std::vector<std::string>> {
  public:
-  // Function type for the client to encrypt a PIR request to the helper.
-  // This function has the same parameter and return types as
-  // `crypto::tink::HybridEncrypt::Encrypt()`: it takes `plain_helper_request`
-  // storing the PIR request and `encryption_context_info` to be passed to the
-  // helper to correctly decrypt the encrypted PIR request, and it returns the
-  // result of the encryption.
-  //
-  // The client stores a function object of this type because in some cases a
-  // HybridEncrypt object may have to be refreshed before being invoked on a
-  // PIR request.
-  // Using this wrapper allows the underlying HybridEncrypt to change between
-  // creation of a client and a call to `CreateRequest`.
-  using EncryptHelperRequestFn =
-      absl::AnyInvocable<crypto::tink::util::StatusOr<std::string>(
-          absl::string_view plain_helper_request,
-          absl::string_view encryption_context_info) const>;
-
   // Creates a new DenseDpfPirClient instance with the given PirConfig and
   // an `encrypter` function that should wrap around an implementation of
-  // `crypto::tink::HybridEncrypt::Encrypt()`. See above for more details about
-  // the type of `encrypter`.
+  // `crypto::tink::HybridEncrypt::Encrypt()`. See the documentation of
+  // DpfPirClient for more details about the type of `encrypter`.
   //
   // Returns INVALID_ARGUMENT if `config` is invalid, or if `encrypter` is NULL.
   static absl::StatusOr<std::unique_ptr<DenseDpfPirClient>> Create(
-      const PirConfig& config, EncryptHelperRequestFn encrypter);
+      const PirConfig& config, EncryptHelperRequestFn encrypter,
+      absl::string_view encryption_context_info =
+          DenseDpfPirServer::kEncryptionContextInfo);
 
   virtual ~DenseDpfPirClient() = default;
 
   // Creates a new PIR request for the given `query_indices`. If successful,
   // returns the request together with the private key needed to decrypt the
   // server's response.
-  virtual absl::StatusOr<std::pair<PirRequest, PirRequestPrivateKey>>
+  //
+  // Returns INVALID_ARGUMENT if any element of `query_indices` is negative, or
+  // out of bounds for the database specified in the config passed at
+  // construction.
+  virtual absl::StatusOr<std::pair<PirRequest, PirRequestClientState>>
   CreateRequest(absl::Span<const int> query_indices) const override;
 
-  // Handles the server's `pir_response`. `decryption_key` is the per-request
-  // key corresponding to the request sent to the server.
+  // Handles the server's `pir_response`. `request_client_state` is the
+  // per-request client state corresponding to the request sent to the server.
+  //
+  // For each query index passed to the corresponding `CreateRequest` call,
+  // returns the database value at that index. The returned values will be
+  // padded with null bytes to the size of the largest database entry. Returns
+  // INVALID_ARGUMENT if either the response or the client state is invalid.
   virtual absl::StatusOr<std::vector<std::string>> HandleResponse(
       const PirResponse& pir_response,
-      const PirRequestPrivateKey& decryption_key) const override;
+      const PirRequestClientState& request_client_state) const override;
 
  private:
   static constexpr int kBitsPerBlock = 8 * sizeof(absl::uint128);
 
   DenseDpfPirClient(std::unique_ptr<DistributedPointFunction> dpf,
-                    EncryptHelperRequestFn encrypter, int database_size);
+                    EncryptHelperRequestFn encrypter,
+                    std::string encryption_context_info, int database_size);
 
   std::unique_ptr<DistributedPointFunction> dpf_;
   EncryptHelperRequestFn encrypter_;
+  std::string encryption_context_info_;
   int database_size_;
 };
 

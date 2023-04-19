@@ -15,6 +15,7 @@
 #include "pir/dense_dpf_pir_client.h"
 
 #include <string>
+#include <vector>
 
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
@@ -29,13 +30,16 @@ namespace distributed_point_functions {
 
 DenseDpfPirClient::DenseDpfPirClient(
     std::unique_ptr<DistributedPointFunction> dpf,
-    EncryptHelperRequestFn encrypter, int database_size)
+    EncryptHelperRequestFn encrypter, std::string encryption_context_info,
+    int database_size)
     : dpf_(std::move(dpf)),
       encrypter_(std::move(encrypter)),
+      encryption_context_info_(std::move(encryption_context_info)),
       database_size_(database_size) {}
 
 absl::StatusOr<std::unique_ptr<DenseDpfPirClient>> DenseDpfPirClient::Create(
-    const PirConfig& config, EncryptHelperRequestFn encrypter) {
+    const PirConfig& config, EncryptHelperRequestFn encrypter,
+    absl::string_view encryption_context_info) {
   if (config.wrapped_pir_config_case() != PirConfig::kDenseDpfPirConfig) {
     return absl::InvalidArgumentError(
         "`config` does not contain a valid DenseDpfPirConfig");
@@ -56,10 +60,11 @@ absl::StatusOr<std::unique_ptr<DenseDpfPirClient>> DenseDpfPirClient::Create(
 
   return absl::WrapUnique(
       new DenseDpfPirClient(std::move(dpf), std::move(encrypter),
+                            std::string(encryption_context_info),
                             config.dense_dpf_pir_config().num_elements()));
 }
 
-absl::StatusOr<std::pair<PirRequest, PirRequestPrivateKey>>
+absl::StatusOr<std::pair<PirRequest, PirRequestClientState>>
 DenseDpfPirClient::CreateRequest(absl::Span<const int> query_indices) const {
   for (const int query : query_indices) {
     if (query < 0) {
@@ -92,46 +97,47 @@ DenseDpfPirClient::CreateRequest(absl::Span<const int> query_indices) const {
                        Aes128CtrSeededPrng::GenerateSeed());
 
   // Encrypt helper_request.
-  DPF_ASSIGN_OR_RETURN(*(leader_request.mutable_encrypted_helper_request()
-                             ->mutable_encrypted_request()),
-                       encrypter_(helper_request.SerializeAsString(),
-                                  DenseDpfPirServer::kEncryptionContextInfo));
+  DPF_ASSIGN_OR_RETURN(
+      *(leader_request.mutable_encrypted_helper_request()
+            ->mutable_encrypted_request()),
+      encrypter_(helper_request.SerializeAsString(), encryption_context_info_));
 
   // Assemble result.
-  std::pair<PirRequest, PirRequestPrivateKey> result;
+  std::pair<PirRequest, PirRequestClientState> result;
   *(result.first.mutable_dpf_pir_request()->mutable_leader_request()) =
       std::move(leader_request);
-  *(result.second.mutable_dpf_pir_request_private_key()
+  *(result.second.mutable_dense_dpf_pir_request_client_state()
         ->mutable_one_time_pad_seed()) = helper_request.one_time_pad_seed();
   return result;
 }
 
 absl::StatusOr<std::vector<std::string>> DenseDpfPirClient::HandleResponse(
     const PirResponse& pir_response,
-    const PirRequestPrivateKey& decryption_key) const {
+    const PirRequestClientState& request_client_state) const {
   if (pir_response.wrapped_pir_response_case() !=
       PirResponse::kDpfPirResponse) {
     return absl::InvalidArgumentError(
         "`response` does not contain a valid DpfPirResponse");
   }
-  if (decryption_key.wrapped_pir_request_private_key_case() !=
-      PirRequestPrivateKey::kDpfPirRequestPrivateKey) {
+  if (request_client_state.wrapped_pir_request_client_state_case() !=
+      PirRequestClientState::kDenseDpfPirRequestClientState) {
     return absl::InvalidArgumentError(
-        "`decryption_key` does not contain a valid DpfPirRequestPrivateKey");
+        "`request_client_state` does not contain a valid "
+        "DenseDpfPirRequestClientState");
   }
   if (pir_response.dpf_pir_response().masked_response().empty()) {
     return absl::InvalidArgumentError("`masked_response` must not be empty");
   }
-  if (decryption_key.dpf_pir_request_private_key()
+  if (request_client_state.dense_dpf_pir_request_client_state()
           .one_time_pad_seed()
           .empty()) {
     return absl::InvalidArgumentError("`one_time_pad_seed` must not be empty");
   }
 
   DPF_ASSIGN_OR_RETURN(
-      auto prng,
-      Aes128CtrSeededPrng::Create(
-          decryption_key.dpf_pir_request_private_key().one_time_pad_seed()));
+      auto prng, Aes128CtrSeededPrng::Create(
+                     request_client_state.dense_dpf_pir_request_client_state()
+                         .one_time_pad_seed()));
   std::vector<std::string> result(
       pir_response.dpf_pir_response().masked_response_size());
   for (int i = 0; i < result.size(); ++i) {

@@ -33,9 +33,9 @@ namespace distributed_point_functions {
 // space, where keys are integers in the space [0, .size()) and each key has an
 // associated value in the database. This class implements the database
 // interface with BlockType being XorWrapper<absl::uint128>, same as the block
-// type for the DPF evaluation result. Only insertion at the end of the database
-// (i.e. appending) is supported. Does not support deletion nor modification of
-// existing records.
+// type for the DPF evaluation result.
+//
+//
 class DenseDpfPirDatabase
     : public PirDatabaseInterface<XorWrapper<absl::uint128>, std::string> {
  public:

@@ -160,6 +160,7 @@ cc_library(
     hdrs = ["dense_dpf_pir_client.h"],
     deps = [
         ":dense_dpf_pir_server",
+        ":dpf_pir_client",
         ":pir_client",
         ":private_information_retrieval_cc_proto",
         "//dpf:distributed_point_function",
@@ -304,7 +305,56 @@ cc_test(
         "//pir/testing:request_generator",
         "@com_github_google_googletest//:gtest_main",
         "@com_google_absl//absl/algorithm:container",
-        "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
+    ],
+)
+
+cc_library(
+    name = "cuckoo_hashing_sparse_dpf_pir_client",
+    srcs = ["cuckoo_hashing_sparse_dpf_pir_client.cc"],
+    hdrs = ["cuckoo_hashing_sparse_dpf_pir_client.h"],
+    deps = [
+        ":cuckoo_hashing_sparse_dpf_pir_server",
+        ":dense_dpf_pir_client",
+        ":dpf_pir_client",
+        ":private_information_retrieval_cc_proto",
+        "//dpf:status_macros",
+        "//pir/hashing:hash_family",
+        "//pir/hashing:hash_family_config",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:optional",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+cc_library(
+    name = "dpf_pir_client",
+    hdrs = ["dpf_pir_client.h"],
+    deps = [
+        ":pir_client",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/strings",
+        "@tink_cc//util:statusor",
+    ],
+)
+
+cc_test(
+    name = "cuckoo_hashing_sparse_dpf_pir_client_test",
+    srcs = ["cuckoo_hashing_sparse_dpf_pir_client_test.cc"],
+    deps = [
+        ":cuckoo_hashed_dpf_pir_database",
+        ":cuckoo_hashing_sparse_dpf_pir_client",
+        ":cuckoo_hashing_sparse_dpf_pir_server",
+        ":private_information_retrieval_cc_proto",
+        "//dpf/internal:status_matchers",
+        "//pir/hashing:hash_family_config_cc_proto",
+        "//pir/testing:encrypt_decrypt",
+        "//pir/testing:mock_pir_database",
+        "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:optional",
+        "@tink_cc//:hybrid_encrypt",
     ],
 )

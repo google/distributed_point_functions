@@ -41,10 +41,12 @@ message DatabaseConfig {
 // we care about.
 //=============================================================================
 
-// Client's per-request key to decrypt a single PirResponse.
-message PirRequestPrivateKey {
-  oneof wrapped_pir_request_private_key {
-    DpfPirRequestPrivateKey dpf_pir_request_private_key = 1;
+// Client's per-request state needed to handle a single PirResponse.
+message PirRequestClientState {
+  oneof wrapped_pir_request_client_state {
+    DenseDpfPirRequestClientState dense_dpf_pir_request_client_state = 1;
+    CuckooHashingSparseDpfPirRequestClientState
+        cuckoo_hashing_sparse_dpf_pir_request_client_state = 2;
   }
 }
 
@@ -131,8 +133,15 @@ message DpfPirRequest {
 }
 
 // The seed for the one-time-pad used by the Helper to mask its response.
-message DpfPirRequestPrivateKey {
+message DenseDpfPirRequestClientState {
   bytes one_time_pad_seed = 1;
+}
+
+// For cuckoo hashing, we need to keep the query around so that we only return
+// responses that we actually queried.
+message CuckooHashingSparseDpfPirRequestClientState {
+  bytes one_time_pad_seed = 1;
+  repeated bytes query_strings = 2;
 }
 
 // The (possibly batched) Response sent from Helper to Leader and from

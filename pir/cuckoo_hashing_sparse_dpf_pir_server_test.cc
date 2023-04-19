@@ -15,7 +15,6 @@
 #include "pir/cuckoo_hashing_sparse_dpf_pir_server.h"
 
 #include "absl/algorithm/container.h"
-#include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
 #include "dpf/internal/status_matchers.h"
 #include "gmock/gmock.h"

@@ -32,14 +32,14 @@ class PirClient {
   // Creates a new PIR request for the given `query`. If successful, returns the
   // request together with the private key needed to decrypt the server's
   // response.
-  virtual absl::StatusOr<std::pair<PirRequest, PirRequestPrivateKey>>
+  virtual absl::StatusOr<std::pair<PirRequest, PirRequestClientState>>
   CreateRequest(QueryType query) const = 0;
 
-  // Handles the server's `pir_response`. `decryption_key` is the per-request
-  // key corresponding to the request sent to the server.
+  // Handles the server's `pir_response`. `request_client_state` is the
+  // per-request client state corresponding to the request sent to the server.
   virtual absl::StatusOr<ResponseType> HandleResponse(
       const PirResponse& pir_response,
-      const PirRequestPrivateKey& decryption_key) const = 0;
+      const PirRequestClientState& request_client_state) const = 0;
 };
 
 }  // namespace distributed_point_functions

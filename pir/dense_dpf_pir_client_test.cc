@@ -149,12 +149,13 @@ TEST_F(DenseDpfPirClientTest, CreateRequestFailsIfIndexIsNegative) {
 
 TEST_F(DenseDpfPirClientTest, HandleResponseFailsIfResponseHasWrongType) {
   PirResponse response;
-  PirRequestPrivateKey private_key;
-  DPF_ASSERT_OK_AND_ASSIGN(*(private_key.mutable_dpf_pir_request_private_key()
-                                 ->mutable_one_time_pad_seed()),
-                           Aes128CtrSeededPrng::GenerateSeed());
+  PirRequestClientState request_client_state;
+  DPF_ASSERT_OK_AND_ASSIGN(
+      *(request_client_state.mutable_dense_dpf_pir_request_client_state()
+            ->mutable_one_time_pad_seed()),
+      Aes128CtrSeededPrng::GenerateSeed());
 
-  EXPECT_THAT(client_->HandleResponse(response, private_key),
+  EXPECT_THAT(client_->HandleResponse(response, request_client_state),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("valid DpfPirResponse")));
 }
@@ -162,20 +163,20 @@ TEST_F(DenseDpfPirClientTest, HandleResponseFailsIfResponseHasWrongType) {
 TEST_F(DenseDpfPirClientTest, HandleResponseFailsIfPrivateKeyHasWrongType) {
   PirResponse response;
   response.mutable_dpf_pir_response()->add_masked_response("Test");
-  PirRequestPrivateKey private_key;
+  PirRequestClientState request_client_state;
 
-  EXPECT_THAT(client_->HandleResponse(response, private_key),
+  EXPECT_THAT(client_->HandleResponse(response, request_client_state),
               StatusIs(absl::StatusCode::kInvalidArgument,
-                       HasSubstr("valid DpfPirRequestPrivateKey")));
+                       HasSubstr("valid DenseDpfPirRequestClientState")));
 }
 
 TEST_F(DenseDpfPirClientTest, HandleResponseFailsIfSeedIsMissing) {
   PirResponse response;
   response.mutable_dpf_pir_response()->add_masked_response("Test");
-  PirRequestPrivateKey private_key;
-  private_key.mutable_dpf_pir_request_private_key();
+  PirRequestClientState request_client_state;
+  request_client_state.mutable_dense_dpf_pir_request_client_state();
 
-  EXPECT_THAT(client_->HandleResponse(response, private_key),
+  EXPECT_THAT(client_->HandleResponse(response, request_client_state),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("one_time_pad_seed")));
 }
@@ -183,11 +184,11 @@ TEST_F(DenseDpfPirClientTest, HandleResponseFailsIfSeedIsMissing) {
 TEST_F(DenseDpfPirClientTest, HandleResponseFailsIfNoResponse) {
   PirResponse response;
   response.mutable_dpf_pir_response();
-  PirRequestPrivateKey private_key;
-  private_key.mutable_dpf_pir_request_private_key()->set_one_time_pad_seed(
-      "Test");
+  PirRequestClientState request_client_state;
+  request_client_state.mutable_dense_dpf_pir_request_client_state()
+      ->set_one_time_pad_seed("Test");
 
-  EXPECT_THAT(client_->HandleResponse(response, private_key),
+  EXPECT_THAT(client_->HandleResponse(response, request_client_state),
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("masked_response")));
 }
@@ -198,9 +199,9 @@ TEST_F(DenseDpfPirClientTest, HandleResponseAppliesOneTimePadCorrectly) {
                            Aes128CtrSeededPrng::GenerateSeed());
   DPF_ASSERT_OK_AND_ASSIGN(auto prg,
                            Aes128CtrSeededPrng::Create(one_time_pad_seed));
-  PirRequestPrivateKey private_key;
-  private_key.mutable_dpf_pir_request_private_key()->set_one_time_pad_seed(
-      one_time_pad_seed);
+  PirRequestClientState request_client_state;
+  request_client_state.mutable_dense_dpf_pir_request_client_state()
+      ->set_one_time_pad_seed(one_time_pad_seed);
 
   // Mask database with OTP and save result in a PirResponse.
   std::vector<std::string> database = {"Element 1", "Element 23"};
@@ -215,19 +216,20 @@ TEST_F(DenseDpfPirClientTest, HandleResponseAppliesOneTimePadCorrectly) {
   }
 
   // HandleResponse and check that the result equals `database`.
-  EXPECT_THAT(client_->HandleResponse(response, private_key),
+  EXPECT_THAT(client_->HandleResponse(response, request_client_state),
               IsOkAndHolds(ElementsAreArray(database)));
 }
 
 TEST_F(DenseDpfPirClientTest, TestPirEndToEnd) {
   PirRequest request;
-  PirRequestPrivateKey private_key;
-  DPF_ASSERT_OK_AND_ASSIGN(std::tie(request, private_key),
+  PirRequestClientState request_client_state;
+  DPF_ASSERT_OK_AND_ASSIGN(std::tie(request, request_client_state),
                            client_->CreateRequest({23, 42}));
   DPF_ASSERT_OK_AND_ASSIGN(PirResponse response,
                            leader_->HandleRequest(request));
-  DPF_ASSERT_OK_AND_ASSIGN(std::vector<std::string> result,
-                           client_->HandleResponse(response, private_key));
+  DPF_ASSERT_OK_AND_ASSIGN(
+      std::vector<std::string> result,
+      client_->HandleResponse(response, request_client_state));
 
   // Using StartsWith because of trailing null bytes.
   EXPECT_THAT(result, testing::ElementsAre(StartsWith("Element 23"),
