@@ -115,7 +115,7 @@ http_archive(
     ],
 )
 
-# rules_license needed for Highway
+# rules_license needed for license() rule
 # https://github.com/bazelbuild/rules_license
 http_archive(
     name = "rules_license",

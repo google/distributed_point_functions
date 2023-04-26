@@ -15,6 +15,7 @@
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 
 package(
+    default_applicable_licenses = ["//:license"],
     default_visibility = ["//visibility:public"],
 )
 
