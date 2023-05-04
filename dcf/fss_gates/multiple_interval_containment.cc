@@ -219,7 +219,11 @@ MultipleIntervalContainmentGate::Eval(MicKey k, absl::uint128 x) {
         "Masked input should be between 0 and 2^log_group_size");
   }
 
-  std::vector<absl::uint128> res;
+  std::vector<absl::uint128> res, ps, q_primes, evaluation_points;
+  res.reserve(mic_parameters_.intervals_size());
+  ps.reserve(mic_parameters_.intervals_size());
+  q_primes.reserve(mic_parameters_.intervals_size());
+  evaluation_points.reserve(2 * mic_parameters_.intervals_size());
 
   // The following code is commented using their Line numbering in
   // https://eprint.iacr.org/2020/1392 Fig. 14 Eval procedure.
@@ -229,49 +233,44 @@ MultipleIntervalContainmentGate::Eval(MicKey k, absl::uint128 x) {
     absl::uint128 p = absl::MakeUint128(
         mic_parameters_.intervals(i).lower_bound().value_uint128().high(),
         mic_parameters_.intervals(i).lower_bound().value_uint128().low());
+    ps.push_back(p);
 
     absl::uint128 q = absl::MakeUint128(
         mic_parameters_.intervals(i).upper_bound().value_uint128().high(),
         mic_parameters_.intervals(i).upper_bound().value_uint128().low());
 
     // Line 3
-
     absl::uint128 q_prime = (q + 1) % N;
+    q_primes.push_back(q_prime);
 
     // Line 4
-    absl::uint128 x_p = (x + N - 1 - p) % N;
+    evaluation_points.push_back((x + N - 1 - p) % N);
+    evaluation_points.push_back((x + N - 1 - q_prime) % N);
+  }
 
-    absl::uint128 x_q_prime = (x + N - 1 - q_prime) % N;
+  std::vector<absl::uint128> dpf_evaluation(2 *
+                                            mic_parameters_.intervals_size());
+  DPF_RETURN_IF_ERROR(dcf_->Evaluate<absl::uint128>(
+      k.dcfkey(), evaluation_points, absl::MakeSpan(dpf_evaluation)));
 
+  for (int i = 0; i < mic_parameters_.intervals_size(); i++) {
     // Line 5
-
-    absl::uint128 s_p;
-
-    DPF_ASSIGN_OR_RETURN(s_p, dcf_->Evaluate<absl::uint128>(k.dcfkey(), x_p));
-
+    absl::uint128 s_p = dpf_evaluation[2 * i];
     s_p = s_p % N;
 
     // Line 6
-
-    absl::uint128 s_q_prime;
-
-    DPF_ASSIGN_OR_RETURN(s_q_prime,
-                         dcf_->Evaluate<absl::uint128>(k.dcfkey(), x_q_prime));
-
+    absl::uint128 s_q_prime = dpf_evaluation[2 * i + 1];
     s_q_prime = s_q_prime % N;
 
     // Line 7
-
     absl::uint128 y;
-
     absl::uint128 z =
         absl::MakeUint128(k.output_mask_share(i).value_uint128().high(),
                           k.output_mask_share(i).value_uint128().low());
-
-    y = (k.dcfkey().key().party() ? ((x > p ? 1 : 0) - (x > q_prime ? 1 : 0))
-                                  : 0) -
+    y = (k.dcfkey().key().party()
+             ? ((x > ps[i] ? 1 : 0) - (x > q_primes[i] ? 1 : 0))
+             : 0) -
         s_p + s_q_prime + z;
-
     res.push_back(y % N);
   }
 

@@ -24,11 +24,13 @@
 
 #include "absl/meta/type_traits.h"
 #include "absl/numeric/int128.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "dcf/distributed_comparison_function.pb.h"
 #include "dpf/distributed_point_function.h"
 #include "dpf/distributed_point_function.pb.h"
+#include "hwy/aligned_allocator.h"
 #include "hwy/base.h"
 
 namespace distributed_point_functions {
@@ -68,7 +70,25 @@ class DistributedComparisonFunction {
   // Returns INVALID_ARGUMENT if `key` or `x` do not match the parameters passed
   // at construction.
   template <typename T>
-  absl::StatusOr<T> Evaluate(const DcfKey& key, absl::uint128 x);
+  absl::StatusOr<T> Evaluate(const DcfKey& key, absl::uint128 x) {
+    T result{};
+    absl::Status status = Evaluate(key, {x}, absl::MakeSpan(&result, 1));
+    if (!status.ok()) {
+      return status;
+    }
+    return result;
+  }
+
+  // Evaluates `key` at multiple `evaluation_points`, and writes the results to
+  // `output`.
+  //
+  // Returns INVALID_ARGUMENT if `key` is invalid, if any element of
+  // `evaluation_points` is out of bounds, or if the size of `output` does not
+  // match `evaluation_points`.
+  template <typename T>
+  absl::Status Evaluate(const DcfKey& key,
+                        absl::Span<const absl::uint128> evaluation_points,
+                        absl::Span<T> output);
 
   // DistributedComparisonFunction is neither copyable nor movable.
   DistributedComparisonFunction(const DistributedComparisonFunction&) = delete;
@@ -123,10 +143,15 @@ struct EvaluationContextCutoff<XorWrapper<T>> {
 }  // namespace dpf_internal
 
 template <typename T>
-absl::StatusOr<T> DistributedComparisonFunction::Evaluate(const DcfKey& key,
-                                                          absl::uint128 x) {
+absl::Status DistributedComparisonFunction::Evaluate(
+    const DcfKey& key, absl::Span<const absl::uint128> evaluation_points,
+    absl::Span<T> output) {
+  if (evaluation_points.size() != output.size()) {
+    return absl::InvalidArgumentError(
+        "`evaluation_points` and `output` must have the same size");
+  }
   const int log_domain_size = parameters_.parameters().log_domain_size();
-  T result{};
+  auto prefixes = hwy::AllocateAligned<absl::uint128>(evaluation_points.size());
 
   absl::StatusOr<EvaluationContext> ctx;
   if (log_domain_size > dpf_internal::EvaluationContextCutoff<T>::kValue) {
@@ -135,32 +160,39 @@ absl::StatusOr<T> DistributedComparisonFunction::Evaluate(const DcfKey& key,
       return ctx.status();
     }
   }
+
   absl::StatusOr<std::vector<T>> dpf_evaluation;
+  std::fill_n(&output[0], output.size(), T{});
   for (int i = 0; i < log_domain_size; ++i) {
-    int current_bit = static_cast<int>(
-        (x & (absl::uint128{1} << (log_domain_size - i - 1))) != 0);
-    // Only evaluate the DPF when we actually need it. This leaks information
-    // about x through a timing side-channel. However, we don't protect against
-    // this anyway, and in many cases x is public.
-    if (current_bit == 0) {
-      HWY_ALIGN_MAX absl::uint128 prefix = 0;
-      if (log_domain_size < 128) {
-        prefix = x >> (log_domain_size - i);
+    std::fill_n(&prefixes[0], evaluation_points.size(), 0);
+    if ((log_domain_size - i) < 128) {
+      for (int j = 0; j < evaluation_points.size(); ++j) {
+        prefixes[j] = evaluation_points[j] >> (log_domain_size - i);
       }
-      if (log_domain_size >= dpf_internal::EvaluationContextCutoff<T>::kValue) {
-        dpf_evaluation =
-            dpf_->EvaluateAt<T>(i, absl::MakeConstSpan(&prefix, 1), *ctx);
-      } else {
-        dpf_evaluation =
-            dpf_->EvaluateAt<T>(key.key(), i, absl::MakeConstSpan(&prefix, 1));
+    }
+    if (log_domain_size >= dpf_internal::EvaluationContextCutoff<T>::kValue) {
+      dpf_evaluation = dpf_->EvaluateAt<T>(
+          i, absl::MakeConstSpan(&prefixes[0], evaluation_points.size()), *ctx);
+    } else {
+      dpf_evaluation = dpf_->EvaluateAt<T>(
+          key.key(), i,
+          absl::MakeConstSpan(&prefixes[0], evaluation_points.size()));
+    }
+    if (!dpf_evaluation.ok()) {
+      return dpf_evaluation.status();
+    }
+
+    for (int j = 0; j < evaluation_points.size(); ++j) {
+      // Check that the bit at position i of evaluation j is 0, and if so add
+      // the DPF result to the corresponding output.
+      if ((log_domain_size - i - 1) >= 128 ||
+          (evaluation_points[j] &
+           (absl::uint128{1} << (log_domain_size - i - 1))) == 0) {
+        output[j] += (*dpf_evaluation)[j];
       }
-      if (!dpf_evaluation.ok()) {
-        return dpf_evaluation.status();
-      }
-      result += (*dpf_evaluation)[0];
     }
   }
-  return result;
+  return absl::OkStatus();
 }
 
 }  // namespace distributed_point_functions

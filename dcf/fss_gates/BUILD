@@ -79,3 +79,18 @@ cc_test(
         "@com_google_absl//absl/strings",
     ],
 )
+
+cc_test(
+    name = "multiple_interval_containment_benchmark",
+    srcs = ["multiple_interval_containment_benchmark.cc"],
+    tags = ["benchmark"],
+    deps = [
+        ":multiple_interval_containment",
+        ":multiple_interval_containment_cc_proto",
+        "//dpf/internal:status_matchers",
+        "@com_github_google_benchmark//:benchmark",
+        "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/random",
+        "@com_google_absl//absl/random:distributions",
+    ],
+)
