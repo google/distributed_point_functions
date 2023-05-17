@@ -17,6 +17,7 @@
 #include <cmath>
 #include <memory>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -301,6 +302,27 @@ TEST_F(DenseDpfPirServerTest, HandleRequestSucceeds) {
   ASSERT_EQ(result.dpf_pir_response().masked_response_size(), 1);
   EXPECT_EQ(result.dpf_pir_response().masked_response(0),
             InnerProductWith({expansion})[0]);
+}
+
+TEST_F(DenseDpfPirServerTest, HandlePlainRequestCanBeCalledConcurrently) {
+  PirRequest request;
+  SetupFakeRequest(123, request);
+  constexpr int kNumThreads = 1024;
+
+  auto do_handle_request = [&request, &server = server_]() {
+    DPF_ASSERT_OK_AND_ASSIGN(PirResponse response,
+                             server->HandleRequest(request));
+  };
+
+  std::vector<std::thread> threads;
+  threads.reserve(kNumThreads);
+  for (int i = 0; i < kNumThreads; ++i) {
+    threads.emplace_back(do_handle_request);
+  }
+
+  for (auto& thread : threads) {
+    thread.join();
+  }
 }
 
 TEST_F(DenseDpfPirServerTest,

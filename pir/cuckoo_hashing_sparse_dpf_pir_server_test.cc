@@ -16,6 +16,7 @@
 
 #include <memory>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -289,6 +290,40 @@ TEST_F(CuckooHashingSparseDpfPirServerTest, HandleRequestSucceeds) {
   }
 
   EXPECT_THAT(response_keys, Contains(StartsWith(query)));
+}
+
+TEST_F(CuckooHashingSparseDpfPirServerTest,
+       HandlePlainRequestCanBeCalledConcurrently) {
+  SetUpServer();
+  std::vector<int> indices = {1, 2, 3};
+  constexpr int kNumThreads = 1024;
+
+  // Create plain request for `indices`.
+  DPF_ASSERT_OK_AND_ASSIGN(
+      auto request_generator,
+      pir_testing::RequestGenerator::Create(
+          params_.num_buckets(),
+          CuckooHashingSparseDpfPirServer::kEncryptionContextInfo));
+  PirRequest request;
+  DPF_ASSERT_OK_AND_ASSIGN(
+      std::tie(*request.mutable_dpf_pir_request()->mutable_plain_request(),
+               std::ignore),
+      request_generator->CreateDpfPirPlainRequests(indices));
+
+  auto do_handle_request = [&request, &server = server_]() {
+    DPF_ASSERT_OK_AND_ASSIGN(PirResponse response,
+                             server->HandleRequest(request));
+  };
+
+  std::vector<std::thread> threads;
+  threads.reserve(kNumThreads);
+  for (int i = 0; i < kNumThreads; ++i) {
+    threads.emplace_back(do_handle_request);
+  }
+
+  for (auto& thread : threads) {
+    thread.join();
+  }
 }
 
 TEST_F(CuckooHashingSparseDpfPirServerTest,
