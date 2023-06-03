@@ -230,9 +230,17 @@ class DistributedPointFunction {
   // Returns FAILED_PRECONDITION if `RegisterValueType<T>` has not been called
   // for all types in the `DpfParameters` passed at construction.
 
-  // Overload for simple integers.
+  // Legacy interface for absl::uint128, which doesn't require explicitly
+  // converting to absl::Span<const absl::uint128>.
   absl::StatusOr<std::pair<DpfKey, DpfKey>> GenerateKeysIncremental(
-      absl::uint128 alpha, absl::Span<const absl::uint128> beta) {
+      absl::uint128 alpha, const std::vector<absl::uint128>& beta) {
+    return GenerateKeysIncremental(alpha, absl::MakeConstSpan(beta));
+  }
+
+  // Templated version when all value types are equal.
+  template <typename T>
+  absl::StatusOr<std::pair<DpfKey, DpfKey>> GenerateKeysIncremental(
+      absl::uint128 alpha, absl::Span<const T> beta) {
     std::vector<Value> values(beta.size());
     for (int i = 0; i < static_cast<int>(beta.size()); ++i) {
       absl::StatusOr<Value> value = ToValue(beta[i]);

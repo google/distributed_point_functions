@@ -107,9 +107,11 @@ cc_test(
     deps = [
         ":distributed_point_function",
         ":distributed_point_function_cc_proto",
+        ":xor_wrapper",
         "//dpf/internal:proto_validator",
         "//dpf/internal:status_matchers",
         "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/base:config",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/random",
