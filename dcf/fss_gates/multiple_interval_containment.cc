@@ -28,6 +28,7 @@
 #include "dcf/fss_gates/multiple_interval_containment.pb.h"
 #include "dcf/fss_gates/prng/basic_rng.h"
 #include "dpf/distributed_point_function.pb.h"
+#include "dpf/internal/maybe_deref_span.h"
 #include "dpf/status_macros.h"
 
 namespace distributed_point_functions {
@@ -209,7 +210,7 @@ absl::StatusOr<std::pair<MicKey, MicKey>> MultipleIntervalContainmentGate::Gen(
 
 absl::StatusOr<std::vector<absl::uint128>>
 MultipleIntervalContainmentGate::BatchEval(
-    absl::Span<const MicKey> keys,
+    dpf_internal::MaybeDerefSpan<const MicKey> keys,
     absl::Span<const absl::uint128> evaluation_points) {
   if (keys.size() != evaluation_points.size()) {
     return absl::InvalidArgumentError(

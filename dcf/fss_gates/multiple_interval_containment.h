@@ -23,6 +23,7 @@
 #include "absl/types/span.h"
 #include "dcf/distributed_comparison_function.h"
 #include "dcf/fss_gates/multiple_interval_containment.pb.h"
+#include "dpf/internal/maybe_deref_span.h"
 #include "dpf/status_macros.h"
 
 namespace distributed_point_functions {
@@ -85,7 +86,7 @@ class MultipleIntervalContainmentGate {
   // Returns INVALID_ARGUMENT if any key is invalid, or if any evaluation point
   // is out of range.
   absl::StatusOr<std::vector<absl::uint128>> BatchEval(
-      absl::Span<const MicKey> keys,
+      dpf_internal::MaybeDerefSpan<const MicKey> keys,
       absl::Span<const absl::uint128> evaluation_points);
 
  private:

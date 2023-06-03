@@ -39,6 +39,7 @@ cc_library(
         "//dcf/fss_gates/prng:basic_rng",
         "//dpf:distributed_point_function_cc_proto",
         "//dpf:status_macros",
+        "//dpf/internal:maybe_deref_span",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status",
