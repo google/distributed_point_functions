@@ -16,47 +16,79 @@
 #include <tuple>
 
 #include "absl/numeric/int128.h"
+#include "absl/random/distributions.h"
 #include "absl/random/random.h"
 #include "absl/status/statusor.h"
-#include "benchmark/benchmark.h"
+#include "benchmark/benchmark.h"  // third_party/benchmark
 #include "dcf/distributed_comparison_function.h"
 #include "dcf/distributed_comparison_function.pb.h"
 #include "dpf/distributed_point_function.h"
+#include "dpf/internal/status_matchers.h"
 
 namespace distributed_point_functions {
 
 template <typename T>
 void BM_EvaluateDcf(benchmark::State& state) {
   int log_domain_size = state.range(0);
+  int batch_size = state.range(1);
   DcfParameters parameters;
   *(parameters.mutable_parameters()->mutable_value_type()) = ToValueType<T>();
   parameters.mutable_parameters()->set_log_domain_size(log_domain_size);
   std::unique_ptr<DistributedComparisonFunction> dcf =
       DistributedComparisonFunction::Create(parameters).value();
 
+  std::vector<DcfKey> keys(batch_size);
+  std::vector<absl::uint128> evaluation_points(batch_size);
   absl::BitGen rng;
   absl::uint128 domain_mask = absl::Uint128Max();
-  absl::uint128 alpha = absl::Uniform<absl::uint128>(rng);
   if (log_domain_size < 128) {
     domain_mask = (absl::uint128{1} << log_domain_size) - 1;
   }
-  alpha &= domain_mask;
-  T beta(42);
-  DcfKey key;
-  std::tie(key, std::ignore) = dcf->GenerateKeys(alpha, beta).value();
-  absl::uint128 x = 0;
+  for (int i = 0; i < batch_size; ++i) {
+    absl::uint128 alpha = absl::Uniform<absl::uint128>(rng);
+    alpha &= domain_mask;
+    T beta = absl::Uniform<T>(rng);
+    std::tie(keys[i], std::ignore) = dcf->GenerateKeys(alpha, beta).value();
+    evaluation_points[i] = absl::Uniform<absl::uint128>(rng);
+    evaluation_points[i] &= domain_mask;
+  }
+
   for (auto s : state) {
-    T evaluation = dcf->Evaluate<T>(key, x).value();
-    x = (x + 1) & domain_mask;
+    DPF_ASSERT_OK_AND_ASSIGN(std::vector<T> evaluation,
+                             dcf->BatchEvaluate<T>(keys, evaluation_points));
     benchmark::DoNotOptimize(evaluation);
   }
 }
-BENCHMARK_TEMPLATE(BM_EvaluateDcf, uint8_t)->RangeMultiplier(2)->Range(2, 64);
-BENCHMARK_TEMPLATE(BM_EvaluateDcf, uint16_t)->RangeMultiplier(2)->Range(2, 64);
-BENCHMARK_TEMPLATE(BM_EvaluateDcf, uint32_t)->RangeMultiplier(2)->Range(2, 64);
-BENCHMARK_TEMPLATE(BM_EvaluateDcf, uint64_t)->RangeMultiplier(2)->Range(2, 64);
-BENCHMARK_TEMPLATE(BM_EvaluateDcf, absl::uint128)
+BENCHMARK_TEMPLATE(BM_EvaluateDcf, uint8_t)
     ->RangeMultiplier(2)
-    ->Range(2, 64);
+    ->RangePair(2, 128, 1, 1024);
+BENCHMARK_TEMPLATE(BM_EvaluateDcf, uint16_t)
+    ->RangeMultiplier(2)
+    ->RangePair(2, 128, 1, 1024);
+BENCHMARK_TEMPLATE(BM_EvaluateDcf, uint32_t)
+    ->RangeMultiplier(2)
+    ->RangePair(2, 128, 1, 1024);
+BENCHMARK_TEMPLATE(BM_EvaluateDcf, uint64_t)
+    ->RangeMultiplier(2)
+    ->RangePair(2, 128, 1, 1024);
+BENCHMARK_TEMPLATE(BM_EvaluateDcf, absl::uint128)->RangePair(2, 128, 1, 1024);
 
 }  // namespace distributed_point_functions
+
+// Declare benchmark_filter flag, which will be defined by benchmark library.
+// Use it to check if any benchmarks were specified explicitly.
+//
+namespace benchmark {
+extern std::string FLAGS_benchmark_filter;
+}
+using benchmark::FLAGS_benchmark_filter;
+
+int main(int argc, char* argv[]) {
+  FLAGS_benchmark_filter = "";
+  benchmark::Initialize(&argc, argv);
+  if (!FLAGS_benchmark_filter.empty()) {
+    benchmark::RunSpecifiedBenchmarks();
+  }
+  benchmark::Shutdown();
+  return 0;
+}

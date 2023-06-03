@@ -81,10 +81,11 @@ cc_test(
         ":distributed_comparison_function",
         ":distributed_comparison_function_cc_proto",
         "//dpf:distributed_point_function",
+        "//dpf/internal:status_matchers",
         "@com_github_google_benchmark//:benchmark",
-        "@com_github_google_googletest//:gtest_main",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/random",
+        "@com_google_absl//absl/random:distributions",
         "@com_google_absl//absl/status:statusor",
     ],
 )
