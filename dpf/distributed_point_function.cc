@@ -279,8 +279,8 @@ absl::Status DistributedPointFunction::EvaluateSeeds(
   DCHECK(seeds_out.size() == num_seeds);
   DCHECK(control_bits_out.size() == num_seeds);
   DPF_RETURN_IF_ERROR(dpf_internal::EvaluateSeeds(
-      num_seeds, num_levels, seeds.data(), control_bits.data(), paths.data(),
-      correction_seeds.get(), correction_controls_left.data(),
+      num_seeds, num_levels, num_levels, seeds.data(), control_bits.data(),
+      paths.data(), correction_seeds.get(), correction_controls_left.data(),
       correction_controls_right.data(), prg_left_, prg_right_, seeds_out.data(),
       control_bits_out.data()));
   return absl::OkStatus();
