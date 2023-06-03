@@ -195,6 +195,16 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "maybe_deref_span",
+    hdrs = ["maybe_deref_span.h"],
+    deps = [
+        "@com_google_absl//absl/meta:type_traits",
+        "@com_google_absl//absl/types:span",
+        "@com_google_absl//absl/types:variant",
+    ],
+)
+
 cc_test(
     name = "aes_128_fixed_key_hash_hwy_test",
     srcs = [
@@ -215,5 +225,14 @@ cc_test(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/types:span",
+    ],
+)
+
+cc_test(
+    name = "maybe_deref_span_test",
+    srcs = ["maybe_deref_span_test.cc"],
+    deps = [
+        ":maybe_deref_span",
+        "@com_github_google_googletest//:gtest_main",
     ],
 )
