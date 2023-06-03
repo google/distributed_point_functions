@@ -174,18 +174,11 @@ absl::Status DistributedComparisonFunction::BatchEvaluate(
 
   // We don't evaluate on the least-significant bit, since there the output only
   // depends on alpha. See Algorith m 7 in https://eprint.iacr.org/2022/866.pdf.
-  auto prefixes = hwy::AllocateAligned<absl::uint128>(num_keys);
-  if (prefixes == nullptr) {
-    return absl::ResourceExhaustedError("Memory allocation error");
-  }
-  for (int i = 0; i < num_keys; ++i) {
-    prefixes[i] = evaluation_points[i] >> 1;
-  }
-
+  constexpr int evaluation_points_rightshift = 1;
   std::fill(output.begin(), output.end(), T{});
   absl::Status status2 = dpf_->EvaluateAndApply<T>(
-      dpf_keys, absl::MakeConstSpan(prefixes.get(), num_keys),
-      std::move(accumulator));
+      dpf_keys, evaluation_points, std::move(accumulator),
+      evaluation_points_rightshift);
   if (!status2.ok()) return status2;
   return status;
 }

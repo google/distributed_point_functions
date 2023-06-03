@@ -230,9 +230,14 @@ MultipleIntervalContainmentGate::BatchEval(
 
   int num_intervals = mic_parameters_.intervals_size();
   std::vector<absl::uint128> p(num_intervals), q(num_intervals),
-      q_prime(num_intervals), x_p(keys.size() * num_intervals),
-      x_q_prime(keys.size() * num_intervals), s_p(keys.size() * num_intervals),
+      q_prime(num_intervals), s_p(keys.size() * num_intervals),
       s_q_prime(keys.size() * num_intervals);
+  auto x_p = hwy::AllocateAligned<absl::uint128>(keys.size() * num_intervals);
+  auto x_q_prime =
+      hwy::AllocateAligned<absl::uint128>(keys.size() * num_intervals);
+  if (x_p == nullptr || x_q_prime == nullptr) {
+    return absl::ResourceExhaustedError("Memory allocation error");
+  }
 
   // The following code is commented using their Line numbering in
   // https://eprint.iacr.org/2020/1392 Fig. 14 Eval procedure.
@@ -267,11 +272,14 @@ MultipleIntervalContainmentGate::BatchEval(
 
   // Line 5
   DPF_RETURN_IF_ERROR(dcf_->BatchEvaluate<absl::uint128>(
-      absl::MakeConstSpan(dcf_keys), x_p, absl::MakeSpan(s_p)));
+      absl::MakeConstSpan(dcf_keys),
+      absl::MakeConstSpan(x_p.get(), dcf_keys.size()), absl::MakeSpan(s_p)));
 
   // Line 6
   DPF_RETURN_IF_ERROR(dcf_->BatchEvaluate<absl::uint128>(
-      absl::MakeConstSpan(dcf_keys), x_q_prime, absl::MakeSpan(s_q_prime)));
+      absl::MakeConstSpan(dcf_keys),
+      absl::MakeConstSpan(x_q_prime.get(), dcf_keys.size()),
+      absl::MakeSpan(s_q_prime)));
 
   std::vector<absl::uint128> res;
   res.reserve(keys.size() * num_intervals);

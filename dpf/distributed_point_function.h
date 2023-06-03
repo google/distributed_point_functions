@@ -403,7 +403,8 @@ class DistributedPointFunction {
   template <typename T, typename Fn>
   absl::Status EvaluateAndApply(
       dpf_internal::MaybeDerefSpan<const DpfKey>,
-      absl::Span<const absl::uint128> evaluation_points, Fn op) const;
+      absl::Span<const absl::uint128> evaluation_points, Fn op,
+      int evaluation_points_rightshift = 0) const;
 
   // Returns the DpfParameters of this DPF.
   inline absl::Span<const DpfParameters> parameters() const {
@@ -1071,7 +1072,8 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateAtImpl(
 template <typename T, typename Fn>
 absl::Status DistributedPointFunction::EvaluateAndApply(
     dpf_internal::MaybeDerefSpan<const DpfKey> keys,
-    absl::Span<const absl::uint128> evaluation_points, Fn op) const {
+    absl::Span<const absl::uint128> evaluation_points, Fn op,
+    int evaluation_points_rightshift) const {
   if (evaluation_points.size() != keys.size()) {
     return absl::InvalidArgumentError(
         "`keys.size()` != `evaluation_points.size()`");
@@ -1112,9 +1114,10 @@ absl::Status DistributedPointFunction::EvaluateAndApply(
 
     // Compute index shifts for the current level.
     const int domain_index_rightshift =
-        parameters_.back().log_domain_size() -
+        evaluation_points_rightshift + parameters_.back().log_domain_size() -
         parameters_[hierarchy_level].log_domain_size();
-    const int tree_index_rightshift = parameters_.back().log_domain_size() -
+    const int tree_index_rightshift = evaluation_points_rightshift +
+                                      parameters_.back().log_domain_size() -
                                       hierarchy_to_tree_[hierarchy_level];
 
     int num_tree_levels = stop_level - start_level;
