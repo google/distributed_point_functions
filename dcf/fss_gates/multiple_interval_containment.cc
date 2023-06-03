@@ -221,7 +221,7 @@ MultipleIntervalContainmentGate::BatchEval(
 
   // Checking whether evaluation_points are all group elements
   for (int i = 0; i < evaluation_points.size(); i++) {
-    if (evaluation_points[i] < 0 || evaluation_points[i] >= N) {
+    if (evaluation_points[i] >= N) {
       return absl::InvalidArgumentError(
           "Masked input should be between 0 and 2^log_group_size");
     }
