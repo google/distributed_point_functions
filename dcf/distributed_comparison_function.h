@@ -24,12 +24,14 @@
 
 #include "absl/meta/type_traits.h"
 #include "absl/numeric/int128.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "dcf/distributed_comparison_function.pb.h"
 #include "dpf/distributed_point_function.h"
 #include "dpf/distributed_point_function.pb.h"
 #include "dpf/internal/maybe_deref_span.h"
+#include "hwy/aligned_allocator.h"
 #include "hwy/base.h"
 
 namespace distributed_point_functions {
@@ -125,43 +127,6 @@ class DistributedComparisonFunction {
 
 // Implementation details.
 
-namespace dpf_internal {
-
-// Returns the level at which it's worth saving the evaluation context.
-// Default: always save it.
-template <typename T>
-struct EvaluationContextCutoff {
-  static constexpr int kValue = -1;
-};
-// Integer types: Informed by benchmarks.
-template <>
-struct EvaluationContextCutoff<uint8_t> {
-  static constexpr int kValue = 50;
-};
-template <>
-struct EvaluationContextCutoff<uint16_t> {
-  static constexpr int kValue = 34;
-};
-template <>
-struct EvaluationContextCutoff<uint32_t> {
-  static constexpr int kValue = 28;
-};
-template <>
-struct EvaluationContextCutoff<uint64_t> {
-  static constexpr int kValue = 24;
-};
-template <>
-struct EvaluationContextCutoff<absl::uint128> {
-  static constexpr int kValue = 22;
-};
-// XorWrapper: Same as the underlying type.
-template <typename T>
-struct EvaluationContextCutoff<XorWrapper<T>> {
-  static constexpr int kValue = EvaluationContextCutoff<T>::kValue;
-};
-
-}  // namespace dpf_internal
-
 template <typename T>
 absl::Status DistributedComparisonFunction::BatchEvaluate(
     dpf_internal::MaybeDerefSpan<const DcfKey> keys,
@@ -177,47 +142,52 @@ absl::Status DistributedComparisonFunction::BatchEvaluate(
   }
 
   const int log_domain_size = parameters_.parameters().log_domain_size();
-
-  absl::StatusOr<EvaluationContext> ctx;
-  for (int j = 0; j < keys.size(); ++j) {
-    output[j] = T{};
-    const DcfKey& key = keys[j];
-    const absl::uint128& x = evaluation_points[j];
-
-    if (log_domain_size >= dpf_internal::EvaluationContextCutoff<T>::kValue) {
-      ctx = dpf_->CreateEvaluationContext(key.key());
-      if (!ctx.ok()) {
-        return ctx.status();
-      }
+  const int num_keys = keys.size();
+  int hierarchy_level = 0;
+  absl::Status status = absl::OkStatus();
+  auto accumulator = [&status, &hierarchy_level, num_keys, log_domain_size,
+                      output, evaluation_points](absl::Span<const T> values) {
+    if (values.size() != num_keys) {
+      status = absl::InternalError(
+          "The size of the span passed to `accumulator` does not match the "
+          "number of batched keys");
+      return false;
     }
-    absl::StatusOr<std::vector<T>> dpf_evaluation;
-    for (int i = 0; i < log_domain_size; ++i) {
-      int current_bit = static_cast<int>(
-          (x & (absl::uint128{1} << (log_domain_size - i - 1))) != 0);
-      // Only evaluate the DPF when we actually need it. This leaks information
-      // about x through a timing side-channel. However, we don't protect
-      // against this anyway, and in many cases x is public.
+    const absl::uint128 mask =
+        (absl::uint128{1} << (log_domain_size - hierarchy_level - 1));
+    for (int i = 0; i < num_keys; ++i) {
+      const auto current_bit =
+          static_cast<int>((evaluation_points[i] & mask) != 0);
       if (current_bit == 0) {
-        HWY_ALIGN_MAX absl::uint128 prefix = 0;
-        if (log_domain_size < 128) {
-          prefix = x >> (log_domain_size - i);
-        }
-        if (log_domain_size >=
-            dpf_internal::EvaluationContextCutoff<T>::kValue) {
-          dpf_evaluation =
-              dpf_->EvaluateAt<T>(i, absl::MakeConstSpan(&prefix, 1), *ctx);
-        } else {
-          dpf_evaluation = dpf_->EvaluateAt<T>(key.key(), i,
-                                               absl::MakeConstSpan(&prefix, 1));
-        }
-        if (!dpf_evaluation.ok()) {
-          return dpf_evaluation.status();
-        }
-        output[j] += (*dpf_evaluation)[0];
+        output[i] += values[i];
       }
     }
+    ++hierarchy_level;
+    return true;
+  };
+
+  // Create vector of pointers to DPF keys.
+  std::vector<const DpfKey*> dpf_keys(num_keys);
+  for (int i = 0; i < num_keys; ++i) {
+    dpf_keys[i] = &(keys[i].key());
   }
-  return absl::OkStatus();
+
+  // We don't evaluate on the least-significant bit, since there the output only
+  // depends on alpha. See Algorith m 7 in https://eprint.iacr.org/2022/866.pdf.
+  auto prefixes = hwy::AllocateAligned<absl::uint128>(num_keys);
+  if (prefixes == nullptr) {
+    return absl::ResourceExhaustedError("Memory allocation error");
+  }
+  for (int i = 0; i < num_keys; ++i) {
+    prefixes[i] = evaluation_points[i] >> 1;
+  }
+
+  std::fill(output.begin(), output.end(), T{});
+  absl::Status status2 = dpf_->EvaluateAndApply<T>(
+      dpf_keys, absl::MakeConstSpan(prefixes.get(), num_keys),
+      std::move(accumulator));
+  if (!status2.ok()) return status2;
+  return status;
 }
 
 }  // namespace distributed_point_functions
