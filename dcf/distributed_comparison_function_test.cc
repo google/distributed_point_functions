@@ -22,8 +22,8 @@
 #include "absl/random/random.h"
 #include "absl/random/uniform_int_distribution.h"
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/utility/utility.h"
+#include "dcf/distributed_comparison_function.pb.h"
 #include "dpf/internal/status_matchers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -31,6 +31,11 @@
 namespace distributed_point_functions {
 
 namespace {
+
+using dpf_internal::IsOkAndHolds;
+using dpf_internal::StatusIs;
+using ::testing::ElementsAreArray;
+using ::testing::HasSubstr;
 
 // Helper function that recursively sets all elements of a tuple to 42.
 template <typename T0>
@@ -126,6 +131,59 @@ TYPED_TEST(DcfTest, GenEval) {
       }
     }
   }
+}
+
+TYPED_TEST(DcfTest, FailsIfDpfKeyIsMalformed) {
+  using ValueType = typename TypeParam::ValueType;
+  DcfKey key;
+
+  EXPECT_THAT(this->dcf_->template Evaluate<ValueType>(key, 0),
+              StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("key")));
+}
+
+TYPED_TEST(DcfTest, BatchEvaluateFailsIfEvaluationPointsHasWrongSize) {
+  using ValueType = typename TypeParam::ValueType;
+  std::vector<DcfKey> keys(1);
+  std::vector<absl::uint128> evaluation_points(2);
+
+  EXPECT_THAT(
+      this->dcf_->template BatchEvaluate<ValueType>(keys, evaluation_points),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("evaluation_points")));
+}
+
+TYPED_TEST(DcfTest, BatchEvaluateFailsIfOutputHasWrongSize) {
+  using ValueType = typename TypeParam::ValueType;
+  std::vector<DcfKey> keys(1);
+  std::vector<absl::uint128> evaluation_points(1);
+  std::vector<ValueType> output(2);
+
+  EXPECT_THAT(
+      this->dcf_->template BatchEvaluate<ValueType>(keys, evaluation_points,
+                                                    absl::MakeSpan(output)),
+      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("output")));
+}
+
+TYPED_TEST(DcfTest, BatchEvaluateMatchesSingleEvaluate) {
+  using ValueType = typename TypeParam::ValueType;
+  absl::uint128 alpha = 0;
+  ValueType beta;
+  SetTo42(beta);
+  std::vector<DcfKey> keys(2);
+  DPF_ASSERT_OK_AND_ASSIGN(std::tie(keys[0], keys[1]),
+                           this->dcf_->GenerateKeys(alpha, beta));
+  std::vector<absl::uint128> evaluation_points{0, 1};
+
+  DPF_ASSERT_OK_AND_ASSIGN(
+      ValueType evaluation_0,
+      this->dcf_->template Evaluate<ValueType>(keys[0], evaluation_points[0]));
+  DPF_ASSERT_OK_AND_ASSIGN(
+      ValueType evaluation_1,
+      this->dcf_->template Evaluate<ValueType>(keys[1], evaluation_points[1]));
+
+  EXPECT_THAT(
+      this->dcf_->template BatchEvaluate<ValueType>(keys, evaluation_points),
+      IsOkAndHolds(ElementsAreArray({evaluation_0, evaluation_1})));
 }
 
 TEST(DcfTest, WorksCorrectlyOnUint64TWithLargeDomain) {
