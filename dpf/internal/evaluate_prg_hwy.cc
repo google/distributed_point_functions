@@ -117,18 +117,21 @@ M IfThenElseMask(M condition, M true_value, M false_value) {
 template <typename V, typename D>
 auto IsBitSet(D d, const V input, int index) {
   // First create a 128-bit block with the `index`-th bit set.
-  HWY_ALIGN absl::uint128 shifted_index = absl::uint128{1} << index;
+  HWY_ALIGN absl::uint128 mask = 0;
+  if (index < 128) {
+    mask = absl::uint128{1} << index;
+  }
 
   // Now load it into a vector of 64-bit integers. Note that every second
   // element of that vector will be 0.
   const hn::Repartition<uint64_t, D> d64;
   static_assert(ABSL_IS_LITTLE_ENDIAN);
-  const auto index_64 =
-      hn::LoadDup128(d64, reinterpret_cast<const uint64_t*>(&shifted_index));
+  const auto mask_64 =
+      hn::LoadDup128(d64, reinterpret_cast<const uint64_t*>(&mask));
 
-  // Compute input AND index_64 on 64-bit integers.
+  // Compute input AND mask_64 on 64-bit integers.
   auto input_64 = hn::BitCast(d64, input);
-  input_64 = hn::And(input_64, index_64);
+  input_64 = hn::And(input_64, mask_64);
 
   // Take the OR of every two adjacent 64-bit integers. This ensures that each
   // half of an 128-bit block is nonzero iff at least one half was nonzero.
@@ -147,10 +150,11 @@ struct HWY_ALIGN Aligned128 {
 absl::Status EvaluateSeedsHwy(
     int64_t num_seeds, int num_levels, int num_correction_words,
     const absl::uint128* seeds_in, const bool* control_bits_in,
-    const absl::uint128* paths, const absl::uint128* correction_seeds,
-    const bool* correction_controls_left, const bool* correction_controls_right,
-    const Aes128FixedKeyHash& prg_left, const Aes128FixedKeyHash& prg_right,
-    absl::uint128* seeds_out, bool* control_bits_out) {
+    const absl::uint128* paths, int paths_rightshift,
+    const absl::uint128* correction_seeds, const bool* correction_controls_left,
+    const bool* correction_controls_right, const Aes128FixedKeyHash& prg_left,
+    const Aes128FixedKeyHash& prg_right, absl::uint128* seeds_out,
+    bool* control_bits_out) {
   // Exit early if inputs are empty.
   if (num_seeds == 0 || num_levels == 0) {
     return absl::OkStatus();
@@ -171,11 +175,11 @@ absl::Status EvaluateSeedsHwy(
   // - the number of bytes in a vector is a multiple of 16.
   if (ABSL_PREDICT_FALSE(!is_aligned || hn::Lanes(d8) < 16 ||
                          hn::Lanes(d8) % 16 != 0)) {
-    return EvaluateSeedsNoHwy(num_seeds, num_levels, num_correction_words,
-                              seeds_in, control_bits_in, paths,
-                              correction_seeds, correction_controls_left,
-                              correction_controls_right, prg_left, prg_right,
-                              seeds_out, control_bits_out);
+    return EvaluateSeedsNoHwy(
+        num_seeds, num_levels, num_correction_words, seeds_in, control_bits_in,
+        paths, paths_rightshift, correction_seeds, correction_controls_left,
+        correction_controls_right, prg_left, prg_right, seeds_out,
+        control_bits_out);
   }
 
   // Do AES key schedule.
@@ -230,7 +234,7 @@ absl::Status EvaluateSeedsHwy(
         MaskFromBools(d64, control_bits_in + start_block + 3 * blocks_per_vec);
     for (int j = 0; j < num_levels; ++j) {
       // Convert path bits to masks and evaluate PRG.
-      const int bit_index = num_levels - j - 1;
+      const int bit_index = num_levels - j - 1 + paths_rightshift;
       const auto path_mask_0 = IsBitSet(d8, path_0, bit_index);
       const auto path_mask_1 = IsBitSet(d8, path_1, bit_index);
       const auto path_mask_2 = IsBitSet(d8, path_2, bit_index);
@@ -393,7 +397,7 @@ absl::Status EvaluateSeedsHwy(
     const auto path = hn::Load(d8, paths_ptr + i);
     auto control_mask = MaskFromBools(d64, control_bits_in + start_block);
     for (int j = 0; j < num_levels; ++j) {
-      const int bit_index = num_levels - j - 1;
+      const int bit_index = num_levels - j - 1 + paths_rightshift;
       const auto path_mask = IsBitSet(d8, path, bit_index);
       HashOneWithKeyMask(
           d8, vec, path_mask,
@@ -475,7 +479,7 @@ absl::Status EvaluateSeedsHwy(
     auto control_mask =
         MaskFromBools(d64, control_bits_in + start_block, remaining_blocks);
     for (int j = 0; j < num_levels; ++j) {
-      const int bit_index = num_levels - j - 1;
+      const int bit_index = num_levels - j - 1 + paths_rightshift;
       const auto path_mask = IsBitSet(d8, path, bit_index);
       HashOneWithKeyMask(
           d8, vec, path_mask,
@@ -548,10 +552,11 @@ namespace dpf_internal {
 absl::Status EvaluateSeedsNoHwy(
     int64_t num_seeds, int num_levels, int num_correction_words,
     const absl::uint128* seeds_in, const bool* control_bits_in,
-    const absl::uint128* paths, const absl::uint128* correction_seeds,
-    const bool* correction_controls_left, const bool* correction_controls_right,
-    const Aes128FixedKeyHash& prg_left, const Aes128FixedKeyHash& prg_right,
-    absl::uint128* seeds_out, bool* control_bits_out) {
+    const absl::uint128* paths, int paths_rightshift,
+    const absl::uint128* correction_seeds, const bool* correction_controls_left,
+    const bool* correction_controls_right, const Aes128FixedKeyHash& prg_left,
+    const Aes128FixedKeyHash& prg_right, absl::uint128* seeds_out,
+    bool* control_bits_out) {
   using BitVector =
       absl::InlinedVector<bool,
                           std::max<size_t>(1, sizeof(bool*) / sizeof(bool))>;
@@ -582,12 +587,12 @@ absl::Status EvaluateSeedsNoHwy(
           seeds, absl::MakeSpan(buffer_right).subspan(0, current_batch_size)));
 
       // Merge back into result.
-      const int bit_index = num_levels - level - 1;
+      const int bit_index = num_levels - level - 1 + paths_rightshift;
       for (int i = 0; i < current_batch_size; ++i) {
         path_bits[i] = 0;
         if (bit_index < 128) {
           path_bits[i] =
-              (paths[start_block + i] & (absl::uint128{1} << bit_index)) != 0;
+              ((paths[start_block + i]) & (absl::uint128{1} << bit_index)) != 0;
         }
         if (path_bits[i] == 0) {
           seeds_out[start_block + i] = buffer_left[i];
@@ -633,10 +638,11 @@ HWY_EXPORT(EvaluateSeedsHwy);
 absl::Status EvaluateSeeds(
     int64_t num_seeds, int num_levels, int num_correction_words,
     const absl::uint128* seeds_in, const bool* control_bits_in,
-    const absl::uint128* paths, const absl::uint128* correction_seeds,
-    const bool* correction_controls_left, const bool* correction_controls_right,
-    const Aes128FixedKeyHash& prg_left, const Aes128FixedKeyHash& prg_right,
-    absl::uint128* seeds_out, bool* control_bits_out) {
+    const absl::uint128* paths, int paths_rightshift,
+    const absl::uint128* correction_seeds, const bool* correction_controls_left,
+    const bool* correction_controls_right, const Aes128FixedKeyHash& prg_left,
+    const Aes128FixedKeyHash& prg_right, absl::uint128* seeds_out,
+    bool* control_bits_out) {
   // Check that we either have one or `num_seeds` correction words per level.
   if (num_correction_words != num_levels &&
       num_correction_words != num_levels * num_seeds) {
@@ -646,7 +652,7 @@ absl::Status EvaluateSeeds(
   }
   return HWY_DYNAMIC_DISPATCH(EvaluateSeedsHwy)(
       num_seeds, num_levels, num_correction_words, seeds_in, control_bits_in,
-      paths, correction_seeds, correction_controls_left,
+      paths, paths_rightshift, correction_seeds, correction_controls_left,
       correction_controls_right, prg_left, prg_right, seeds_out,
       control_bits_out);
 }

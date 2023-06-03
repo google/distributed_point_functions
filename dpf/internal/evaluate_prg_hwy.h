@@ -40,7 +40,8 @@ inline bool ExtractAndClearLowestBit(absl::uint128& x) {
 // `correction_seeds`, `correction_controls_left`, and
 // `correction_controls_right`. At each level `l < num_level`, the evaluation
 // for the i-th seed continues along the left or right path depending on the
-// l-th most significant bit among the lowest `num_levels` bits of `paths[i]`.
+// l-th most significant bit among the lowest `num_levels` bits of `paths[i]`,
+// after right-shifting each `paths[i]` by `paths_rightshift`.
 //
 // This function takes raw pointers instead of absl::Span for performance
 // reasons. No bounds checks are performed, so it is the caller's responsibility
@@ -69,19 +70,21 @@ inline bool ExtractAndClearLowestBit(absl::uint128& x) {
 absl::Status EvaluateSeeds(
     int64_t num_seeds, int num_levels, int num_correction_words,
     const absl::uint128* seeds_in, const bool* control_bits_in,
-    const absl::uint128* paths, const absl::uint128* correction_seeds,
-    const bool* correction_controls_left, const bool* correction_controls_right,
-    const Aes128FixedKeyHash& prg_left, const Aes128FixedKeyHash& prg_right,
-    absl::uint128* seeds_out, bool* control_bits_out);
+    const absl::uint128* paths, int paths_rightshift,
+    const absl::uint128* correction_seeds, const bool* correction_controls_left,
+    const bool* correction_controls_right, const Aes128FixedKeyHash& prg_left,
+    const Aes128FixedKeyHash& prg_right, absl::uint128* seeds_out,
+    bool* control_bits_out);
 
 // As `EvaluateSeeds`, but does not require any SIMD support.
 absl::Status EvaluateSeedsNoHwy(
     int64_t num_seeds, int num_levels, int num_correction_words,
     const absl::uint128* seeds_in, const bool* control_bits_in,
-    const absl::uint128* paths, const absl::uint128* correction_seeds,
-    const bool* correction_controls_left, const bool* correction_controls_right,
-    const Aes128FixedKeyHash& prg_left, const Aes128FixedKeyHash& prg_right,
-    absl::uint128* seeds_out, bool* control_bits_out);
+    const absl::uint128* paths, int paths_rightshift,
+    const absl::uint128* correction_seeds, const bool* correction_controls_left,
+    const bool* correction_controls_right, const Aes128FixedKeyHash& prg_left,
+    const Aes128FixedKeyHash& prg_right, absl::uint128* seeds_out,
+    bool* control_bits_out);
 
 }  // namespace dpf_internal
 }  // namespace distributed_point_functions

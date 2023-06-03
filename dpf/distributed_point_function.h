@@ -1147,7 +1147,7 @@ absl::Status DistributedPointFunction::EvaluateAndApply(
       // Evaluate the current hierarchy level for all keys.
       absl::Status status = dpf_internal::EvaluateSeeds(
           seeds.size(), num_tree_levels, num_tree_levels * num_keys,
-          seeds.data(), control_bits.data(), tree_indices.get(),
+          seeds.data(), control_bits.data(), tree_indices.get(), 0,
           correction_seeds.get(), correction_control_bits_left.data(),
           correction_control_bits_right.data(), prg_left_, prg_right_,
           seeds.data(), control_bits.data());
