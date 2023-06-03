@@ -20,6 +20,7 @@
 
 #include "absl/numeric/int128.h"
 #include "absl/status/statusor.h"
+#include "absl/types/span.h"
 #include "dcf/distributed_comparison_function.h"
 #include "dcf/fss_gates/multiple_interval_containment.pb.h"
 #include "dpf/status_macros.h"
@@ -72,7 +73,20 @@ class MultipleIntervalContainmentGate {
   // This method evaluates the Multiple Interval Containment Gate key k
   // on input domain point `x`. The output is returned as a 128 bit string
   // and needs to be interpreted as an element in the output group Z_{2 ^ n}.
-  absl::StatusOr<std::vector<absl::uint128>> Eval(MicKey k, absl::uint128 x);
+  inline absl::StatusOr<std::vector<absl::uint128>> Eval(MicKey k,
+                                                         absl::uint128 x) {
+    return BatchEval(absl::MakeConstSpan(&k, 1), absl::MakeConstSpan(&x, 1));
+  }
+
+  // Evaluates keys[i] on evaluation_points[i] for all i, and returns the result
+  // as a single vector of absl::uint128. The result for key i and interval j
+  // will be at position i * num_intervals + j in the resulting vector.
+  //
+  // Returns INVALID_ARGUMENT if any key is invalid, or if any evaluation point
+  // is out of range.
+  absl::StatusOr<std::vector<absl::uint128>> BatchEval(
+      absl::Span<const MicKey> keys,
+      absl::Span<const absl::uint128> evaluation_points);
 
  private:
   // Parameters needed for specifying a Multiple Interval Containment Gate.

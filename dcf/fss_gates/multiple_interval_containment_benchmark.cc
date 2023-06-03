@@ -56,11 +56,9 @@ void BM_BatchedMicEvaluation(benchmark::State& state) {
 
   std::vector<absl::uint128> evaluations(num_intervals);
   for (auto s : state) {
-    for (int i = 0; i < num_keys; ++i) {
-      DPF_ASSERT_OK_AND_ASSIGN(evaluations,
-                               mic_gate->Eval(keys[i], evaluation_points[i]));
-      benchmark::DoNotOptimize(evaluations);
-    }
+    DPF_ASSERT_OK_AND_ASSIGN(evaluations,
+                             mic_gate->BatchEval(keys, evaluation_points));
+    benchmark::DoNotOptimize(evaluations);
   }
 }
 

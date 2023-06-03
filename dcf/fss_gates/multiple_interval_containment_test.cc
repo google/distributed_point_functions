@@ -19,7 +19,9 @@
 #include <tuple>
 #include <vector>
 
+#include "absl/algorithm/container.h"
 #include "absl/numeric/int128.h"
+#include "absl/random/random.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -540,6 +542,45 @@ TEST(MICTest, EvalFailsForMaskedInputOutsideGroup) {
               dpf_internal::StatusIs(
                   absl::StatusCode::kInvalidArgument,
                   "Masked input should be between 0 and 2^log_group_size"));
+}
+
+TEST(MICTest, BatchEvalIsSameAsRepeatedEval) {
+  int num_keys = 5;
+  int num_intervals = 7;
+  MicParameters params;
+  params.set_log_group_size(64);
+
+  std::vector<MicKey> keys(num_keys);
+  std::vector<absl::uint128> evaluation_points(num_keys);
+  std::vector<absl::uint128> r_out(num_intervals);
+  absl::BitGen gen;
+  for (int i = 0; i < num_intervals; ++i) {
+    uint64_t lower = absl::Uniform<uint64_t>(gen);
+    uint64_t upper = absl::Uniform<uint64_t>(gen);
+    if (lower > upper) std::swap(lower, upper);
+    Interval* interval = params.add_intervals();
+    interval->mutable_lower_bound()->set_value_uint64(lower);
+    interval->mutable_upper_bound()->set_value_uint64(upper);
+    r_out[i] = absl::Uniform<uint64_t>(gen);
+  }
+  DPF_ASSERT_OK_AND_ASSIGN(auto mic_gate,
+                           MultipleIntervalContainmentGate::Create(params));
+  for (int i = 0; i < num_keys; ++i) {
+    DPF_ASSERT_OK_AND_ASSIGN(
+        std::tie(keys[i], std::ignore),
+        mic_gate->Gen(absl::Uniform<uint64_t>(gen), r_out));
+  }
+
+  DPF_ASSERT_OK_AND_ASSIGN(auto evaluations,
+                           mic_gate->BatchEval(keys, evaluation_points));
+  std::vector<absl::uint128> evaluations2;
+  for (int i = 0; i < num_keys; ++i) {
+    DPF_ASSERT_OK_AND_ASSIGN(auto evaluations_i,
+                             mic_gate->Eval(keys[i], evaluation_points[i]));
+    absl::c_move(evaluations_i, std::back_inserter(evaluations2));
+  }
+
+  EXPECT_THAT(evaluations, testing::ContainerEq(evaluations2));
 }
 
 }  // namespace

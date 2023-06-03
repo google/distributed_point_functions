@@ -44,6 +44,7 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -73,7 +74,9 @@ cc_test(
         "//dpf/internal:status_matchers",
         "//dpf/internal:value_type_helpers",
         "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/random",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
