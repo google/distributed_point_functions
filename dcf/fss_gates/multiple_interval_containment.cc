@@ -137,7 +137,6 @@ absl::StatusOr<std::pair<MicKey, MicKey>> MultipleIntervalContainmentGate::Gen(
   absl::uint128 gamma = (N - 1 + r_in) % N;
 
   // Line 2
-
   DcfKey key_0, key_1;
 
   absl::uint128 alpha = gamma;
@@ -228,55 +227,73 @@ MultipleIntervalContainmentGate::BatchEval(
     }
   }
 
-  std::vector<absl::uint128> res;
-  res.reserve(keys.size() * mic_parameters_.intervals_size());
-  for (int j = 0; j < keys.size(); ++j) {
-    const absl::uint128 x = evaluation_points[j];
-    const MicKey& k = keys[j];
+  int num_intervals = mic_parameters_.intervals_size();
+  std::vector<absl::uint128> p(num_intervals), q(num_intervals),
+      q_prime(num_intervals), x_p(keys.size() * num_intervals),
+      x_q_prime(keys.size() * num_intervals), s_p(keys.size() * num_intervals),
+      s_q_prime(keys.size() * num_intervals);
 
-    // The following code is commented using their Line numbering in
-    // https://eprint.iacr.org/2020/1392 Fig. 14 Eval procedure.
-
+  // The following code is commented using their Line numbering in
+  // https://eprint.iacr.org/2020/1392 Fig. 14 Eval procedure.
+  for (int i = 0; i < num_intervals; ++i) {
     // Line 2
-    for (int i = 0; i < mic_parameters_.intervals_size(); ++i) {
-      absl::uint128 p = absl::MakeUint128(
-          mic_parameters_.intervals(i).lower_bound().value_uint128().high(),
-          mic_parameters_.intervals(i).lower_bound().value_uint128().low());
+    p[i] = absl::MakeUint128(
+        mic_parameters_.intervals(i).lower_bound().value_uint128().high(),
+        mic_parameters_.intervals(i).lower_bound().value_uint128().low());
 
-      absl::uint128 q = absl::MakeUint128(
-          mic_parameters_.intervals(i).upper_bound().value_uint128().high(),
-          mic_parameters_.intervals(i).upper_bound().value_uint128().low());
+    q[i] = absl::MakeUint128(
+        mic_parameters_.intervals(i).upper_bound().value_uint128().high(),
+        mic_parameters_.intervals(i).upper_bound().value_uint128().low());
 
-      // Line 3
-      absl::uint128 q_prime = (q + 1) % N;
+    // Line 3
+    q_prime[i] = (q[i] + 1) % N;
+  }
 
+  std::vector<const DcfKey*> dcf_keys;
+  dcf_keys.reserve(keys.size() * num_intervals);
+  for (int i = 0; i < keys.size(); ++i) {
+    const absl::uint128& x = evaluation_points[i];
+    for (int j = 0; j < num_intervals; ++j) {
+      int index = i * num_intervals + j;
       // Line 4
-      absl::uint128 x_p = (x + N - 1 - p) % N;
-      absl::uint128 x_q_prime = (x + N - 1 - q_prime) % N;
+      x_p[index] = (x + N - 1 - p[j]) % N;
+      x_q_prime[index] = (x + N - 1 - q_prime[j]) % N;
 
-      // Line 5
-      absl::uint128 s_p;
-      DPF_ASSIGN_OR_RETURN(s_p, dcf_->Evaluate<absl::uint128>(k.dcfkey(), x_p));
-      s_p = s_p % N;
-
-      // Line 6
-      absl::uint128 s_q_prime;
-      DPF_ASSIGN_OR_RETURN(
-          s_q_prime, dcf_->Evaluate<absl::uint128>(k.dcfkey(), x_q_prime));
-      s_q_prime = s_q_prime % N;
-
-      // Line 7
-      absl::uint128 y;
-      absl::uint128 z =
-          absl::MakeUint128(k.output_mask_share(i).value_uint128().high(),
-                            k.output_mask_share(i).value_uint128().low());
-      y = (k.dcfkey().key().party() ? ((x > p ? 1 : 0) - (x > q_prime ? 1 : 0))
-                                    : 0) -
-          s_p + s_q_prime + z;
-      res.push_back(y % N);
+      // Extract DCF keys from MIC keys.
+      dcf_keys.push_back(&(keys[i].dcfkey()));
     }
   }
 
+  // Line 5
+  DPF_RETURN_IF_ERROR(dcf_->BatchEvaluate<absl::uint128>(
+      absl::MakeConstSpan(dcf_keys), x_p, absl::MakeSpan(s_p)));
+
+  // Line 6
+  DPF_RETURN_IF_ERROR(dcf_->BatchEvaluate<absl::uint128>(
+      absl::MakeConstSpan(dcf_keys), x_q_prime, absl::MakeSpan(s_q_prime)));
+
+  std::vector<absl::uint128> res;
+  res.reserve(keys.size() * num_intervals);
+  for (int i = 0; i < keys.size(); ++i) {
+    const absl::uint128& x = evaluation_points[i];
+    const MicKey& k = keys[i];
+    for (int j = 0; j < num_intervals; ++j) {
+      int index = i * num_intervals + j;
+
+      s_p[index] = s_p[index] % N;
+      s_q_prime[index] = s_q_prime[index] % N;
+
+      // Line 7
+      absl::uint128 z =
+          absl::MakeUint128(k.output_mask_share(j).value_uint128().high(),
+                            k.output_mask_share(j).value_uint128().low());
+      absl::uint128 y = (k.dcfkey().key().party()
+                             ? ((x > p[j] ? 1 : 0) - (x > q_prime[j] ? 1 : 0))
+                             : 0) -
+                        s_p[index] + s_q_prime[index] + z;
+      res.push_back(y % N);
+    }
+  }
   // Line 9
   return res;
 }

@@ -73,7 +73,7 @@ class MultipleIntervalContainmentGate {
   // This method evaluates the Multiple Interval Containment Gate key k
   // on input domain point `x`. The output is returned as a 128 bit string
   // and needs to be interpreted as an element in the output group Z_{2 ^ n}.
-  inline absl::StatusOr<std::vector<absl::uint128>> Eval(MicKey k,
+  inline absl::StatusOr<std::vector<absl::uint128>> Eval(const MicKey& k,
                                                          absl::uint128 x) {
     return BatchEval(absl::MakeConstSpan(&k, 1), absl::MakeConstSpan(&x, 1));
   }

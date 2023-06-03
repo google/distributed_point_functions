@@ -29,6 +29,7 @@
 #include "dcf/distributed_comparison_function.pb.h"
 #include "dpf/distributed_point_function.h"
 #include "dpf/distributed_point_function.pb.h"
+#include "dpf/internal/maybe_deref_span.h"
 #include "hwy/base.h"
 
 namespace distributed_point_functions {
@@ -79,14 +80,16 @@ class DistributedComparisonFunction {
     return result;
   }
 
-  // Evaluates `keys[i]` at `evaluation_points[i]` for all i.
+  // Evaluates `keys[i]` at `evaluation_points[i]` for all i. `keys` can be any
+  // container convertible to absl::Span<const DcfKey> or absl::Span<const
+  // DcfKey* const>.
   //
   // Returns INVALID_ARGUMENT if `keys` and `evaluation_points` have different
   // sizes, or if any element of `keys` is invalid or any element of
   // `evaluation_points` is out of scope.
   template <typename T>
   inline absl::StatusOr<std::vector<T>> BatchEvaluate(
-      absl::Span<const DcfKey> keys,
+      dpf_internal::MaybeDerefSpan<const DcfKey> keys,
       absl::Span<const absl::uint128> evaluation_points) {
     std::vector<T> result(keys.size());
     absl::Status status =
@@ -103,7 +106,7 @@ class DistributedComparisonFunction {
   // Returns INVALID_ARGUMENT `output`, `keys`, and `evaluation_points` don't
   // have the same size.
   template <typename T>
-  absl::Status BatchEvaluate(absl::Span<const DcfKey> keys,
+  absl::Status BatchEvaluate(dpf_internal::MaybeDerefSpan<const DcfKey> keys,
                              absl::Span<const absl::uint128> evaluation_points,
                              absl::Span<T> output);
 
@@ -161,7 +164,7 @@ struct EvaluationContextCutoff<XorWrapper<T>> {
 
 template <typename T>
 absl::Status DistributedComparisonFunction::BatchEvaluate(
-    absl::Span<const DcfKey> keys,
+    dpf_internal::MaybeDerefSpan<const DcfKey> keys,
     absl::Span<const absl::uint128> evaluation_points, absl::Span<T> output) {
   if (keys.size() != evaluation_points.size()) {
     // Different error message for the two-argument version.
