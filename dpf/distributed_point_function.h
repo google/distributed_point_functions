@@ -1086,9 +1086,7 @@ absl::Status DistributedPointFunction::EvaluateAndApply(
   DpfExpansion eval;
   eval.control_bits.resize(num_keys);
   eval.seeds = hwy::AllocateAligned<absl::uint128>(num_keys);
-  auto tree_indices = hwy::AllocateAligned<absl::uint128>(num_keys);
-  auto prefixes = hwy::AllocateAligned<absl::uint128>(num_keys);
-  if (eval.seeds == nullptr || tree_indices == nullptr || prefixes == nullptr) {
+  if (eval.seeds == nullptr) {
     return absl::ResourceExhaustedError("Memory allocation error");
   }
   absl::Span<absl::uint128> seeds(eval.seeds.get(), num_keys);
@@ -1112,17 +1110,12 @@ absl::Status DistributedPointFunction::EvaluateAndApply(
       stop_level = hierarchy_to_tree_[hierarchy_level];
     }
 
-    // Compute prefixes for the current level.
-    const int shift_amount = (parameters_.back().log_domain_size() -
-                              parameters_[hierarchy_level].log_domain_size());
-    constexpr int elements_per_block = dpf_internal::ElementsPerBlock<T>();
-    for (int64_t i = 0; i < num_keys; ++i) {
-      prefixes[i] = 0;
-      if (shift_amount < 128) {
-        prefixes[i] = evaluation_points[i] >> shift_amount;
-      }
-      tree_indices[i] = DomainToTreeIndex(prefixes[i], hierarchy_level);
-    }
+    // Compute index shifts for the current level.
+    const int domain_index_rightshift =
+        parameters_.back().log_domain_size() -
+        parameters_[hierarchy_level].log_domain_size();
+    const int tree_index_rightshift = parameters_.back().log_domain_size() -
+                                      hierarchy_to_tree_[hierarchy_level];
 
     int num_tree_levels = stop_level - start_level;
     if (num_tree_levels > 0) {
@@ -1147,8 +1140,9 @@ absl::Status DistributedPointFunction::EvaluateAndApply(
       // Evaluate the current hierarchy level for all keys.
       absl::Status status = dpf_internal::EvaluateSeeds(
           seeds.size(), num_tree_levels, num_tree_levels * num_keys,
-          seeds.data(), control_bits.data(), tree_indices.get(), 0,
-          correction_seeds.get(), correction_control_bits_left.data(),
+          seeds.data(), control_bits.data(), evaluation_points.data(),
+          tree_index_rightshift, correction_seeds.get(),
+          correction_control_bits_left.data(),
           correction_control_bits_right.data(), prg_left_, prg_right_,
           seeds.data(), control_bits.data());
       if (!status.ok()) {
@@ -1164,6 +1158,7 @@ absl::Status DistributedPointFunction::EvaluateAndApply(
     }
 
     // Compute value correction for the current level.
+    constexpr int elements_per_block = dpf_internal::ElementsPerBlock<T>();
     const int blocks_needed = blocks_needed_[hierarchy_level];
     for (int64_t i = 0; i < num_keys; ++i) {
       std::array<T, elements_per_block> current_elements =
@@ -1177,8 +1172,9 @@ absl::Status DistributedPointFunction::EvaluateAndApply(
         return correction_ints.status();
       }
       int block_index = 0;
-      if (elements_per_block > 1) {
-        block_index = DomainToBlockIndex(prefixes[i], hierarchy_level);
+      if (elements_per_block > 1 && domain_index_rightshift < 128) {
+        block_index = DomainToBlockIndex(
+            evaluation_points[i] >> domain_index_rightshift, hierarchy_level);
       }
       values[i] = current_elements[block_index];
       if (control_bits[i]) {
