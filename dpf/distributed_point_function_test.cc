@@ -29,6 +29,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/str_join.h"
 #include "absl/types/span.h"
 #include "absl/utility/utility.h"
 #include "dpf/distributed_point_function.pb.h"
@@ -44,6 +45,7 @@ namespace {
 using dpf_internal::IsOk;
 using dpf_internal::IsOkAndHolds;
 using dpf_internal::StatusIs;
+using ::testing::HasSubstr;
 using ::testing::Ne;
 using ::testing::StartsWith;
 
@@ -987,6 +989,8 @@ using MyIntModN128 =
                                65535u, 18446744073709551551ull))>;  // 2**80-65
 #endif
 using DpfEvaluationTypes = ::testing::Types<
+    // Integers
+    uint8_t, uint32_t, uint64_t, absl::uint128,
     // Tuple
     Tuple<uint8_t>, Tuple<uint32_t>, Tuple<absl::uint128>,
     Tuple<uint32_t, uint32_t>, Tuple<uint32_t, uint64_t>,
@@ -1072,6 +1076,90 @@ TYPED_TEST(DpfEvaluationTest, TestBatchSinglePointEvaluation) {
       }
     }
   }
+}
+
+TYPED_TEST(DpfEvaluationTest, TestEvaluateAndApplySimpleAddition) {
+  std::vector<std::vector<int>> parameters = {
+      {0, 1, 2}, {8, 16, 32, 64}, {0, 128}, {128}, {/* filled below */}};
+  for (int i = 0; i <= 128; ++i) {
+    parameters.back().push_back(i);
+  }
+  for (const auto& log_domain_sizes : parameters) {
+    absl::uint128 max_domain_element = absl::Uint128Max();
+    if (log_domain_sizes.back() < 128) {
+      max_domain_element = (absl::uint128{1} << log_domain_sizes.back()) - 1;
+    }
+    absl::uint128 alpha = max_domain_element;
+    this->SetUp(log_domain_sizes, alpha);
+
+    std::vector<absl::uint128> evaluation_points = {23, 42, 123, 0,
+                                                    absl::Uint128Max()};
+    for (auto& point : evaluation_points) {
+      point &= max_domain_element;
+    }
+    std::vector<const DpfKey*> keys = {
+        &(this->keys_.first), &(this->keys_.second), &(this->keys_.first),
+        &(this->keys_.second), &(this->keys_.first)};
+    int num_levels = log_domain_sizes.size();
+    int num_keys = keys.size();
+
+    std::vector<TypeParam> sum(num_keys, TypeParam{});
+    int count = 0;
+    auto fn = [&sum, &count](absl::Span<const TypeParam> values) {
+      for (int i = 0; i < values.size(); ++i) {
+        sum[i] += values[i];
+      }
+      ++count;
+      return true;
+    };
+
+    // Run evaluation level-by-level to compute the expected sum.
+    std::vector<TypeParam> expected(num_keys, TypeParam{});
+    for (int hierarchy_level = 0; hierarchy_level < num_levels;
+         ++hierarchy_level) {
+      const int shift_amount =
+          (log_domain_sizes.back() - log_domain_sizes[hierarchy_level]);
+      for (int i = 0; i < num_keys; ++i) {
+        absl::uint128 prefix = 0;
+        if (shift_amount < 128) {
+          prefix = evaluation_points[i] >> shift_amount;
+        }
+        DPF_ASSERT_OK_AND_ASSIGN(
+            auto result,
+            this->dpf_->template EvaluateAt<TypeParam>(
+                *keys[i], hierarchy_level, absl::MakeConstSpan(&prefix, 1)));
+        expected[i] += result[0];
+      }
+    }
+
+    EXPECT_THAT(this->dpf_->template EvaluateAndApply<TypeParam>(
+                    keys, evaluation_points, fn),
+                IsOk());
+    EXPECT_EQ(sum, expected)
+        << "log_domain_sizes=" << absl::StrJoin(log_domain_sizes, " ");
+    EXPECT_EQ(count, num_levels);
+  }
+}
+
+TYPED_TEST(DpfEvaluationTest,
+           EvaluateAndApplyFailsWithTooManyEvaluationPoints) {
+  std::vector<absl::uint128> evaluation_points = {0, 1};
+
+  EXPECT_THAT(
+      this->dpf_->template EvaluateAndApply<TypeParam>(
+          absl::MakeConstSpan(&(this->keys_.first), 1), evaluation_points,
+          [](absl::Span<const TypeParam>) { return true; }),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("evaluation_points")));
+}
+
+TYPED_TEST(DpfEvaluationTest, EvaluateAndApplyFailsWithInvalidKey) {
+  DpfKey key;
+
+  EXPECT_THAT(this->dpf_->template EvaluateAndApply<TypeParam>(
+                  absl::MakeConstSpan(&key, 1), {0},
+                  [](absl::Span<const TypeParam>) { return true; }),
+              StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("key")));
 }
 
 }  // namespace

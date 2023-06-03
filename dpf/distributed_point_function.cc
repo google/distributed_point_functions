@@ -225,7 +225,7 @@ absl::uint128 DistributedPointFunction::DomainToTreeIndex(
     absl::uint128 domain_index, int hierarchy_level) const {
   int block_index_bits = parameters_[hierarchy_level].log_domain_size() -
                          hierarchy_to_tree_[hierarchy_level];
-  DCHECK(block_index_bits < 128);
+  DCHECK_LT(block_index_bits, 128);
   return domain_index >> block_index_bits;
 }
 
@@ -233,7 +233,7 @@ int DistributedPointFunction::DomainToBlockIndex(absl::uint128 domain_index,
                                                  int hierarchy_level) const {
   int block_index_bits = parameters_[hierarchy_level].log_domain_size() -
                          hierarchy_to_tree_[hierarchy_level];
-  DCHECK(block_index_bits < 128);
+  DCHECK_LT(block_index_bits, 128);
   return static_cast<int>(domain_index &
                           ((absl::uint128{1} << block_index_bits) - 1));
 }
