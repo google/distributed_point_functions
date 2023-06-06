@@ -625,7 +625,7 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
                                          beta_share,
                                          state.cumulative_word));
 	    std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 3" << std::endl;
-            DPF_ASSIGN_OR_RETURN(Value share_of_W1_CW,
+            DPF_ASSIGN_OR_RETURN(share_of_W1_CW,
                     ValueNegate<uint64_t>(share_of_W1_CW_temp));
         }
 
@@ -664,7 +664,7 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
 
         DPF_ASSIGN_OR_RETURN(Value random_value_mask,
                              ConvertRandToVal<uint64_t>(state.mux_2_randomness));
-//
+
 	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7" << std::endl;
 
 
@@ -672,21 +672,27 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
 
         Value masked_ot_1, masked_ot_2, masked_ot_1_tmp, masked_ot_2_tmp;
 
+
         if(state.share_of_t_star == false){
         std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.1" << std::endl;
             DPF_ASSIGN_OR_RETURN(masked_ot_1_tmp,
                                  ValueAdd<uint64_t>(share_of_W0_CW,
                                                     rot_sender_mask_first_value));
 std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.2" << std::endl;
+
+
             DPF_ASSIGN_OR_RETURN(masked_ot_2_tmp,
                     ValueAdd<uint64_t>(share_of_W1_CW,
                                        rot_sender_mask_second_value));
+            std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.25" << std::endl;
         }
         else{
         std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.3" << std::endl;
+
             DPF_ASSIGN_OR_RETURN(masked_ot_1_tmp,
                     ValueAdd<uint64_t>(share_of_W1_CW,
                                        rot_sender_mask_first_value));
+
 	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.4" << std::endl;
             DPF_ASSIGN_OR_RETURN(masked_ot_2_tmp,
                     ValueAdd<uint64_t>(share_of_W0_CW,
@@ -695,11 +701,10 @@ std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.2" << std::endl
 
 	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 8" << std::endl;
 
-
         DPF_ASSIGN_OR_RETURN(masked_ot_1,
                 ValueSub<uint64_t>(masked_ot_1_tmp,
                                    random_value_mask));
-//
+
         DPF_ASSIGN_OR_RETURN(masked_ot_2,
                 ValueSub<uint64_t>(masked_ot_2_tmp,
                                    random_value_mask));
@@ -725,6 +730,8 @@ std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.2" << std::endl
 
         // Decode mux message
         ValueCorrectionShare value_corr_share;
+
+
 
 //        return absl::UnimplementedError("");
 
