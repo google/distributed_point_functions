@@ -25,6 +25,10 @@
 #include "dpf/distributed_point_function.pb.h"
 #include "dpf/key_generation_protocol/key_generation_protocol.pb.h"
 #include "dcf/fss_gates/prng/basic_rng.h"
+#include "dpf/internal/evaluate_prg_hwy.h"
+#include "dpf/internal/get_hwy_mode.h"
+#include "dpf/internal/proto_validator.h"
+#include "dpf/internal/value_type_helpers.h"
 
 namespace distributed_point_functions {
 
@@ -119,6 +123,11 @@ struct ProtocolState{
 
     // Round 4 state
 
+    absl::uint128 reconstructed_seed_correction;
+
+    bool reconstructed_control_left_correction,
+            reconstructed_control_right_correction;
+
     bool masked_tau_zero;
 
     bool tau_zero, tau_one;
@@ -136,6 +145,11 @@ struct ProtocolState{
         // Mux 2 randomness mask
         absl::uint128 mux_2_randomness;
 
+    // Round 7 state
+
+        // share of correction value
+
+        Value correction_value_share;
 
 
     // global  state variables
@@ -316,11 +330,14 @@ class KeyGenerationProtocol {
     }
 
 
+    std::unique_ptr<DistributedPointFunction> dpf_;
+
+
 
 private:
   explicit KeyGenerationProtocol(std::unique_ptr<DistributedPointFunction> dpf);
 
-  std::unique_ptr<DistributedPointFunction> dpf_;
+
 
   // Number of leaves = 2 ^ levels.
 
@@ -363,6 +380,14 @@ private:
         return std::make_pair(mux_corr_party0, mux_corr_party1);
 
     }
+
+        absl::uint128 BlockToUint128(Block x){
+            absl::uint128 y = absl::MakeUint128(x.high(),x.low());
+            return y;
+        }
+
+
+
 
 };
 

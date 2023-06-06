@@ -47,7 +47,28 @@ class KeyGenerationProtocolTest : public testing::Test {
   }
   std::vector<DpfParameters> parameters_;
   int levels;
+  using T = uint64_t;
+
+  absl::uint128 BlockToUint128(Block x){
+      absl::uint128 y = absl::MakeUint128(x.high(),x.low());
+      return y;
+  }
+  void displayDpfKey(DpfKey key, int levels){
+    std::cout << "Party : " << key.party() << std::endl;
+    std::cout << "Root seed : " << BlockToUint128(key.seed()) << std::endl;
+
+    for(int i = 0; i < levels; i++){
+        std::cout << "Level : " << i << std::endl;
+        std::cout << "seed correction : " << BlockToUint128(key.correction_words(i).seed()) << std::endl;
+        std::cout << "left control correction : " << key.correction_words(i).control_left() << std::endl;
+        std::cout << "right control correction : " << key.correction_words(i).control_right() << std::endl;
+        T v = *(FromValue<T>(key.correction_words(i).value_correction(0)));
+        std::cout << "Value correction : " << v << std::endl;
+    }
+  }
 };
+
+
 //
 //TEST_F(KeyGenerationProtocolTest, CreateSucceeds) {
 //
@@ -104,10 +125,10 @@ TEST_F(KeyGenerationProtocolTest, EndToEndSucceeds) {
     for (int i = 0; i < beta.size(); i++){
         DPF_ASSERT_OK_AND_ASSIGN(absl::uint128 beta_share_party0_seed, rng->Rand128());
 
-        Value value0 = ToValue<uint64_t>(static_cast<uint64_t>(beta_share_party0_seed));
+        Value value0 = ToValue<T>(static_cast<T>(beta_share_party0_seed));
 
         DPF_ASSERT_OK_AND_ASSIGN(Value value1,
-                                 keygen->ValueSub<uint64_t>(beta[i], value0));
+                                 keygen->ValueSub<T>(beta[i], value0));
 
         beta_shares_party0.push_back(value0);
 
@@ -253,6 +274,15 @@ TEST_F(KeyGenerationProtocolTest, EndToEndSucceeds) {
                                         round7_party0,
                                         state_party1));
             }
+
+        std::cout << "\n\n";
+
+        displayDpfKey(state_party0.key, levels);
+
+        std::cout << "\n\n";
+
+        displayDpfKey(state_party1.key, levels);
+
 
     }
 }  // namespace
