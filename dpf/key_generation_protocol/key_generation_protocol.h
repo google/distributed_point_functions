@@ -175,9 +175,9 @@ class KeyGenerationProtocol {
 
   // Create ProtocolState given shares of alphas and betas.
   absl::StatusOr<ProtocolState> Initialize(int partyid,
-      const absl::uint128 alpha_shares,
-      const std::vector<Value> beta_shares,
-      KeyGenerationPreprocessing keygen_preproc);
+      const absl::uint128& alpha_shares,
+      const std::vector<Value>& beta_shares,
+      const KeyGenerationPreprocessing& keygen_preproc);
 
   // Receiver OT message for the MUX in Step 5. Just takes the state as input.
   absl::StatusOr<SeedCorrectionOtReceiverMessage>
