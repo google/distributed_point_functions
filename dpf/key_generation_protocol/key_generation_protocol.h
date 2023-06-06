@@ -265,32 +265,32 @@ class KeyGenerationProtocol {
     }
 
     // Expands seed s into a new seed and Value
-    template<typename T>
-    absl::StatusOr<std::pair<absl::uint128, Value>> Convert(const absl::uint128 s) const{
-
-        std::vector<absl::uint128> in_seed, out_seed, out_value;
-        in_seed.push_back(s);
-
-        out_seed.resize(1);
-        out_value.resize(1);
-
-        DPF_RETURN_IF_ERROR(
-                dpf_->prg_left_.Evaluate(in_seed,
-                                         absl::MakeSpan(out_seed)));
-
-
-        DPF_RETURN_IF_ERROR(
-                dpf_->prg_value_.Evaluate(in_seed,
-                                         absl::MakeSpan(out_value)));
-
-        // Temporary hack for converting absl::uint128 into
-        // required integer type (e.g. uint64_t)
-        T out_value_temp = static_cast<T>(out_value[0]);
-
-        Value value = ToValue<T>(out_value_temp);
-
-        return std::make_pair(out_seed[0], value);
-    }
+//    template<typename T>
+//    absl::StatusOr<std::pair<absl::uint128, Value>> Convert(const absl::uint128 s) const{
+//
+//        std::vector<absl::uint128> in_seed, out_seed, out_value;
+//        in_seed.push_back(s);
+//
+//        out_seed.resize(1);
+//        out_value.resize(1);
+//
+//        DPF_RETURN_IF_ERROR(
+//                dpf_->prg_left_.Evaluate(in_seed,
+//                                         absl::MakeSpan(out_seed)));
+//
+//
+//        DPF_RETURN_IF_ERROR(
+//                dpf_->prg_value_.Evaluate(in_seed,
+//                                         absl::MakeSpan(out_value)));
+//
+//        // Temporary hack for converting absl::uint128 into
+//        // required integer type (e.g. uint64_t)
+//        T out_value_temp = static_cast<T>(out_value[0]);
+//
+//        Value value = ToValue<T>(out_value_temp);
+//
+//        return std::make_pair(out_seed[0], value);
+//    }
 
 
     // Helper method for converting randomness into Value type

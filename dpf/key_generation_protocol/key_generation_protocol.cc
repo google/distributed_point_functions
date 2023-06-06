@@ -460,21 +460,37 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
                 absl::uint128 cumulative_control_sum = partyid;
 
 
+
                 // TODO : Instead of calling Convert() one by one,
                 // call it over the entire set of seeds at once
-                for(int i = 0; i < state.uncorrected_seeds.size(); i++){
-                    std::pair<absl::uint128, Value> seed_and_word;
 
-                    // Line 8 : Applying convert
+                std::vector<absl::uint128> seed_after_convert, value_seed_after_convert;
 
-                    DPF_ASSIGN_OR_RETURN(seed_and_word,
-                            Convert<uint64_t>(state.uncorrected_seeds[i]));
+                seed_after_convert.resize(state.uncorrected_seeds.size());
+                value_seed_after_convert.resize(state.uncorrected_seeds.size());
 
-                    state.uncorrected_seeds[i] = seed_and_word.first;
+                DPF_RETURN_IF_ERROR(
+                        dpf_->prg_left_.Evaluate(state.uncorrected_seeds,
+                                                 absl::MakeSpan(seed_after_convert)));
+
+                DPF_RETURN_IF_ERROR(
+                        dpf_->prg_value_.Evaluate(state.uncorrected_seeds,
+                                                  absl::MakeSpan(value_seed_after_convert)));
+
+                state.uncorrected_seeds = seed_after_convert;
+
+
+                for(int i = 0; i < value_seed_after_convert.size(); i++){
+
+                    // Temporary hack for converting absl::uint128 into
+                    // required integer type (e.g. uint64_t)
+                    uint64_t out_value_temp = static_cast<uint64_t>(value_seed_after_convert[i]);
+
+                    Value value = ToValue<uint64_t>(out_value_temp);
 
                     // Line 9 : Adding words
                     DPF_ASSIGN_OR_RETURN(cumulative_word,
-                    ValueAdd<uint64_t>(cumulative_word, seed_and_word.second));
+                                         ValueAdd<uint64_t>(cumulative_word, value));
 
                     // Line 10: Adding control bits
                     if(partyid == 0){
@@ -488,6 +504,7 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
                     }
 
                 }
+
 
             state.cumulative_word = cumulative_word;
 
