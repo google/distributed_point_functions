@@ -116,9 +116,9 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
 
     absl::StatusOr<ProtocolState> KeyGenerationProtocol::Initialize(
             int partyid,
-            const absl::uint128 alpha_shares,
-            const std::vector<Value> beta_shares,
-            KeyGenerationPreprocessing keygen_preproc){
+            const absl::uint128& alpha_shares,
+            const std::vector<Value>& beta_shares,
+            const KeyGenerationPreprocessing& keygen_preproc){
 
         // We are assuming that number of parameters = number of levels
         levels = dpf_->parameters_.size();
@@ -517,7 +517,7 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
 
         bool masked_tau_zero_party_0, masked_tau_zero_party_1;
 
-        if(partyid = 0){
+        if(partyid == 0){
             masked_tau_zero_party_0 = state.masked_tau_zero;
             masked_tau_zero_party_1 = masked_tau.masked_tau_zero();
         }
@@ -579,6 +579,8 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
 
         Value beta_share = state.beta_shares[state.tree_level];
 
+	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 0" << std::endl;
+
         if(partyid == 0){
             DPF_ASSIGN_OR_RETURN(share_of_W0_CW,
                                  ValueSub<uint64_t>(
@@ -586,6 +588,7 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
                                          state.cumulative_word));
         }
         else{
+            std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 1" << std::endl;
             DPF_ASSIGN_OR_RETURN(share_of_W0_CW,
                                  ValueAdd<uint64_t>(
                                          beta_share,
@@ -599,15 +602,17 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
                                          beta_share));
         }
         else{
+            std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 2" << std::endl;
             DPF_ASSIGN_OR_RETURN(Value share_of_W1_CW_temp,
                                  ValueAdd<uint64_t>(
                                          beta_share,
                                          state.cumulative_word));
-
+	    std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 3" << std::endl;
             DPF_ASSIGN_OR_RETURN(Value share_of_W1_CW,
                     ValueNegate<uint64_t>(share_of_W1_CW_temp));
         }
 
+	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 4" << std::endl;
 
         // Swap ROT mask depending on the receiver msg
         absl::uint128 rot_sender_mask_first, rot_sender_mask_second;
@@ -622,6 +627,7 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
         }
 
         // Convert ROT masks into Value type
+        std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 5" << std::endl;
         Value rot_sender_mask_first_value, rot_sender_mask_second_value;
 
         DPF_ASSIGN_OR_RETURN(rot_sender_mask_first_value,
@@ -629,6 +635,8 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
 
         DPF_ASSIGN_OR_RETURN(rot_sender_mask_second_value,
                              ConvertRandToVal<uint64_t>(rot_sender_mask_second));
+
+	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 6" << std::endl;
 
         // Sample mux 2 randomness
         const absl::string_view kSampleSeed = absl::string_view();
@@ -640,28 +648,36 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
         DPF_ASSIGN_OR_RETURN(Value random_value_mask,
                              ConvertRandToVal<uint64_t>(state.mux_2_randomness));
 //
+	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7" << std::endl;
+
+
         // Generate mux sender msg depending on own share of t*
 
         Value masked_ot_1, masked_ot_2, masked_ot_1_tmp, masked_ot_2_tmp;
 
         if(state.share_of_t_star == false){
+        std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.1" << std::endl;
             DPF_ASSIGN_OR_RETURN(masked_ot_1_tmp,
                                  ValueAdd<uint64_t>(share_of_W0_CW,
                                                     rot_sender_mask_first_value));
-
+std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.2" << std::endl;
             DPF_ASSIGN_OR_RETURN(masked_ot_2_tmp,
                     ValueAdd<uint64_t>(share_of_W1_CW,
                                        rot_sender_mask_second_value));
         }
         else{
+        std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.3" << std::endl;
             DPF_ASSIGN_OR_RETURN(masked_ot_1_tmp,
                     ValueAdd<uint64_t>(share_of_W1_CW,
                                        rot_sender_mask_first_value));
-
+	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.4" << std::endl;
             DPF_ASSIGN_OR_RETURN(masked_ot_2_tmp,
                     ValueAdd<uint64_t>(share_of_W0_CW,
                                        rot_sender_mask_second_value));
         }
+
+	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 8" << std::endl;
+
 
         DPF_ASSIGN_OR_RETURN(masked_ot_1,
                 ValueSub<uint64_t>(masked_ot_1_tmp,
@@ -670,6 +686,9 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
         DPF_ASSIGN_OR_RETURN(masked_ot_2,
                 ValueSub<uint64_t>(masked_ot_2_tmp,
                                    random_value_mask));
+
+	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 9" << std::endl;
+
 
         ValueCorrectionOtSenderMessage round6msg;
 

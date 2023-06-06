@@ -1,0 +1,71 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package distributed_point_functions;
+
+import "dpf/key_generation_protocol/key_generation_protocol.proto";
+
+
+message StartMessage {}
+message EndMessage {}
+
+// Client acts as Party 0, and initiates the execution.
+message KeyGenerationProtocolClientMessage {
+  oneof client_message_oneof {
+	StartMessage start_message = 1;
+    	SeedCorrectionOtReceiverMessage
+		client_round_1_message = 2;
+	SeedCorrectionOtSenderMessage
+		client_round_2_message = 3;
+	SeedCorrectionShare
+		client_round_3_message = 4;
+	MaskedTau
+		client_round_4_message = 5;
+	ValueCorrectionOtReceiverMessage
+		client_round_5_message = 6;
+	ValueCorrectionOtSenderMessage
+		client_round_6_message = 7;
+	ValueCorrectionShare
+		client_round_7_message = 8;
+  }
+}
+// Server acts as Party 1 and responds to the client
+// initiating the execution.
+message KeyGenerationProtocolServerMessage {
+  oneof server_message_oneof {
+	SeedCorrectionOtReceiverMessage
+		server_round_1_message = 1;
+	SeedCorrectionOtSenderMessage
+		server_round_2_message = 2;
+	SeedCorrectionShare
+		server_round_3_message = 3;
+	MaskedTau
+		server_round_4_message = 4;
+	ValueCorrectionOtReceiverMessage
+		server_round_5_message = 5;
+	ValueCorrectionOtSenderMessage
+		server_round_6_message = 6;
+	ValueCorrectionShare
+		server_round_7_message = 7;
+	EndMessage end_message = 8;
+  }
+}
+// gRPC interface for Key Generation Protocol.
+service KeyGenerationProtocolRpc {
+  // Handles a single protocol round.
+  rpc Handle(KeyGenerationProtocolClientMessage) returns (KeyGenerationProtocolServerMessage) {}
+}
+
