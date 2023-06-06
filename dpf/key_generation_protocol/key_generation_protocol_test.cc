@@ -110,6 +110,10 @@ TEST_F(KeyGenerationProtocolTest, EndToEndSucceeds) {
 
     alpha_share_party1 = alpha ^ alpha_share_party0;
 
+    std::cout << "Party 0 alpha share : " << alpha_share_party0 << std::endl;
+
+    std::cout << "Party 1 alpha share : " << alpha_share_party1 << std::endl;
+
     // Generating shares of beta for Party 0 and Party 1
     std::vector<Value> beta;
 
@@ -287,3 +291,4 @@ TEST_F(KeyGenerationProtocolTest, EndToEndSucceeds) {
     }
 }  // namespace
 }  // namespace distributed_point_functions
+

@@ -199,7 +199,8 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
         bool alpha_level_share = state.alpha_shares & (1 << (levels - state.tree_level - 1)) ? 1 : 0;
         bool rot_masked_alpha_level_share = alpha_level_share ^
                 state.keygen_preproc.level_corr[state.tree_level].mux_1.rot_receiver_choice_bit;
-//        msg_ot_recv.set_choice_bit_mask(alpha_level_share ^ state.ke);
+
+        msg_ot_recv.set_choice_bit_mask(rot_masked_alpha_level_share);
 
 
         return msg_ot_recv;
@@ -229,8 +230,6 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
                 dpf_->prg_right_.Evaluate(state.seeds,
                                           absl::MakeSpan(expanded_seeds_right)));
 
-        state.uncorrected_seeds.clear();
-        state.shares_of_uncorrected_control_bits.clear();
 
         // Line 4 : Cumulative XOR of all the left seeds, left control bits,
         // right seeds, right control bits at the next level.
@@ -447,7 +446,7 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
         uint64_t n = state.seeds.size();
 
 
-            for(int i = 0; i < n; i++) {
+            for(uint64_t i = 0; i < n; i++) {
                 uint64_t left_index = i << 1;
                 uint64_t right_index = left_index + 1;
 
@@ -610,7 +609,7 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
 
         Value beta_share = state.beta_shares[state.tree_level];
 
-	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 0" << std::endl;
+//	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 0" << std::endl;
 
         if(partyid == 0){
             DPF_ASSIGN_OR_RETURN(share_of_W0_CW,
@@ -619,7 +618,7 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
                                          state.cumulative_word));
         }
         else{
-            std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 1" << std::endl;
+//            std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 1" << std::endl;
             DPF_ASSIGN_OR_RETURN(share_of_W0_CW,
                                  ValueAdd<T>(
                                          beta_share,
@@ -633,17 +632,17 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
                                          beta_share));
         }
         else{
-            std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 2" << std::endl;
+//            std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 2" << std::endl;
             DPF_ASSIGN_OR_RETURN(Value share_of_W1_CW_temp,
                                  ValueAdd<T>(
                                          beta_share,
                                          state.cumulative_word));
-	    std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 3" << std::endl;
+//	    std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 3" << std::endl;
             DPF_ASSIGN_OR_RETURN(share_of_W1_CW,
                     ValueNegate<T>(share_of_W1_CW_temp));
         }
 
-	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 4" << std::endl;
+//	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 4" << std::endl;
 
         // Swap ROT mask depending on the receiver msg
         absl::uint128 rot_sender_mask_first, rot_sender_mask_second;
@@ -658,7 +657,7 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
         }
 
         // Convert ROT masks into Value type
-        std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 5" << std::endl;
+//        std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 5" << std::endl;
         Value rot_sender_mask_first_value, rot_sender_mask_second_value;
 
         DPF_ASSIGN_OR_RETURN(rot_sender_mask_first_value,
@@ -667,7 +666,7 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
         DPF_ASSIGN_OR_RETURN(rot_sender_mask_second_value,
                              ConvertRandToVal<T>(rot_sender_mask_second));
 
-	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 6" << std::endl;
+//	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 6" << std::endl;
 
         // Sample mux 2 randomness
         const absl::string_view kSampleSeed = absl::string_view();
@@ -679,7 +678,7 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
         DPF_ASSIGN_OR_RETURN(Value random_value_mask,
                              ConvertRandToVal<T>(state.mux_2_randomness));
 
-	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7" << std::endl;
+//	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7" << std::endl;
 
 
         // Generate mux sender msg depending on own share of t*
@@ -688,32 +687,32 @@ KeyGenerationProtocol::Create(absl::Span<const DpfParameters> parameters) {
 
 
         if(state.share_of_t_star == false){
-        std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.1" << std::endl;
+//        std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.1" << std::endl;
             DPF_ASSIGN_OR_RETURN(masked_ot_1_tmp,
                                  ValueAdd<T>(share_of_W0_CW,
                                                     rot_sender_mask_first_value));
-std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.2" << std::endl;
+//std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.2" << std::endl;
 
 
             DPF_ASSIGN_OR_RETURN(masked_ot_2_tmp,
                     ValueAdd<T>(share_of_W1_CW,
                                        rot_sender_mask_second_value));
-            std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.25" << std::endl;
+//            std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.25" << std::endl;
         }
         else{
-        std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.3" << std::endl;
+//        std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.3" << std::endl;
 
             DPF_ASSIGN_OR_RETURN(masked_ot_1_tmp,
                     ValueAdd<T>(share_of_W1_CW,
                                        rot_sender_mask_first_value));
 
-	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.4" << std::endl;
+//	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.4" << std::endl;
             DPF_ASSIGN_OR_RETURN(masked_ot_2_tmp,
                     ValueAdd<T>(share_of_W0_CW,
                                        rot_sender_mask_second_value));
         }
 
-	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 8" << std::endl;
+//	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 8" << std::endl;
 
         DPF_ASSIGN_OR_RETURN(masked_ot_1,
                 ValueSub<T>(masked_ot_1_tmp,
@@ -723,7 +722,7 @@ std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.2" << std::endl
                 ValueSub<T>(masked_ot_2_tmp,
                                    random_value_mask));
 
-	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 9" << std::endl;
+//	std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 9" << std::endl;
 
 
         ValueCorrectionOtSenderMessage round6msg;
@@ -806,6 +805,7 @@ std::cout << "ComputeValueCorrectionOtSenderMessage Checkpoint 7.2" << std::endl
 
         state.seeds = state.uncorrected_seeds;
         state.uncorrected_seeds.clear();
+        state.uncorrected_seeds.reserve(2 * state.seeds.size());
 
         state.shares_of_control_bits = state.shares_of_uncorrected_control_bits;
         state.shares_of_uncorrected_control_bits.clear();

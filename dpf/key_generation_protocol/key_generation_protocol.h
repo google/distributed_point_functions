@@ -311,18 +311,24 @@ class KeyGenerationProtocol {
     template<typename T>
     absl::StatusOr<Value> ConvertRandToVal(const absl::uint128 s) const{
 
-        std::vector<absl::uint128> in_seed, out_value;
-        in_seed.push_back(s);
-
-        out_value.resize(1);
-
-        DPF_RETURN_IF_ERROR(
-                dpf_->prg_value_.Evaluate(in_seed,
-                                          absl::MakeSpan(out_value)));
+//        std::vector<absl::uint128> in_seed, out_value;
+//        in_seed.push_back(s);
+//
+//        out_value.resize(1);
+//
+//        DPF_RETURN_IF_ERROR(
+//                dpf_->prg_value_.Evaluate(in_seed,
+//                                          absl::MakeSpan(out_value)));
 
         // Temporary hack for converting absl::uint128 into
         // required integer type (e.g. uint64_t)
-        T out_value_temp = static_cast<T>(out_value[0]);
+
+//        T out_value_temp = static_cast<T>(out_value[0]);
+
+
+
+
+        T out_value_temp = static_cast<T>(s);
 
         Value value = ToValue<T>(out_value_temp);
 
