@@ -43,7 +43,7 @@ size_t AlignBytes(size_t value_size_in_bytes) {
   constexpr size_t kAlignmentMask = ~(kAlignmentSize - 1);
   // The number of aligned bytes is the least multiple of kAlignmentSize larger
   // than `value_size_in_bytes`, i.e. it is
-  //   ceil(value_size_in_bytes / kAlignment) * kAlignment.
+  //   ceil(value_size_in_bytes / kAlignmentSize) * kAlignmentSize.
   // The division and subsequent multiplication is saved by simply masking off
   // the lowest `kAlignmentSize` bits.
   size_t round_up_value_size_in_bytes =
