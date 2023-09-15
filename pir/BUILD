@@ -332,6 +332,30 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "cuckoo_hashing_sparse_dpf_pir_server_benchmark",
+    srcs = ["cuckoo_hashing_sparse_dpf_pir_server_benchmark.cc"],
+    tags = ["benchmark"],
+    deps = [
+        ":cuckoo_hashed_dpf_pir_database",
+        ":cuckoo_hashing_sparse_dpf_pir_server",
+        ":private_information_retrieval_cc_proto",
+        "//dpf/internal:status_matchers",
+        "//pir/hashing:hash_family",
+        "//pir/hashing:hash_family_config",
+        "//pir/hashing:hash_family_config_cc_proto",
+        "//pir/testing:mock_pir_database",
+        "//pir/testing:pir_selection_bits",
+        "//pir/testing:request_generator",
+        "@com_github_google_benchmark//:benchmark",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
+        "@com_google_absl//absl/random",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
 cc_library(
     name = "cuckoo_hashing_sparse_dpf_pir_client",
     srcs = ["cuckoo_hashing_sparse_dpf_pir_client.cc"],
