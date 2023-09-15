@@ -161,6 +161,26 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "dense_dpf_pir_server_benchmark",
+    srcs = ["dense_dpf_pir_server_benchmark.cc"],
+    tags = ["benchmark"],
+    deps = [
+        ":dense_dpf_pir_database",
+        ":dense_dpf_pir_server",
+        ":private_information_retrieval_cc_proto",
+        "//dpf/internal:status_matchers",
+        "//pir/testing:mock_pir_database",
+        "//pir/testing:request_generator",
+        "@com_github_google_benchmark//:benchmark",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
+        "@com_google_absl//absl/random",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
 cc_library(
     name = "dense_dpf_pir_client",
     srcs = ["dense_dpf_pir_client.cc"],
