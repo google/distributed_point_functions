@@ -58,7 +58,8 @@ absl::StatusOr<std::unique_ptr<HybridDecrypt>> CreateFakeHybridDecrypt() {
       std::unique_ptr<KeysetHandle> private_key_handle,
       CleartextKeysetHandle::Read(std::move(private_key_reader)));
 
-  return private_key_handle->GetPrimitive<HybridDecrypt>();
+  return private_key_handle->GetPrimitive<crypto::tink::HybridDecrypt>(
+      crypto::tink::ConfigGlobalRegistry());
 }
 
 absl::StatusOr<std::unique_ptr<HybridEncrypt>> CreateFakeHybridEncrypt() {
@@ -75,7 +76,8 @@ absl::StatusOr<std::unique_ptr<HybridEncrypt>> CreateFakeHybridEncrypt() {
       std::unique_ptr<KeysetHandle> public_key_handle,
       CleartextKeysetHandle::Read(std::move(public_key_reader)));
 
-  return public_key_handle->GetPrimitive<HybridEncrypt>();
+  return public_key_handle->GetPrimitive<crypto::tink::HybridEncrypt>(
+      crypto::tink::ConfigGlobalRegistry());
 }
 
 }  // namespace pir_testing
