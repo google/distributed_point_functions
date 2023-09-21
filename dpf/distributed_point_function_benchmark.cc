@@ -92,7 +92,7 @@ BENCHMARK_TEMPLATE(
     Tuple<MyIntModN64, MyIntModN64, MyIntModN64, MyIntModN64, MyIntModN64>)
     ->DenseRange(12, 22, 2);
 BENCHMARK_TEMPLATE(BM_EvaluateRegularDpf, XorWrapper<absl::uint128>)
-    ->DenseRange(12, 24, 2);
+    ->DenseRange(1, 24, 1);
 
 // Benchmarks full evaluation of all hierarchy levels. Expects the first range
 // argument to specify the number of iterations. The output domain size is fixed
