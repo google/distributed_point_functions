@@ -54,7 +54,8 @@ void BM_InnerProductOnEqualSizeValues(benchmark::State& state) {
 
   // Compute the inner product
   for (auto _ : state) {
-    benchmark::DoNotOptimize(database->InnerProductWith({selections}));
+    auto result = database->InnerProductWith({selections});
+    benchmark::DoNotOptimize(result);
   }
 }
 
@@ -85,7 +86,8 @@ void BM_InnerProductOnVariableSizeValues(benchmark::State& state) {
 
   // Compute the inner product
   for (auto _ : state) {
-    benchmark::DoNotOptimize(database->InnerProductWith({selections}));
+    auto result = database->InnerProductWith({selections});
+    benchmark::DoNotOptimize(result);
   }
 }
 
@@ -118,7 +120,8 @@ void BM_BatchedInnerProductOnVariableSizeValues(benchmark::State& state) {
 
   // Compute the inner product
   for (auto _ : state) {
-    benchmark::DoNotOptimize(database->InnerProductWith(selections));
+    auto result = database->InnerProductWith(selections);
+    benchmark::DoNotOptimize(result);
   }
 }
 

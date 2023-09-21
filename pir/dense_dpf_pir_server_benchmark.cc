@@ -91,7 +91,8 @@ void BM_HandlePlainRequestWithEqualSizeRecords(benchmark::State& state) {
 
     // Record the time to handle the request on a single server.
     state.ResumeTiming();
-    benchmark::DoNotOptimize(server->HandleRequest(request1));
+    auto response = server->HandleRequest(request1);
+    benchmark::DoNotOptimize(response);
   }
 }
 BENCHMARK(BM_HandlePlainRequestWithEqualSizeRecords);
