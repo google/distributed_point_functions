@@ -16,6 +16,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
+#include <limits>
 #include <memory>
 #include <numeric>
 #include <string>
@@ -291,18 +293,19 @@ DistributedPointFunction::ExpandSeeds(
     const DpfExpansion& partial_evaluations,
     absl::Span<const CorrectionWord* const> correction_words) const {
   int num_expansions = static_cast<int>(correction_words.size());
-  if (num_expansions >= 63) {
-    return absl::InvalidArgumentError(
-        "Trying to expand more than 62 tree levels at once. Please insert "
-        "intermediate hierarchy levels, or evaluate fewer hierarchy levels at "
-        "once.");
-  }
 
-  // Allocate buffers with the correct size to avoid reallocations.
+  // Check that the output size fits in a size_t. This should already be checked
+  // by the caller, so using DCHECK here is enough.
+  DCHECK_LT(num_expansions, 63);
   auto current_level_size =
       static_cast<int64_t>(partial_evaluations.control_bits.size());
+  absl::uint128 output_size_128 = absl::uint128{current_level_size}
+                                  << num_expansions;
+  DCHECK_LE(output_size_128, std::numeric_limits<ssize_t>::max());
+  size_t output_size = static_cast<size_t>(output_size_128);
+
+  // Allocate buffers with the correct size to avoid reallocations.
   int64_t max_batch_size = Aes128FixedKeyHash::kBatchSize;
-  int64_t output_size = current_level_size << num_expansions;
   std::vector<absl::uint128> prg_buffer_left(max_batch_size),
       prg_buffer_right(max_batch_size);
 

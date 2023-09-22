@@ -166,7 +166,7 @@ TEST(DistributedPointFunction, KeyGenerationFailsIfValueTypeNotRegistered) {
                        StartsWith("No value correction function known")));
 }
 
-TEST(DistributedPointFunction, EvaluationFailsIfOutputSizeTooLarge) {
+TEST(DistributedPointFunction, EvaluationFailsIfDomainSizeGapTooLarge) {
   std::vector<DpfParameters> parameters(2);
   parameters[0].mutable_value_type()->mutable_integer()->set_bitsize(128);
   parameters[1].mutable_value_type()->mutable_integer()->set_bitsize(128);
@@ -181,10 +181,33 @@ TEST(DistributedPointFunction, EvaluationFailsIfOutputSizeTooLarge) {
   DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx,
                            dpf->CreateEvaluationContext(keys.first));
 
-  EXPECT_THAT(dpf->EvaluateUntil<absl::uint128>(1, {}, ctx),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       "Output size would be larger than 2**62. Please "
-                       "evaluate fewer hierarchy levels at once."));
+  EXPECT_THAT(
+      dpf->EvaluateUntil<absl::uint128>(1, {}, ctx),
+      StatusIs(absl::StatusCode::kInvalidArgument, StartsWith("Domain size")));
+}
+
+TEST(DistributedPointFunction, EvaluationFailsIfOutputSizeTooLarge) {
+  std::vector<DpfParameters> parameters(2);
+  parameters[0].mutable_value_type()->mutable_integer()->set_bitsize(128);
+  parameters[1].mutable_value_type()->mutable_integer()->set_bitsize(128);
+  parameters[0].set_log_domain_size(10);
+  parameters[1].set_log_domain_size(72);
+  DPF_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<DistributedPointFunction> dpf,
+      DistributedPointFunction::CreateIncremental(parameters));
+
+  std::pair<DpfKey, DpfKey> keys;
+  DPF_ASSERT_OK_AND_ASSIGN(keys, dpf->GenerateKeysIncremental(123, 456u, 789u));
+  DPF_ASSERT_OK_AND_ASSIGN(EvaluationContext ctx,
+                           dpf->CreateEvaluationContext(keys.first));
+
+  // Evaluate on 2**2 prefixes, bringing the output size to 2**(72-10+2) =
+  // 2**64, which overflows an int64_t. Assumes a size_t is at most 64 bits.
+  std::vector<absl::uint128> prefixes = {123, 456, 789, 1011};
+  DPF_ASSERT_OK(dpf->EvaluateUntil<absl::uint128>(0, {}, ctx));
+  EXPECT_THAT(
+      dpf->EvaluateUntil<absl::uint128>(1, prefixes, ctx),
+      StatusIs(absl::StatusCode::kInvalidArgument, StartsWith("Output size")));
 }
 
 TEST(DistributedPointFunction, TestSinglePointPartialEvaluation) {

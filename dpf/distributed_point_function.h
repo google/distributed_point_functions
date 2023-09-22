@@ -742,11 +742,23 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
   }
   int64_t prefixes_size = static_cast<int64_t>(prefixes.size());
 
+  // Check that the output size is not too large. We first check that the
+  // domain size blowup fits in an int64_t, and then check that the total size
+  // of all elements doesn't over flow a signed size_t.
   int log_domain_size = parameters_[hierarchy_level].log_domain_size();
-  if (log_domain_size - previous_log_domain_size > 62) {
+  if (log_domain_size - previous_log_domain_size >= 63) {
     return absl::InvalidArgumentError(
-        "Output size would be larger than 2**62. Please evaluate fewer "
-        "hierarchy levels at once.");
+        "Domain size gap too large. Please evaluate fewer hierarchy "
+        "levels at once, or insert intermediate hierarchy levels.");
+  }
+  int64_t outputs_per_prefix = int64_t{1}
+                               << (log_domain_size - previous_log_domain_size);
+  if (absl::uint128{prefixes_size} * outputs_per_prefix >
+      std::numeric_limits<ssize_t>::max()) {
+    return absl::InvalidArgumentError(
+        "Output size would be too large. Please evaluate fewer hierarchy "
+        "levels at once, insert intermediate hierarchy levels, or evaluate on "
+        "fewer prefixes at once.");
   }
 
   // The `prefixes` passed in by the caller refer to the domain of the previous
@@ -860,13 +872,6 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
           current_elements[j];
     }
   }
-
-  // Compute the number of outputs we will have. For each prefix, we will have a
-  // full expansion from the previous heirarchy level to the current heirarchy
-  // level.
-  DCHECK_LT(log_domain_size - previous_log_domain_size, 63);
-  int64_t outputs_per_prefix = int64_t{1}
-                               << (log_domain_size - previous_log_domain_size);
 
   if (prefixes.empty()) {
     // If prefixes is empty (i.e., this is the first evaluation of `ctx`), just
