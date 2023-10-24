@@ -75,7 +75,7 @@ int SHA256HashFunction::operator()(absl::string_view input,
   std::copy(reinterpret_cast<unsigned char*>(&hash[0]),
             reinterpret_cast<unsigned char*>(&hash[0]) + hi_offset,
             reinterpret_cast<unsigned char*>(&lo));
-  // Long division using 64-bit "digits" and absl::uint128 builtin divison.
+  // Long division using 64-bit "digits" and absl::uint128 builtin division.
   absl::uint128 dividend1 = hi;
   auto remainder1 = static_cast<uint64_t>(dividend1 % upper_bound);
   absl::uint128 dividend2 =
