@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -49,11 +50,13 @@ class CuckooHashingSparseDpfPirClient
          absl::string_view encryption_context_info =
              CuckooHashingSparseDpfPirServer::kEncryptionContextInfo);
 
-  // Creates a new PIR request for the given `query`. If successful, returns the
-  // request together with the private key needed to decrypt the server's
-  // response.
-  absl::StatusOr<std::pair<PirRequest, PirRequestClientState>> CreateRequest(
-      absl::Span<const std::string> query) const override;
+  // Creates a pair of plain PIR requests for the given `query`. If successful,
+  // returns the requests together with the private state needed to decrypt the
+  // server's response.
+  absl::StatusOr<
+      std::tuple<DpfPirRequest::PlainRequest, DpfPirRequest::HelperRequest,
+                 PirRequestClientState>>
+  CreatePlainRequests(absl::Span<const std::string> query) const override;
 
   // Handles the server's `pir_response`. `request_client_state` is the
   // per-request client state corresponding to the request sent to the server.
@@ -68,12 +71,15 @@ class CuckooHashingSparseDpfPirClient
 
  private:
   CuckooHashingSparseDpfPirClient(
+      EncryptHelperRequestFn encrypter, std::string encryption_context_info,
       std::unique_ptr<DenseDpfPirClient> wrapped_client,
-      std::vector<HashFunction> hash_functions, int num_buckets);
+      std::vector<HashFunction> hash_functions, int num_buckets,
+      int seed_fingerprint);
 
   std::unique_ptr<DenseDpfPirClient> wrapped_client_;
   std::vector<HashFunction> hash_functions_;
   int num_buckets_;
+  int seed_fingerprint_;
 };
 
 }  // namespace distributed_point_functions

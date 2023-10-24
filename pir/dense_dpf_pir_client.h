@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -49,15 +50,17 @@ class DenseDpfPirClient
 
   virtual ~DenseDpfPirClient() = default;
 
-  // Creates a new PIR request for the given `query_indices`. If successful,
-  // returns the request together with the private key needed to decrypt the
+  // Creates a pair of plain PIR requests for the given `query`. If successful,
+  // returns the requests together with the private state needed to decrypt the
   // server's response.
   //
   // Returns INVALID_ARGUMENT if any element of `query_indices` is negative, or
   // out of bounds for the database specified in the config passed at
   // construction.
-  virtual absl::StatusOr<std::pair<PirRequest, PirRequestClientState>>
-  CreateRequest(absl::Span<const int> query_indices) const override;
+  virtual absl::StatusOr<
+      std::tuple<DpfPirRequest::PlainRequest, DpfPirRequest::HelperRequest,
+                 PirRequestClientState>>
+  CreatePlainRequests(absl::Span<const int> query_indices) const override;
 
   // Handles the server's `pir_response`. `request_client_state` is the
   // per-request client state corresponding to the request sent to the server.
@@ -78,8 +81,6 @@ class DenseDpfPirClient
                     std::string encryption_context_info, int database_size);
 
   std::unique_ptr<DistributedPointFunction> dpf_;
-  EncryptHelperRequestFn encrypter_;
-  std::string encryption_context_info_;
   int database_size_;
 };
 

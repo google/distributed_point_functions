@@ -319,6 +319,7 @@ cc_library(
         "//dpf:status_macros",
         "//dpf:xor_wrapper",
         "//pir/hashing:hash_family_config_cc_proto",
+        "//pir/hashing:sha256_hash_family",
         "@boringssl//:crypto",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/memory",
@@ -388,6 +389,7 @@ cc_library(
         "//dpf:status_macros",
         "//pir/hashing:hash_family",
         "//pir/hashing:hash_family_config",
+        "//pir/hashing:sha256_hash_family",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
@@ -403,7 +405,9 @@ cc_library(
     hdrs = ["dpf_pir_client.h"],
     deps = [
         ":pir_client",
+        ":private_information_retrieval_cc_proto",
         "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
     ],
 )

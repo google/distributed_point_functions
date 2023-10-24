@@ -30,8 +30,8 @@ class PirClient {
   virtual ~PirClient() = default;
 
   // Creates a new PIR request for the given `query`. If successful, returns the
-  // request together with the private key needed to decrypt the server's
-  // response.
+  // request together with the client's private state needed to decrypt the
+  // server's response.
   virtual absl::StatusOr<std::pair<PirRequest, PirRequestClientState>>
   CreateRequest(QueryType query) const = 0;
 

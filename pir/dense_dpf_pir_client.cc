@@ -33,6 +33,7 @@
 #include "dpf/distributed_point_function.pb.h"
 #include "dpf/status_macros.h"
 #include "pir/dense_dpf_pir_server.h"
+#include "pir/dpf_pir_client.h"
 #include "pir/private_information_retrieval.pb.h"
 #include "pir/prng/aes_128_ctr_seeded_prng.h"
 
@@ -42,9 +43,8 @@ DenseDpfPirClient::DenseDpfPirClient(
     std::unique_ptr<DistributedPointFunction> dpf,
     EncryptHelperRequestFn encrypter, std::string encryption_context_info,
     int database_size)
-    : dpf_(std::move(dpf)),
-      encrypter_(std::move(encrypter)),
-      encryption_context_info_(std::move(encryption_context_info)),
+    : DpfPirClient(std::move(encrypter), std::move(encryption_context_info)),
+      dpf_(std::move(dpf)),
       database_size_(database_size) {}
 
 absl::StatusOr<std::unique_ptr<DenseDpfPirClient>> DenseDpfPirClient::Create(
@@ -74,8 +74,10 @@ absl::StatusOr<std::unique_ptr<DenseDpfPirClient>> DenseDpfPirClient::Create(
                             config.dense_dpf_pir_config().num_elements()));
 }
 
-absl::StatusOr<std::pair<PirRequest, PirRequestClientState>>
-DenseDpfPirClient::CreateRequest(absl::Span<const int> query_indices) const {
+absl::StatusOr<std::tuple<DpfPirRequest::PlainRequest,
+                          DpfPirRequest::HelperRequest, PirRequestClientState>>
+DenseDpfPirClient::CreatePlainRequests(
+    absl::Span<const int> query_indices) const {
   for (const int query : query_indices) {
     if (query < 0) {
       return absl::InvalidArgumentError(
@@ -87,38 +89,29 @@ DenseDpfPirClient::CreateRequest(absl::Span<const int> query_indices) const {
   }
 
   // Generate plain requests for each index.
-  DpfPirRequest::LeaderRequest leader_request;
+  DpfPirRequest::PlainRequest leader_request;
   DpfPirRequest::HelperRequest helper_request;
   for (int i = 0; i < query_indices.size(); ++i) {
     absl::uint128 alpha = query_indices[i] / kBitsPerBlock;
     XorWrapper<absl::uint128> beta(absl::uint128{1}
                                    << (query_indices[i] % kBitsPerBlock));
-    DPF_ASSIGN_OR_RETURN(
-        std::tie(
-            *(leader_request.mutable_plain_request()->mutable_dpf_key()->Add()),
-            *(helper_request.mutable_plain_request()
-                  ->mutable_dpf_key()
-                  ->Add())),
-        dpf_->GenerateKeys(alpha, beta));
+    DPF_ASSIGN_OR_RETURN(std::tie(*(leader_request.mutable_dpf_key()->Add()),
+                                  *(helper_request.mutable_plain_request()
+                                        ->mutable_dpf_key()
+                                        ->Add())),
+                         dpf_->GenerateKeys(alpha, beta));
   }
 
   // Generate OTP seed.
   DPF_ASSIGN_OR_RETURN(*(helper_request.mutable_one_time_pad_seed()),
                        Aes128CtrSeededPrng::GenerateSeed());
 
-  // Encrypt helper_request.
-  DPF_ASSIGN_OR_RETURN(
-      *(leader_request.mutable_encrypted_helper_request()
-            ->mutable_encrypted_request()),
-      encrypter_(helper_request.SerializeAsString(), encryption_context_info_));
-
   // Assemble result.
-  std::pair<PirRequest, PirRequestClientState> result;
-  *(result.first.mutable_dpf_pir_request()->mutable_leader_request()) =
-      std::move(leader_request);
-  *(result.second.mutable_dense_dpf_pir_request_client_state()
-        ->mutable_one_time_pad_seed()) = helper_request.one_time_pad_seed();
-  return result;
+  PirRequestClientState client_state;
+  client_state.mutable_dense_dpf_pir_request_client_state()
+      ->set_one_time_pad_seed(helper_request.one_time_pad_seed());
+  return std::make_tuple(std::move(leader_request), std::move(helper_request),
+                         std::move(client_state));
 }
 
 absl::StatusOr<std::vector<std::string>> DenseDpfPirClient::HandleResponse(

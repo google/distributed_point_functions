@@ -226,6 +226,35 @@ TEST_F(CuckooHashingSparseDpfPirServerTest, CreatePlainSucceeds) {
               IsOkAndHolds(NotNull()));
 }
 
+TEST_F(CuckooHashingSparseDpfPirServerTest,
+       HandlRequestFailsWhenSeedFingerprintDoesNotMatch) {
+  // Create two servers.
+  SetUpDatabase();
+  DPF_ASSERT_OK_AND_ASSIGN(auto server1,
+                           CuckooHashingSparseDpfPirServer::CreatePlain(
+                               params_, std::move(database_)));
+  // Generate a request.
+  DPF_ASSERT_OK_AND_ASSIGN(
+      auto request_generator,
+      pir_testing::RequestGenerator::Create(
+          params_.num_buckets(),
+          CuckooHashingSparseDpfPirServer::kEncryptionContextInfo));
+  PirRequest request;
+  DPF_ASSERT_OK_AND_ASSIGN(
+      std::tie(*request.mutable_dpf_pir_request()->mutable_plain_request(),
+               std::ignore),
+      request_generator->CreateDpfPirPlainRequests({1, 2, 3}));
+
+  int wrong_fingerprint = 123;
+  request.mutable_dpf_pir_request()
+      ->mutable_plain_request()
+      ->set_seed_fingerprint(wrong_fingerprint);
+
+  EXPECT_THAT(server1->HandleRequest(request),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("seed_fingerprint")));
+}
+
 TEST_F(CuckooHashingSparseDpfPirServerTest, HandleRequestSucceeds) {
   // Create two servers.
   SetUpDatabase();
