@@ -15,6 +15,7 @@
 #include "pir/cuckoo_hashing_sparse_dpf_pir_server.h"
 
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <new>
 #include <string>
@@ -29,6 +30,7 @@
 #include "dpf/status_macros.h"
 #include "openssl/rand.h"
 #include "pir/hashing/hash_family_config.pb.h"
+#include "pir/hashing/sha256_hash_family.h"
 #include "pir/private_information_retrieval.pb.h"
 
 namespace distributed_point_functions {
@@ -39,10 +41,11 @@ static constexpr double kBucketsPerElement = 1.5;
 
 CuckooHashingSparseDpfPirServer::CuckooHashingSparseDpfPirServer(
     PirServerPublicParams params, std::unique_ptr<DistributedPointFunction> dpf,
-    std::unique_ptr<Database> database)
+    std::unique_ptr<Database> database, int seed_fingerprint)
     : params_(std::move(params)),
       dpf_(std::move(dpf)),
-      database_(std::move(database)) {}
+      database_(std::move(database)),
+      seed_fingerprint_(seed_fingerprint) {}
 
 absl::StatusOr<CuckooHashingParams>
 CuckooHashingSparseDpfPirServer::GenerateParams(const PirConfig& config) {
@@ -114,12 +117,18 @@ CuckooHashingSparseDpfPirServer::CreatePlain(
   DPF_ASSIGN_OR_RETURN(auto dpf,
                        DistributedPointFunction::Create(dpf_parameters));
 
+  // The first 31 bits of the SHA256 hash of the seed. Used to check that client
+  // and both servers use the same key.
+  int seed_fingerprint = SHA256HashFunction("")(
+      params.hash_family_config().seed(), std::numeric_limits<int>::max());
+
   PirServerPublicParams server_params;
   *(server_params.mutable_cuckoo_hashing_sparse_dpf_pir_server_params()) =
       std::move(params);
 
   return absl::WrapUnique(new CuckooHashingSparseDpfPirServer(
-      std::move(server_params), std::move(dpf), std::move(database)));
+      std::move(server_params), std::move(dpf), std::move(database),
+      seed_fingerprint));
 }
 
 // Computes the response to the client's `request`.
@@ -138,6 +147,12 @@ absl::StatusOr<PirResponse> CuckooHashingSparseDpfPirServer::HandlePlainRequest(
       request.dpf_pir_request().plain_request();
   if (plain_request.dpf_key_size() == 0) {
     return absl::InvalidArgumentError("`dpf_key` must not be empty");
+  }
+  if (plain_request.seed_fingerprint() != 0 &&
+      plain_request.seed_fingerprint() != seed_fingerprint_) {
+    return absl::InvalidArgumentError(
+        "`seed_fingerprint` does not match. Please ensure that all servers and "
+        "the client are initialized with the same parameters.");
   }
 
   std::vector<std::vector<XorWrapper<absl::uint128>>> selections(

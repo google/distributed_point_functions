@@ -14,6 +14,7 @@
 
 #include "pir/cuckoo_hashing_sparse_dpf_pir_client.h"
 
+#include <limits>
 #include <memory>
 #include <string>
 #include <tuple>
@@ -32,6 +33,7 @@
 #include "pir/dpf_pir_client.h"
 #include "pir/hashing/hash_family.h"
 #include "pir/hashing/hash_family_config.h"
+#include "pir/hashing/sha256_hash_family.h"
 #include "pir/private_information_retrieval.pb.h"
 
 namespace distributed_point_functions {
@@ -66,11 +68,13 @@ absl::StatusOr<std::string> DummyEncrypter(absl::string_view plaintext,
 CuckooHashingSparseDpfPirClient::CuckooHashingSparseDpfPirClient(
     EncryptHelperRequestFn encrypter, std::string encryption_context_info,
     std::unique_ptr<DenseDpfPirClient> wrapped_client,
-    std::vector<HashFunction> hash_functions, int num_buckets)
+    std::vector<HashFunction> hash_functions, int num_buckets,
+    int seed_fingerprint)
     : DpfPirClient(std::move(encrypter), std::move(encryption_context_info)),
       wrapped_client_(std::move(wrapped_client)),
       hash_functions_(std::move(hash_functions)),
-      num_buckets_(num_buckets) {}
+      num_buckets_(num_buckets),
+      seed_fingerprint_(seed_fingerprint) {}
 
 absl::StatusOr<std::unique_ptr<CuckooHashingSparseDpfPirClient>>
 CuckooHashingSparseDpfPirClient::Create(
@@ -98,6 +102,14 @@ CuckooHashingSparseDpfPirClient::Create(
                            params.cuckoo_hashing_sparse_dpf_pir_server_params()
                                .hash_family_config()));
 
+  // The first 31 bits of the SHA256 hash of the seed. Used to check that client
+  // and both servers use the same key.
+  int seed_fingerprint = SHA256HashFunction("")(
+      params.cuckoo_hashing_sparse_dpf_pir_server_params()
+          .hash_family_config()
+          .seed(),
+      std::numeric_limits<int>::max());
+
   DPF_ASSIGN_OR_RETURN(
       std::vector<HashFunction> hash_functions,
       CreateHashFunctions(std::move(hash_family),
@@ -114,7 +126,8 @@ CuckooHashingSparseDpfPirClient::Create(
   return absl::WrapUnique(new CuckooHashingSparseDpfPirClient(
       std::move(encrypter), std::string(encryption_context_info),
       std::move(wrapped_client), std::move(hash_functions),
-      params.cuckoo_hashing_sparse_dpf_pir_server_params().num_buckets()));
+      params.cuckoo_hashing_sparse_dpf_pir_server_params().num_buckets(),
+      seed_fingerprint));
 }
 absl::StatusOr<std::tuple<DpfPirRequest::PlainRequest,
                           DpfPirRequest::HelperRequest, PirRequestClientState>>
@@ -144,6 +157,9 @@ CuckooHashingSparseDpfPirClient::CreatePlainRequests(
         .mutable_cuckoo_hashing_sparse_dpf_pir_request_client_state()
         ->add_query_strings(query[i]);
   }
+  leader_request.set_seed_fingerprint(seed_fingerprint_);
+  helper_request.mutable_plain_request()->set_seed_fingerprint(
+      seed_fingerprint_);
   return std::make_tuple(std::move(leader_request), std::move(helper_request),
                          std::move(request_client_state));
 }

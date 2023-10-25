@@ -73,11 +73,13 @@ class CuckooHashingSparseDpfPirClient
   CuckooHashingSparseDpfPirClient(
       EncryptHelperRequestFn encrypter, std::string encryption_context_info,
       std::unique_ptr<DenseDpfPirClient> wrapped_client,
-      std::vector<HashFunction> hash_functions, int num_buckets);
+      std::vector<HashFunction> hash_functions, int num_buckets,
+      int seed_fingerprint);
 
   std::unique_ptr<DenseDpfPirClient> wrapped_client_;
   std::vector<HashFunction> hash_functions_;
   int num_buckets_;
+  int seed_fingerprint_;
 };
 
 }  // namespace distributed_point_functions

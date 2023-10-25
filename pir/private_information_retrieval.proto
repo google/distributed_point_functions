@@ -104,6 +104,10 @@ message DpfPirRequest {
   // A plain DPF PIR request. Contains one DPF key per batched request.
   message PlainRequest {
     repeated distributed_point_functions.DpfKey dpf_key = 1;
+    // Optional fingerprint of the hash function seed for sparse PIRs. Not
+    // needed for any security guarantees, but to catch programming errors when
+    // inconsistent seeds are used.
+    fixed32 seed_fingerprint = 2;
   }
 
   // Message to the Leader. Contains a PlainRequest, as well as an

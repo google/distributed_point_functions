@@ -112,11 +112,13 @@ class CuckooHashingSparseDpfPirServer : public DpfPirServer {
 
   CuckooHashingSparseDpfPirServer(PirServerPublicParams params,
                                   std::unique_ptr<DistributedPointFunction> dpf,
-                                  std::unique_ptr<Database> database);
+                                  std::unique_ptr<Database> database,
+                                  int seed_fingerprint);
 
   PirServerPublicParams params_;
   std::unique_ptr<DistributedPointFunction> dpf_;
   std::unique_ptr<Database> database_;
+  int seed_fingerprint_;
 };
 
 }  // namespace distributed_point_functions

@@ -231,5 +231,30 @@ TEST_F(CuckooHashingSparseDpfPirClientTest, EndToEndSucceeds) {
   EXPECT_THAT(result[2], Optional(StartsWith(values_[42])));
 }
 
+TEST_F(CuckooHashingSparseDpfPirClientTest,
+       EndToEndSucceedsWithoutFingerprintForBackwardsCompatibility) {
+  std::vector<std::string> queries = {"Key 1", "Key", "Key 42"};
+
+  PirRequest request;
+  PirRequestClientState client_state;
+  DPF_ASSERT_OK_AND_ASSIGN(std::tie(request, client_state),
+                           client_->CreateRequest(queries));
+
+  request.mutable_dpf_pir_request()
+      ->mutable_leader_request()
+      ->mutable_plain_request()
+      ->clear_seed_fingerprint();
+
+  DPF_ASSERT_OK_AND_ASSIGN(PirResponse response,
+                           leader_->HandleRequest(request));
+  DPF_ASSERT_OK_AND_ASSIGN(std::vector<absl::optional<std::string>> result,
+                           client_->HandleResponse(response, client_state));
+
+  EXPECT_EQ(result.size(), queries.size());
+  EXPECT_THAT(result[0], Optional(StartsWith(values_[1])));
+  EXPECT_EQ(result[1], absl::nullopt);
+  EXPECT_THAT(result[2], Optional(StartsWith(values_[42])));
+}
+
 }  // namespace
 }  // namespace distributed_point_functions
