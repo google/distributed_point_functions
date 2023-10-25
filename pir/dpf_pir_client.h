@@ -18,10 +18,14 @@
 #define DISTRIBUTED_POINT_FUNCTIONS_PIR_DPF_PIR_CLIENT_H_
 
 #include <string>
+#include <tuple>
+#include <utility>
 
 #include "absl/functional/any_invocable.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "pir/pir_client.h"
+#include "pir/private_information_retrieval.pb.h"
 
 namespace distributed_point_functions {
 
@@ -44,8 +48,82 @@ class DpfPirClient : public PirClient<QueryType, ResponseType> {
       absl::string_view plain_helper_request,
       absl::string_view encryption_context_info) const>;
 
+  // Creates a pair of plain DPF PIR requests, one for each server, as well as
+  // the client's private state. Useful to wrap PIR protocols in other
+  // protocols, or to send queries to servers directly. For the communication
+  // pattern described in dpf_pir_server.h, please use CreateRequest instead.
+  //
+  virtual absl::StatusOr<
+      std::tuple<DpfPirRequest::PlainRequest, DpfPirRequest::HelperRequest,
+                 PirRequestClientState>>
+  CreatePlainRequests(QueryType query) const = 0;
+
+  // Creates a new PIR request for the given `query`, which is to be sent to the
+  // Leader server. If successful, returns the request together with the
+  // client's private state needed to decrypt the server's response.
+  absl::StatusOr<std::pair<PirRequest, PirRequestClientState>> CreateRequest(
+      QueryType query) const final {
+    absl::StatusOr<
+        std::tuple<DpfPirRequest::PlainRequest, DpfPirRequest::HelperRequest,
+                   PirRequestClientState>>
+        plain_requests = CreatePlainRequests(query);
+    if (!plain_requests.ok()) {
+      return plain_requests.status();
+    }
+    absl::StatusOr<PirRequest> leader_request = PlainRequestsToLeaderRequest(
+        std::move(std::get<0>(plain_requests.value())),
+        std::move(std::get<1>(plain_requests.value())));
+    if (!leader_request.ok()) {
+      return leader_request.status();
+    }
+    return std::make_pair(
+        std::move(leader_request.value()),
+        std::move(std::get<PirRequestClientState>(plain_requests.value())));
+  }
+
   virtual ~DpfPirClient() = default;
+
+ protected:
+  // Constructor to be called by subclasses. `encrypter` and
+  // `encryption_context_info` will be used to encrypt the helper's PIR request.
+  DpfPirClient(EncryptHelperRequestFn encrypter,
+               std::string encryption_context_info)
+      : encrypter_(std::move(encrypter)),
+        encryption_context_info_(std::move(encryption_context_info)) {}
+
+ private:
+  absl::StatusOr<PirRequest> PlainRequestsToLeaderRequest(
+      DpfPirRequest::PlainRequest leader_plain_request,
+      DpfPirRequest::HelperRequest helper_plain_request) const;
+
+  EncryptHelperRequestFn encrypter_;
+  std::string encryption_context_info_;
 };
+
+template <typename QueryType, typename ResponseType>
+absl::StatusOr<PirRequest>
+DpfPirClient<QueryType, ResponseType>::PlainRequestsToLeaderRequest(
+    DpfPirRequest::PlainRequest leader_plain_request,
+    DpfPirRequest::HelperRequest helper_plain_request) const {
+  // Encrypt helper_request.
+  absl::StatusOr<std::string> encrypted_helper_request = encrypter_(
+      helper_plain_request.SerializeAsString(), encryption_context_info_);
+  if (!encrypted_helper_request.ok()) {
+    return encrypted_helper_request.status();
+  }
+
+  // Assemble and return result.
+  PirRequest leader_request;
+  *(leader_request.mutable_dpf_pir_request()
+        ->mutable_leader_request()
+        ->mutable_encrypted_helper_request()
+        ->mutable_encrypted_request()) =
+      std::move(encrypted_helper_request.value());
+  *(leader_request.mutable_dpf_pir_request()
+        ->mutable_leader_request()
+        ->mutable_plain_request()) = std::move(leader_plain_request);
+  return leader_request;
+}
 
 }  // namespace distributed_point_functions
 #endif  // DISTRIBUTED_POINT_FUNCTIONS_PIR_DPF_PIR_CLIENT_H_

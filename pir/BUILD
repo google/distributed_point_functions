@@ -403,7 +403,9 @@ cc_library(
     hdrs = ["dpf_pir_client.h"],
     deps = [
         ":pir_client",
+        ":private_information_retrieval_cc_proto",
         "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
     ],
 )

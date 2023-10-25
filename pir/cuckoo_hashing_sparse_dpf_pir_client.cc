@@ -29,6 +29,7 @@
 #include "absl/types/span.h"
 #include "dpf/status_macros.h"
 #include "pir/dense_dpf_pir_client.h"
+#include "pir/dpf_pir_client.h"
 #include "pir/hashing/hash_family.h"
 #include "pir/hashing/hash_family_config.h"
 #include "pir/private_information_retrieval.pb.h"
@@ -51,12 +52,23 @@ bool IsPrefixPaddedWithZeros(absl::string_view input,
   return true;
 }
 
+// Always returns an InternalError. Used in the constructor for the wrapped PIR
+// client, which should never be called directly.
+absl::StatusOr<std::string> DummyEncrypter(absl::string_view plaintext,
+                                           absl::string_view context_info) {
+  return absl::InternalError(
+      "This PIR client is wrapped by a CuckooHashingSparseDpfPirClient and "
+      "should never be called directly");
+}
+
 }  // namespace
 
 CuckooHashingSparseDpfPirClient::CuckooHashingSparseDpfPirClient(
+    EncryptHelperRequestFn encrypter, std::string encryption_context_info,
     std::unique_ptr<DenseDpfPirClient> wrapped_client,
     std::vector<HashFunction> hash_functions, int num_buckets)
-    : wrapped_client_(std::move(wrapped_client)),
+    : DpfPirClient(std::move(encrypter), std::move(encryption_context_info)),
+      wrapped_client_(std::move(wrapped_client)),
       hash_functions_(std::move(hash_functions)),
       num_buckets_(num_buckets) {}
 
@@ -97,16 +109,16 @@ CuckooHashingSparseDpfPirClient::Create(
       params.cuckoo_hashing_sparse_dpf_pir_server_params().num_buckets());
   DPF_ASSIGN_OR_RETURN(
       std::unique_ptr<DenseDpfPirClient> wrapped_client,
-      DenseDpfPirClient::Create(wrapped_client_config, std::move(encrypter),
-                                encryption_context_info));
+      DenseDpfPirClient::Create(wrapped_client_config, DummyEncrypter, ""));
 
   return absl::WrapUnique(new CuckooHashingSparseDpfPirClient(
+      std::move(encrypter), std::string(encryption_context_info),
       std::move(wrapped_client), std::move(hash_functions),
       params.cuckoo_hashing_sparse_dpf_pir_server_params().num_buckets()));
 }
-
-absl::StatusOr<std::pair<PirRequest, PirRequestClientState>>
-CuckooHashingSparseDpfPirClient::CreateRequest(
+absl::StatusOr<std::tuple<DpfPirRequest::PlainRequest,
+                          DpfPirRequest::HelperRequest, PirRequestClientState>>
+CuckooHashingSparseDpfPirClient::CreatePlainRequests(
     absl::Span<const std::string> query) const {
   std::vector<int> indices;
   indices.reserve(hash_functions_.size() * query.size());
@@ -115,10 +127,12 @@ CuckooHashingSparseDpfPirClient::CreateRequest(
       indices.push_back(hash_functions_[j](query[i], num_buckets_));
     }
   }
-  PirRequest request;
+  DpfPirRequest::PlainRequest leader_request;
+  DpfPirRequest::HelperRequest helper_request;
   PirRequestClientState request_client_state;
-  DPF_ASSIGN_OR_RETURN(std::tie(request, request_client_state),
-                       wrapped_client_->CreateRequest(indices));
+  DPF_ASSIGN_OR_RETURN(
+      std::tie(leader_request, helper_request, request_client_state),
+      wrapped_client_->CreatePlainRequests(indices));
   std::string otp_seed =
       request_client_state.dense_dpf_pir_request_client_state()
           .one_time_pad_seed();
@@ -130,7 +144,8 @@ CuckooHashingSparseDpfPirClient::CreateRequest(
         .mutable_cuckoo_hashing_sparse_dpf_pir_request_client_state()
         ->add_query_strings(query[i]);
   }
-  return std::make_pair(std::move(request), std::move(request_client_state));
+  return std::make_tuple(std::move(leader_request), std::move(helper_request),
+                         std::move(request_client_state));
 }
 
 absl::StatusOr<std::vector<absl::optional<std::string>>>
