@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <tuple>
@@ -1083,7 +1084,7 @@ absl::Status DistributedPointFunction::EvaluateAndApply(
     return absl::InvalidArgumentError(
         "`keys.size()` != `evaluation_points.size()`");
   }
-  for (int i = 0; i < keys.size(); ++i) {
+  for (size_t i = 0; i < keys.size(); ++i) {
     absl::Status status = proto_validator_->ValidateDpfKey(keys[i]);
     if (!status.ok()) return status;
   }
