@@ -33,10 +33,6 @@ message PirConfig {
   }
 }
 
-message DatabaseConfig {
-  // Database dimensions, location, how to access elements, etc.
-}
-
 //=============================================================================
 // Abstract PIR Interface. This is supposed to cover all PIR implementations
 // we care about.
