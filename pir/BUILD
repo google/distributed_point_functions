@@ -469,3 +469,51 @@ cc_test(
         "@com_google_protobuf//:protobuf",
     ],
 )
+
+cc_library(
+    name = "simple_hashing_sparse_dpf_pir_server",
+    srcs = ["simple_hashing_sparse_dpf_pir_server.cc"],
+    hdrs = ["simple_hashing_sparse_dpf_pir_server.h"],
+    deps = [
+        ":dpf_pir_server",
+        ":pir_database_interface",
+        ":private_information_retrieval_cc_proto",
+        "//dpf:distributed_point_function",
+        "//dpf:distributed_point_function_cc_proto",
+        "//dpf:status_macros",
+        "//dpf:xor_wrapper",
+        "//pir/hashing:hash_family_config_cc_proto",
+        "//pir/hashing:sha256_hash_family",
+        "@boringssl//:crypto",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "simple_hashing_sparse_dpf_pir_server_test",
+    srcs = ["simple_hashing_sparse_dpf_pir_server_test.cc"],
+    deps = [
+        ":private_information_retrieval_cc_proto",
+        ":simple_hashed_dpf_pir_database",
+        ":simple_hashing_sparse_dpf_pir_server",
+        "//dpf/internal:status_matchers",
+        "//pir/hashing:hash_family",
+        "//pir/hashing:hash_family_config",
+        "//pir/hashing:hash_family_config_cc_proto",
+        "//pir/testing:encrypt_decrypt",
+        "//pir/testing:mock_pir_database",
+        "//pir/testing:request_generator",
+        "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_protobuf//:protobuf",
+    ],
+)

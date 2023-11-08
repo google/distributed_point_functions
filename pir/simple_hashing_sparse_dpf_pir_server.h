@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef DISTRIBUTED_POINT_FUNCTIONS_PIR_CUCKOO_HASHING_SPARSE_DPF_PIR_SERVER_H_
-#define DISTRIBUTED_POINT_FUNCTIONS_PIR_CUCKOO_HASHING_SPARSE_DPF_PIR_SERVER_H_
+#ifndef DISTRIBUTED_POINT_FUNCTIONS_PIR_SIMPLE_HASHING_SPARSE_DPF_PIR_SERVER_H_
+#define DISTRIBUTED_POINT_FUNCTIONS_PIR_SIMPLE_HASHING_SPARSE_DPF_PIR_SERVER_H_
 
 #include <memory>
 #include <string>
@@ -33,15 +33,17 @@
 
 namespace distributed_point_functions {
 
-// Implements sparse two-server PIR with DPFs. Works by first applying Cuckoo
+// Implements sparse two-server PIR with DPFs. Works by first applying Simple
 // Hashing on the database to densify it, and subsequently run queries on the
-// dense database. Cuckoo hashing guarantees that every key gets mapped to one
-// out of 3 locations. The client simply queries all three locations.
+// dense database. Simple hashing guarantees that every key gets mapped
+// deterministically to a single bucket. The client then downloads the entire
+// bucket.
 //
-class CuckooHashingSparseDpfPirServer : public DpfPirServer {
+class SimpleHashingSparseDpfPirServer : public DpfPirServer {
  public:
-  using Database = PirDatabaseInterface<XorWrapper<absl::uint128>,
-                                        std::pair<std::string, std::string>>;
+  using Database =
+      PirDatabaseInterface<XorWrapper<absl::uint128>,
+                           std::pair<std::string, std::string>, std::string>;
 
   // Function type for the `sender` argument passed to CreateLeader. See
   // DpfPirServer documentation for details.
@@ -54,15 +56,15 @@ class CuckooHashingSparseDpfPirServer : public DpfPirServer {
   // Context Info passed to the decrypter when created as Helper. Should be the
   // same as used on the client for encryption.
   static inline constexpr absl::string_view kEncryptionContextInfo =
-      "CuckooHashingSparseDpfPirServer";
+      "SimpleHashingSparseDpfPirServer";
 
   // Generates parameters to be used by the client and for constructing the
   // database.
-  static absl::StatusOr<CuckooHashingParams> GenerateParams(
+  static absl::StatusOr<SimpleHashingParams> GenerateParams(
       const PirConfig& config);
 
-  // Creates a new CuckooHashingSparseDpfPirServer instance with the given
-  // CuckooHashingParams and Database, acting as a Leader server. `sender`
+  // Creates a new SimpleHashingSparseDpfPirServer instance with the given
+  // SimpleHashingParams and Database, acting as a Leader server. `sender`
   // should be a function that forwards the EncryptedHelperRequest to the
   // Helper, and executes its callback while waiting for the response (which
   // will in turn compute the Leader's response). For correctness, `params` must
@@ -70,8 +72,8 @@ class CuckooHashingSparseDpfPirServer : public DpfPirServer {
   //
   // Returns INVALID_ARGUMENT if `sender` or `database` is NULL, or if `params`
   // is invalid.
-  static absl::StatusOr<std::unique_ptr<CuckooHashingSparseDpfPirServer>>
-  CreateLeader(CuckooHashingParams params, std::unique_ptr<Database> database,
+  static absl::StatusOr<std::unique_ptr<SimpleHashingSparseDpfPirServer>>
+  CreateLeader(SimpleHashingParams params, std::unique_ptr<Database> database,
                ForwardHelperRequestFn sender);
 
   // Creates a new DenseDpfPirServer instance with the given CuckooHashingParams
@@ -84,8 +86,8 @@ class CuckooHashingSparseDpfPirServer : public DpfPirServer {
   //
   // Returns INVALID_ARGUMENT if `decrypter` or `database` is NULL, or if
   // `params` is invalid.
-  static absl::StatusOr<std::unique_ptr<CuckooHashingSparseDpfPirServer>>
-  CreateHelper(CuckooHashingParams params, std::unique_ptr<Database> database,
+  static absl::StatusOr<std::unique_ptr<SimpleHashingSparseDpfPirServer>>
+  CreateHelper(SimpleHashingParams params, std::unique_ptr<Database> database,
                DecryptHelperRequestFn decrypter);
 
   // Creates a new DenseDpfPirServer instance with the given CuckooHashingParams
@@ -93,8 +95,8 @@ class CuckooHashingSparseDpfPirServer : public DpfPirServer {
   // match the parameters used to construct `database`.
   //
   // Returns INVALID_ARGUMENT if `database` is NULL, or if `params` is invalid.
-  static absl::StatusOr<std::unique_ptr<CuckooHashingSparseDpfPirServer>>
-  CreatePlain(CuckooHashingParams params, std::unique_ptr<Database> database);
+  static absl::StatusOr<std::unique_ptr<SimpleHashingSparseDpfPirServer>>
+  CreatePlain(SimpleHashingParams params, std::unique_ptr<Database> database);
 
   // Returns this server's public parameters to be used at the Client.
   const PirServerPublicParams& GetPublicParams() const override {
@@ -111,7 +113,7 @@ class CuckooHashingSparseDpfPirServer : public DpfPirServer {
   static constexpr int kHashFunctionSeedLengthBytes = 16;
   static constexpr int kDpfBlockSizeBits = 8 * sizeof(absl::uint128);
 
-  CuckooHashingSparseDpfPirServer(PirServerPublicParams params,
+  SimpleHashingSparseDpfPirServer(PirServerPublicParams params,
                                   std::unique_ptr<DistributedPointFunction> dpf,
                                   std::unique_ptr<Database> database,
                                   int seed_fingerprint);
@@ -124,4 +126,4 @@ class CuckooHashingSparseDpfPirServer : public DpfPirServer {
 
 }  // namespace distributed_point_functions
 
-#endif  // DISTRIBUTED_POINT_FUNCTIONS_PIR_CUCKOO_HASHING_SPARSE_DPF_PIR_SERVER_H_
+#endif  // DISTRIBUTED_POINT_FUNCTIONS_PIR_SIMPLE_HASHING_SPARSE_DPF_PIR_SERVER_H_
