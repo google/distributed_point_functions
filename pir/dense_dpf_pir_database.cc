@@ -84,6 +84,13 @@ DenseDpfPirDatabase::Builder& DenseDpfPirDatabase::Builder::Insert(
   return *this;
 }
 
+DenseDpfPirDatabase::Builder& DenseDpfPirDatabase::Builder::Clear() {
+  values_.clear();
+  total_database_bytes_ = 0;
+  has_been_built_ = false;
+  return *this;
+}
+
 absl::StatusOr<std::unique_ptr<DenseDpfPirDatabase::Interface>>
 DenseDpfPirDatabase::Builder::Build() {
   DPF_RETURN_IF_ERROR(CheckHasNotBeenBuilt(has_been_built_));

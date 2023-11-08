@@ -50,6 +50,9 @@ class PirDatabaseInterface {
     virtual Builder& Insert(RecordType) = 0;
     // Returns a copy of this Builder.
     virtual std::unique_ptr<Builder> Clone() const = 0;
+    // Clears all elements inserted into this builder, but leaves any other
+    // configuration intact.
+    virtual Builder& Clear() = 0;
     // Builds the database after all elements have been inserted and invalidated
     // the builder. All subsequent calls to Build() should fail with
     // FAILED_PRECONDITION.

@@ -56,6 +56,9 @@ class CuckooHashedDpfPirDatabase
     // Inserts the given key-value pair into the database once Build() is
     // called.
     Builder& Insert(std::pair<std::string, std::string>) override;
+    // Clears all elements inserted into this builder, but leaves any other
+    // configuration intact.
+    Builder& Clear() override;
     // Sets the cuckoo hashing parameters used for this database. Must be called
     // before calling `Build`.
     Builder& SetParams(CuckooHashingParams params);

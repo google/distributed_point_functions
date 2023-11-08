@@ -109,6 +109,11 @@ class CuckooHashedDpfPirDatabaseBuilderTest : public ::testing::Test {
               real_key_builder_.Insert(input);
               return *mock_key_builder_ptr;
             });
+    ON_CALL(*mock_key_builder_, Clear)
+        .WillByDefault([this, mock_key_builder_ptr]() -> auto& {
+          real_key_builder_.Clear();
+          return *mock_key_builder_ptr;
+        });
     ON_CALL(*mock_key_builder_, Build).WillByDefault([this]() {
       return real_key_builder_.Build();
     });
@@ -118,6 +123,11 @@ class CuckooHashedDpfPirDatabaseBuilderTest : public ::testing::Test {
               real_value_builder_.Insert(input);
               return *mock_value_builder_ptr;
             });
+    ON_CALL(*mock_value_builder_, Clear)
+        .WillByDefault([this, mock_value_builder_ptr]() -> auto& {
+          real_value_builder_.Clear();
+          return *mock_value_builder_ptr;
+        });
     ON_CALL(*mock_value_builder_, Build).WillByDefault([this]() {
       return real_value_builder_.Build();
     });
@@ -139,6 +149,28 @@ class CuckooHashedDpfPirDatabaseBuilderTest : public ::testing::Test {
   std::unique_ptr<MockDenseBuilder> mock_key_builder_, mock_value_builder_;
   DenseDpfPirDatabase::Builder real_key_builder_, real_value_builder_;
 };
+
+TEST_F(CuckooHashedDpfPirDatabaseBuilderTest,
+       SetKeyDatabaseBuilderClearsBuilder) {
+  EXPECT_CALL(*mock_key_builder_, Clear).Times(1);
+  builder_.SetKeyDatabaseBuilder(std::move(mock_key_builder_));
+}
+
+TEST_F(CuckooHashedDpfPirDatabaseBuilderTest,
+       SetValueDatabaseBuilderClearsBuilder) {
+  EXPECT_CALL(*mock_value_builder_, Clear).Times(1);
+  builder_.SetValueDatabaseBuilder(std::move(mock_value_builder_));
+}
+
+TEST_F(CuckooHashedDpfPirDatabaseBuilderTest,
+       ClearCallsClearOnWrappedBuilders) {
+  // Called two times because `Set(Key|Value)DatabaseBuilder` also calls Clear.
+  EXPECT_CALL(*mock_key_builder_, Clear).Times(2);
+  EXPECT_CALL(*mock_value_builder_, Clear).Times(2);
+  builder_.SetKeyDatabaseBuilder(std::move(mock_key_builder_))
+      .SetValueDatabaseBuilder(std::move(mock_value_builder_));
+  builder_.Clear();
+}
 
 TEST_F(CuckooHashedDpfPirDatabaseBuilderTest, BuildsEmptyDatabase) {
   EXPECT_THAT(
@@ -213,6 +245,16 @@ TEST_F(CuckooHashedDpfPirDatabaseBuilderTest, FailsToBuildDatabaseTwice) {
   EXPECT_THAT(builder_.Clone()->Build(),
               StatusIs(absl::StatusCode::kFailedPrecondition,
                        HasSubstr("already built")));
+}
+
+TEST_F(CuckooHashedDpfPirDatabaseBuilderTest, CanBuildAgainAfterCallingClear) {
+  builder_.Insert({"Key 1", "Value 1"});
+  EXPECT_THAT(builder_.Build(), IsOk());
+  EXPECT_THAT(builder_.Build(), StatusIs(absl::StatusCode::kFailedPrecondition,
+                                         HasSubstr("already built")));
+
+  builder_.Clear();
+  EXPECT_THAT(builder_.Build(), IsOkAndHolds(NotNull()));
 }
 
 TEST_F(CuckooHashedDpfPirDatabaseBuilderTest, InsertsManyElementsCorrectly) {

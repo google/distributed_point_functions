@@ -42,6 +42,7 @@ using ::testing::ElementsAre;
 using ::testing::ElementsAreArray;
 using ::testing::HasSubstr;
 using ::testing::IsEmpty;
+using ::testing::NotNull;
 using ::testing::Pointee;
 using ::testing::Property;
 using ::testing::StartsWith;
@@ -64,6 +65,27 @@ TEST(DenseDpfPirDatabaseBuilder, CreateWithAllDefaultArguments) {
   ASSERT_NE(dense_database, nullptr);
   EXPECT_EQ(dense_database->max_value_size_in_bytes(), 0);
   EXPECT_EQ(dense_database->content().size(), 0);
+}
+
+TEST(DenseDpfPirDatabaseBuilder, ClearedBuilderIsSameAsDefaultBuilder) {
+  DenseDpfPirDatabase::Builder builder1, builder2;
+
+  builder1.Insert("test");
+  builder1.Clear();
+
+  DPF_ASSERT_OK_AND_ASSIGN(InterfacePtr database1, builder1.Build());
+  DPF_ASSERT_OK_AND_ASSIGN(InterfacePtr database2, builder2.Build());
+
+  DenseDpfPirDatabase* dense_database1 =
+      dynamic_cast<DenseDpfPirDatabase*>(database1.get());
+  DenseDpfPirDatabase* dense_database2 =
+      dynamic_cast<DenseDpfPirDatabase*>(database2.get());
+  ASSERT_NE(dense_database1, nullptr);
+  ASSERT_NE(dense_database2, nullptr);
+  EXPECT_EQ(dense_database1->max_value_size_in_bytes(),
+            dense_database2->max_value_size_in_bytes());
+  EXPECT_THAT(dense_database1->content(),
+              ElementsAreArray(dense_database2->content()));
 }
 
 // This test fixture is for exercising the Append() member function.
@@ -125,6 +147,16 @@ TEST_F(DenseDpfPirDatabaseBuilderInsertTest, BuildFailsIfAlreadyBuilt) {
   EXPECT_THAT(builder.Clone()->Build(),
               StatusIs(absl::StatusCode::kFailedPrecondition,
                        HasSubstr("already built")));
+}
+
+TEST_F(DenseDpfPirDatabaseBuilderInsertTest, CanBuildAgainAfterCallingClear) {
+  DenseDpfPirDatabase::Builder builder;
+  DPF_EXPECT_OK(builder.Build());
+  EXPECT_THAT(builder.Build(), StatusIs(absl::StatusCode::kFailedPrecondition,
+                                        HasSubstr("already built")));
+
+  builder.Clear();
+  EXPECT_THAT(builder.Build(), IsOkAndHolds(NotNull()));
 }
 
 // Values can be correctly inserted to the database.

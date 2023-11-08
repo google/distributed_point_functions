@@ -75,6 +75,19 @@ CuckooHashedDpfPirDatabase::Builder::Insert(RecordType key_value) {
 }
 
 CuckooHashedDpfPirDatabase::Builder&
+CuckooHashedDpfPirDatabase::Builder::Clear() {
+  if (key_database_builder_ != nullptr) {
+    key_database_builder_->Clear();
+  }
+  if (value_database_builder_ != nullptr) {
+    value_database_builder_->Clear();
+  }
+  records_.clear();
+  has_been_built_ = false;
+  return *this;
+}
+
+CuckooHashedDpfPirDatabase::Builder&
 CuckooHashedDpfPirDatabase::Builder::SetParams(CuckooHashingParams params) {
   params_ = std::move(params);
   return *this;
@@ -83,6 +96,9 @@ CuckooHashedDpfPirDatabase::Builder::SetParams(CuckooHashingParams params) {
 CuckooHashedDpfPirDatabase::Builder&
 CuckooHashedDpfPirDatabase::Builder::SetKeyDatabaseBuilder(
     std::unique_ptr<DenseDatabase::Builder> builder) {
+  if (builder != nullptr) {
+    builder->Clear();
+  }
   key_database_builder_ = std::move(builder);
   return *this;
 }
@@ -90,6 +106,9 @@ CuckooHashedDpfPirDatabase::Builder::SetKeyDatabaseBuilder(
 CuckooHashedDpfPirDatabase::Builder&
 CuckooHashedDpfPirDatabase::Builder::SetValueDatabaseBuilder(
     std::unique_ptr<DenseDatabase::Builder> builder) {
+  if (builder != nullptr) {
+    builder->Clear();
+  }
   value_database_builder_ = std::move(builder);
   return *this;
 }
