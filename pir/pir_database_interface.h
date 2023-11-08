@@ -28,11 +28,13 @@
 namespace distributed_point_functions {
 
 // This class defines the basic database interfaces used by a PIR server.
-template <typename BlockTypeT, typename RecordTypeT>
+template <typename BlockTypeT, typename RecordTypeT,
+          typename ResponseTypeT = RecordTypeT>
 class PirDatabaseInterface {
  public:
   using BlockType = BlockTypeT;
   using RecordType = RecordTypeT;
+  using ResponseType = ResponseTypeT;
 
   // Builder interface for constructing concrete databases. Allows inserting
   // records one-by-one before constructing the underlying in-memory database in
@@ -65,7 +67,7 @@ class PirDatabaseInterface {
   // For compactness and efficiency, the binary selection vector is packed in
   // blocks, represented as a vector of `BlockType`.
   // The result of the inner product is held in a `ResponseType` value.
-  virtual absl::StatusOr<std::vector<RecordType>> InnerProductWith(
+  virtual absl::StatusOr<std::vector<ResponseType>> InnerProductWith(
       absl::Span<const std::vector<BlockType>> selections) const = 0;
 
   // Returns the number of elements contained in the database.
