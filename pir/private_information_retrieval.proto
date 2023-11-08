@@ -44,6 +44,8 @@ message PirRequestClientState {
     DenseDpfPirRequestClientState dense_dpf_pir_request_client_state = 1;
     CuckooHashingSparseDpfPirRequestClientState
         cuckoo_hashing_sparse_dpf_pir_request_client_state = 2;
+    SimpleHashingSparseDpfPirRequestClientState
+        simple_hashing_sparse_dpf_pir_request_client_state = 3;
   }
 }
 
@@ -162,6 +164,13 @@ message DenseDpfPirRequestClientState {
 // For cuckoo hashing, we need to keep the query around so that we only return
 // responses that we actually queried.
 message CuckooHashingSparseDpfPirRequestClientState {
+  bytes one_time_pad_seed = 1;
+  repeated bytes query_strings = 2;
+}
+
+// Same as Cuckoo Hashing, we need to remember the queries to check if the key
+// was present.
+message SimpleHashingSparseDpfPirRequestClientState {
   bytes one_time_pad_seed = 1;
   repeated bytes query_strings = 2;
 }

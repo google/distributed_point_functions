@@ -494,6 +494,30 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "simple_hashing_sparse_dpf_pir_client",
+    srcs = ["simple_hashing_sparse_dpf_pir_client.cc"],
+    hdrs = ["simple_hashing_sparse_dpf_pir_client.h"],
+    deps = [
+        ":dense_dpf_pir_client",
+        ":dpf_pir_client",
+        ":private_information_retrieval_cc_proto",
+        ":simple_hashing_sparse_dpf_pir_server",
+        "//dpf:status_macros",
+        "//pir/hashing:hash_family",
+        "//pir/hashing:hash_family_config",
+        "//pir/hashing:sha256_hash_family",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:optional",
+        "@com_google_absl//absl/types:span",
+        "@com_google_protobuf//:protobuf",
+    ],
+)
+
 cc_test(
     name = "simple_hashing_sparse_dpf_pir_server_test",
     srcs = ["simple_hashing_sparse_dpf_pir_server_test.cc"],
@@ -515,5 +539,26 @@ cc_test(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_protobuf//:protobuf",
+    ],
+)
+
+cc_test(
+    name = "simple_hashing_sparse_dpf_pir_client_test",
+    srcs = ["simple_hashing_sparse_dpf_pir_client_test.cc"],
+    deps = [
+        ":private_information_retrieval_cc_proto",
+        ":simple_hashed_dpf_pir_database",
+        ":simple_hashing_sparse_dpf_pir_client",
+        ":simple_hashing_sparse_dpf_pir_server",
+        "//dpf/internal:status_matchers",
+        "//pir/hashing:hash_family_config_cc_proto",
+        "//pir/testing:encrypt_decrypt",
+        "//pir/testing:mock_pir_database",
+        "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:optional",
+        "@tink_cc//:hybrid_encrypt",
     ],
 )
