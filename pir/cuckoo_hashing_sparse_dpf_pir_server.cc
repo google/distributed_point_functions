@@ -54,6 +54,13 @@ CuckooHashingSparseDpfPirServer::GenerateParams(const PirConfig& config) {
     return absl::InvalidArgumentError(
         "`config` must be a valid CuckooHashingSparseDpfPirConfig");
   }
+  if (config.cuckoo_hashing_sparse_dpf_pir_config().num_elements() <= 0) {
+    return absl::InvalidArgumentError("`num_elements` must be positive");
+  }
+  if (config.cuckoo_hashing_sparse_dpf_pir_config().hash_family() ==
+      HashFamilyConfig::HASH_FAMILY_UNSPECIFIED) {
+    return absl::InvalidArgumentError("`hash_family` must be set");
+  }
   CuckooHashingParams params;
   std::string seed(kHashFunctionSeedLengthBytes, '\0');
   RAND_bytes(reinterpret_cast<uint8_t*>(&seed[0]), seed.size());

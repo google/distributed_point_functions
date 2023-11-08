@@ -63,6 +63,28 @@ TEST(CuckooHashingSparseDpfPirServer, GenerateParamsFailsWhenConfigIsInvalid) {
                        HasSubstr("valid CuckooHashingSparseDpfPirConfig")));
 }
 
+TEST(CuckooHashingSparseDpfPirServer,
+     GenerateParamsFailsWhenHashFamilyIsNotSet) {
+  PirConfig config;
+  config.mutable_cuckoo_hashing_sparse_dpf_pir_config()->set_num_elements(
+      kNumElements);
+
+  EXPECT_THAT(
+      CuckooHashingSparseDpfPirServer::GenerateParams(config),
+      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("hash_family")));
+}
+
+TEST(CuckooHashingSparseDpfPirServer,
+     GenerateParamsFailsWhenNumElementsIsNotSet) {
+  PirConfig config;
+  config.mutable_cuckoo_hashing_sparse_dpf_pir_config()->set_hash_family(
+      kHashFamily);
+
+  EXPECT_THAT(
+      CuckooHashingSparseDpfPirServer::GenerateParams(config),
+      StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("num_elements")));
+}
+
 class CuckooHashingSparseDpfPirServerTest : public testing::Test {
  protected:
   void SetUpConfig() {
