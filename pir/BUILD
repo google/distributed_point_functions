@@ -168,7 +168,6 @@ cc_test(
     deps = [
         ":dense_dpf_pir_database",
         ":dense_dpf_pir_server",
-        ":private_information_retrieval_cc_proto",
         "//dpf/internal:status_matchers",
         "//pir/testing:mock_pir_database",
         "//pir/testing:request_generator",
@@ -176,7 +175,6 @@ cc_test(
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/random",
-        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/types:span",
     ],
 )
@@ -361,19 +359,16 @@ cc_test(
     deps = [
         ":cuckoo_hashed_dpf_pir_database",
         ":cuckoo_hashing_sparse_dpf_pir_server",
-        ":private_information_retrieval_cc_proto",
         "//dpf/internal:status_matchers",
         "//pir/hashing:hash_family",
         "//pir/hashing:hash_family_config",
         "//pir/hashing:hash_family_config_cc_proto",
         "//pir/testing:mock_pir_database",
-        "//pir/testing:pir_selection_bits",
         "//pir/testing:request_generator",
         "@com_github_google_benchmark//:benchmark",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/random",
-        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/types:span",
     ],
 )
@@ -431,5 +426,46 @@ cc_test(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",
         "@tink_cc//:hybrid_encrypt",
+    ],
+)
+
+cc_library(
+    name = "simple_hashed_dpf_pir_database",
+    srcs = ["simple_hashed_dpf_pir_database.cc"],
+    hdrs = ["simple_hashed_dpf_pir_database.h"],
+    deps = [
+        ":dense_dpf_pir_database",
+        ":pir_database_interface",
+        ":private_information_retrieval_cc_proto",
+        "//dpf:status_macros",
+        "//dpf:xor_wrapper",
+        "//pir/hashing:hash_family",
+        "//pir/hashing:hash_family_config",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
+        "@com_google_protobuf//:protobuf",
+    ],
+)
+
+cc_test(
+    name = "simple_hashed_dpf_pir_database_test",
+    srcs = ["simple_hashed_dpf_pir_database_test.cc"],
+    deps = [
+        ":private_information_retrieval_cc_proto",
+        ":simple_hashed_dpf_pir_database",
+        "//dpf:xor_wrapper",
+        "//dpf/internal:status_matchers",
+        "//pir/hashing:hash_family",
+        "//pir/hashing:hash_family_config",
+        "//pir/hashing:hash_family_config_cc_proto",
+        "//pir/testing:mock_pir_database",
+        "//pir/testing:pir_selection_bits",
+        "@com_github_google_googletest//:gtest_main",
+        "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/status",
+        "@com_google_protobuf//:protobuf",
     ],
 )
