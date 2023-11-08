@@ -294,6 +294,7 @@ cc_test(
         ":cuckoo_hashed_dpf_pir_database",
         ":dense_dpf_pir_database",
         ":private_information_retrieval_cc_proto",
+        "//dpf:xor_wrapper",
         "//dpf/internal:status_matchers",
         "//pir/hashing:hash_family_config_cc_proto",
         "//pir/testing:mock_pir_database",
