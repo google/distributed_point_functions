@@ -13,7 +13,9 @@
 // limitations under the License.
 
 #include <memory>
+#include <string>
 #include <tuple>
+#include <vector>
 
 #include "absl/numeric/int128.h"
 #include "absl/random/distributions.h"

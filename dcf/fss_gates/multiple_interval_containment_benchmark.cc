@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/numeric/int128.h"
 #include "absl/random/distributions.h"

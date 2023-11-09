@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <array>
+#include <string>
 #include <utility>
 
 #include "absl/numeric/int128.h"

@@ -15,8 +15,10 @@
 #include "dcf/fss_gates/multiple_interval_containment.h"
 
 #include <cstdint>
+#include <iterator>
 #include <memory>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 #include "absl/algorithm/container.h"

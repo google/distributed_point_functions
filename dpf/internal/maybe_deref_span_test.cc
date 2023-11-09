@@ -14,6 +14,7 @@
 
 #include "dpf/internal/maybe_deref_span.h"
 
+#include <type_traits>
 #include <vector>
 
 #include "gmock/gmock.h"
