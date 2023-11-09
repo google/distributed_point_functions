@@ -20,6 +20,8 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <memory>
 #include <string>
 #include <tuple>
@@ -45,8 +47,8 @@
 #include "dpf/internal/maybe_deref_span.h"
 #include "dpf/internal/proto_validator.h"
 #include "dpf/internal/value_type_helpers.h"
+#include "google/protobuf/repeated_ptr_field.h"
 #include "hwy/aligned_allocator.h"
-#include "openssl/cipher.h"
 
 namespace distributed_point_functions {
 
@@ -745,7 +747,7 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
 
   // Check that the output size is not too large. We first check that the
   // domain size blowup fits in an int64_t, and then check that the total size
-  // of all elements doesn't over flow a signed size_t.
+  // of all elements doesn't over flow a size_t.
   int log_domain_size = parameters_[hierarchy_level].log_domain_size();
   if (log_domain_size - previous_log_domain_size >= 63) {
     return absl::InvalidArgumentError(
@@ -755,7 +757,7 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
   int64_t outputs_per_prefix = int64_t{1}
                                << (log_domain_size - previous_log_domain_size);
   if (absl::uint128{prefixes_size} * outputs_per_prefix >
-      std::numeric_limits<ssize_t>::max()) {
+      std::numeric_limits<size_t>::max() / 2) {
     return absl::InvalidArgumentError(
         "Output size would be too large. Please evaluate fewer hierarchy "
         "levels at once, insert intermediate hierarchy levels, or evaluate on "

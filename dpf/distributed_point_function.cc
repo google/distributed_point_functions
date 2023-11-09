@@ -301,7 +301,7 @@ DistributedPointFunction::ExpandSeeds(
       static_cast<int64_t>(partial_evaluations.control_bits.size());
   absl::uint128 output_size_128 = absl::uint128{current_level_size}
                                   << num_expansions;
-  DCHECK_LE(output_size_128, std::numeric_limits<ssize_t>::max());
+  DCHECK_LE(output_size_128, std::numeric_limits<size_t>::max() / 2);
   size_t output_size = static_cast<size_t>(output_size_128);
 
   // Allocate buffers with the correct size to avoid reallocations.
