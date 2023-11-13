@@ -32,7 +32,7 @@
 #include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/inlined_vector.h"
-#include "absl/log/check.h"
+#include "absl/log/absl_check.h"
 #include "absl/meta/type_traits.h"
 #include "absl/numeric/int128.h"
 #include "absl/status/status.h"
@@ -731,7 +731,7 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
   int previous_log_domain_size = 0;
   int previous_hierarchy_level = ctx.previous_hierarchy_level();
   if (!prefixes.empty()) {
-    DCHECK_GE(ctx.previous_hierarchy_level(), 0);
+    ABSL_DCHECK_GE(ctx.previous_hierarchy_level(), 0);
     previous_log_domain_size =
         parameters_[previous_hierarchy_level].log_domain_size();
     for (absl::uint128 prefix : prefixes) {
@@ -855,7 +855,7 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
       1 << (parameters_[hierarchy_level].log_domain_size() -
             hierarchy_to_tree_[hierarchy_level]);
   const int blocks_needed = blocks_needed_[hierarchy_level];
-  DCHECK(corrected_elements_per_block <= elements_per_block);
+  ABSL_DCHECK(corrected_elements_per_block <= elements_per_block);
   std::vector<T> corrected_expansion(expansion_size *
                                      corrected_elements_per_block);
   for (int64_t i = 0; i < expansion_size; ++i) {
@@ -879,7 +879,8 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateUntil(
   if (prefixes.empty()) {
     // If prefixes is empty (i.e., this is the first evaluation of `ctx`), just
     // return the expansion.
-    DCHECK(static_cast<int>(corrected_expansion.size()) == outputs_per_prefix);
+    ABSL_DCHECK(static_cast<int>(corrected_expansion.size()) ==
+                outputs_per_prefix);
     return corrected_expansion;
   } else {
     // Otherwise, only return elements under `prefixes`.
@@ -1032,7 +1033,7 @@ absl::StatusOr<std::vector<T>> DistributedPointFunction::EvaluateAtImpl(
   if (!status.ok()) {
     return status;
   }
-  DCHECK(static_cast<int64_t>(seeds.size()) == num_evaluation_points);
+  ABSL_DCHECK(static_cast<int64_t>(seeds.size()) == num_evaluation_points);
 
   // Hash `seeds`.
   absl::StatusOr<hwy::AlignedFreeUniquePtr<absl::uint128[]>> hashed_expansion =

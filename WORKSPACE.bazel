@@ -177,28 +177,6 @@ http_archive(
     ],
 )
 
-# gflags needed for glog.
-# https://github.com/gflags/gflags
-http_archive(
-    name = "com_github_gflags_gflags",
-    sha256 = "017e0a91531bfc45be9eaf07e4d8fed33c488b90b58509dbd2e33a33b2648ae6",
-    strip_prefix = "gflags-a738fdf9338412f83ab3f26f31ac11ed3f3ec4bd",
-    urls = [
-        "https://github.com/gflags/gflags/archive/a738fdf9338412f83ab3f26f31ac11ed3f3ec4bd.zip",
-    ],
-)
-
-# glog needed by SHELL
-# https://github.com/google/glog
-http_archive(
-    name = "com_github_google_glog",
-    sha256 = "0f91ee6cc1edc3b1c53a286382e69a37e5d172ce208b7e5b305be8770d8c21b1",
-    strip_prefix = "glog-f545ff5e7d7f3df95f6e86c8cb987d9d9d4bd481",
-    urls = [
-        "https://github.com/google/glog/archive/f545ff5e7d7f3df95f6e86c8cb987d9d9d4bd481.zip",
-    ],
-)
-
 # SHELL for uint256.
 # https://github.com/google/shell-encryption
 http_archive(

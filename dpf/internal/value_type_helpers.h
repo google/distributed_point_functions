@@ -28,7 +28,7 @@
 #include <vector>
 
 #include "absl/base/config.h"
-#include "absl/log/check.h"
+#include "absl/log/absl_check.h"
 #include "absl/meta/type_traits.h"
 #include "absl/numeric/int128.h"
 #include "absl/status/status.h"
@@ -214,7 +214,7 @@ struct ValueTypeHelper<T, absl::enable_if_t<is_unsigned_integer_v<T>>> {
   static constexpr int TotalBitSize() { return sizeof(T) * 8; }
 
   static T DirectlyFromBytes(absl::string_view bytes) {
-    CHECK(bytes.size() == sizeof(T));
+    ABSL_CHECK(bytes.size() == sizeof(T));
     T out{0};
 #ifdef ABSL_IS_LITTLE_ENDIAN
     std::copy_n(bytes.begin(), sizeof(T), reinterpret_cast<char*>(&out));
@@ -242,7 +242,7 @@ struct ValueTypeHelper<T, absl::enable_if_t<is_unsigned_integer_v<T>>> {
       }
 
       // Fill up with `bytes` and advance `bytes` by sizeof(T).
-      DCHECK(remaining_bytes.size() >= sizeof(T));
+      ABSL_DCHECK(remaining_bytes.size() >= sizeof(T));
       block |= DirectlyFromBytes(remaining_bytes.substr(0, sizeof(T)));
       remaining_bytes = remaining_bytes.substr(sizeof(T));
     }
@@ -430,7 +430,7 @@ struct ValueTypeHelper<Tuple<ElementType...>, void> {
   }
 
   static TupleType DirectlyFromBytes(absl::string_view bytes) {
-    CHECK(8 * bytes.size() >= TotalBitSize());
+    ABSL_CHECK(8 * bytes.size() >= TotalBitSize());
     int offset = 0;
     absl::Status status = absl::OkStatus();
     // Braced-init-list ensures the elements are constructed in-order.
@@ -589,7 +589,7 @@ std::array<T, ElementsPerBlock<T>()> ConvertBytesToArrayOf(
     absl::string_view bytes) {
   std::array<T, ElementsPerBlock<T>()> out;
   const int element_size_bytes = (TotalBitSize<T>() + 7) / 8;
-  CHECK(bytes.size() >= ElementsPerBlock<T>() * element_size_bytes);
+  ABSL_CHECK(bytes.size() >= ElementsPerBlock<T>() * element_size_bytes);
   for (int i = 0; i < ElementsPerBlock<T>(); ++i) {
     out[i] =
         FromBytes<T>(bytes.substr(i * element_size_bytes, element_size_bytes));

@@ -17,7 +17,7 @@
 #include <vector>
 
 #include "absl/flags/parse.h"
-#include "absl/log/log.h"
+#include "absl/log/absl_log.h"
 #include "absl/numeric/int128.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -217,7 +217,7 @@ HWY_BEFORE_TEST(Aes128FixedKeyHashHwyTest);
 HWY_EXPORT_AND_TEST_P(Aes128FixedKeyHashHwyTest, TestAllAes);
 
 TEST(Aes128FixedKeyHashHwy, LogHwyMode) {
-  LOG(INFO) << "Highway is in " << GetHwyModeAsString() << " mode";
+  ABSL_LOG(INFO) << "Highway is in " << GetHwyModeAsString() << " mode";
 }
 
 }  // namespace dpf_internal

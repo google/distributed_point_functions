@@ -22,7 +22,7 @@
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
-#include "absl/log/check.h"
+#include "absl/log/absl_check.h"
 #include "absl/memory/memory.h"
 #include "absl/numeric/int128.h"
 #include "absl/status/status.h"
@@ -223,7 +223,7 @@ absl::Status ProtoValidator::ValidateDpfKey(const DpfKey& key) const {
       // last_level_output_correction.
       continue;
     }
-    DCHECK(hierarchy_to_tree_[i] < key.correction_words_size());
+    ABSL_DCHECK(hierarchy_to_tree_[i] < key.correction_words_size());
     if (key.correction_words(hierarchy_to_tree_[i])
             .value_correction()
             .empty()) {

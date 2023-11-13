@@ -19,7 +19,7 @@
 
 #include "absl/base/attributes.h"
 #include "absl/base/call_once.h"
-#include "absl/log/check.h"
+#include "absl/log/absl_check.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -45,8 +45,9 @@ using ::crypto::tink::KeysetReader;
 absl::once_flag register_tink_once ABSL_ATTRIBUTE_UNUSED;
 
 absl::StatusOr<std::unique_ptr<HybridDecrypt>> CreateFakeHybridDecrypt() {
-  absl::call_once(register_tink_once,
-                  []() { CHECK_OK(crypto::tink::HybridConfig::Register()); });
+  absl::call_once(register_tink_once, []() {
+    ABSL_CHECK_OK(crypto::tink::HybridConfig::Register());
+  });
 
   const auto* const toc = embedded_private_key_create();
   absl::string_view private_key_json(toc->data, toc->size);
@@ -62,8 +63,9 @@ absl::StatusOr<std::unique_ptr<HybridDecrypt>> CreateFakeHybridDecrypt() {
 }
 
 absl::StatusOr<std::unique_ptr<HybridEncrypt>> CreateFakeHybridEncrypt() {
-  absl::call_once(register_tink_once,
-                  []() { CHECK_OK(crypto::tink::HybridConfig::Register()); });
+  absl::call_once(register_tink_once, []() {
+    ABSL_CHECK_OK(crypto::tink::HybridConfig::Register());
+  });
 
   const auto* const toc = embedded_public_key_create();
   absl::string_view public_key_json(toc->data, toc->size);
