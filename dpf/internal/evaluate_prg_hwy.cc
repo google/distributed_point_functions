@@ -22,7 +22,7 @@
 #include "absl/base/config.h"
 #include "absl/base/optimization.h"
 #include "absl/container/inlined_vector.h"
-#include "absl/log/check.h"
+#include "absl/log/absl_check.h"
 #include "absl/numeric/int128.h"
 #include "absl/status/status.h"
 #include "absl/types/span.h"
@@ -388,7 +388,7 @@ absl::Status EvaluateSeedsHwy(
     BoolsFromMask(d64, control_mask_3,
                   control_bits_out + start_block + 3 * blocks_per_vec);
   }
-  DCHECK_GT(i + 4 * bytes_per_vec, num_bytes);
+  ABSL_DCHECK_GT(i + 4 * bytes_per_vec, num_bytes);
 
   // Single full vectors.
   for (; i + bytes_per_vec <= num_bytes; i += bytes_per_vec) {
@@ -455,7 +455,7 @@ absl::Status EvaluateSeedsHwy(
     hn::Store(vec, d8, seeds_out_ptr + i);
     BoolsFromMask(d64, control_mask, control_bits_out + start_block);
   }
-  DCHECK_GT(i + bytes_per_vec, num_bytes);
+  ABSL_DCHECK_GT(i + bytes_per_vec, num_bytes);
 
   // Elements less than a full vector.
   int remaining_blocks = num_seeds - i / sizeof(absl::uint128);

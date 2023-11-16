@@ -21,7 +21,7 @@
 #include <vector>
 
 #include "absl/container/btree_set.h"
-#include "absl/log/check.h"
+#include "absl/log/absl_check.h"
 #include "absl/numeric/int128.h"
 #include "absl/random/random.h"
 #include "absl/random/uniform_int_distribution.h"
@@ -48,7 +48,7 @@ void BM_EvaluateRegularDpf(benchmark::State& state) {
       DistributedPointFunction::Create(parameters).value();
   absl::uint128 alpha = 0;
   T beta{};
-  CHECK(dpf->RegisterValueType<T>().ok());
+  ABSL_CHECK(dpf->RegisterValueType<T>().ok());
   std::pair<DpfKey, DpfKey> keys = dpf->GenerateKeys(alpha, beta).value();
   EvaluationContext ctx_0 = dpf->CreateEvaluationContext(keys.first).value();
   for (auto s : state) {
@@ -378,7 +378,7 @@ void BM_BatchEvaluation(benchmark::State& state) {
   std::vector<const DpfKey*> key_pointers(num_keys * evaluation_points_per_key);
   auto evaluation_points =
       hwy::AllocateAligned<absl::uint128>(num_keys * evaluation_points_per_key);
-  CHECK(evaluation_points != nullptr);
+  ABSL_CHECK(evaluation_points != nullptr);
   for (int i = 0; i < num_keys; ++i) {
     absl::uint128 alpha = absl::MakeUint128(absl::Uniform<uint64_t>(rng),
                                             absl::Uniform<uint64_t>(rng)) &

@@ -27,8 +27,8 @@
 #include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/inlined_vector.h"
-#include "absl/log/check.h"
-#include "absl/log/log.h"
+#include "absl/log/absl_check.h"
+#include "absl/log/absl_log.h"
 #include "absl/memory/memory.h"
 #include "absl/numeric/int128.h"
 #include "absl/status/status.h"
@@ -94,7 +94,7 @@ DistributedPointFunction::ComputeValueCorrection(
   absl::Span<absl::uint128> expanded_seed_a(&expanded_seeds[0], blocks_needed);
   absl::Span<absl::uint128> expanded_seed_b(&expanded_seeds[blocks_needed],
                                             blocks_needed);
-  DCHECK(seeds.size() == 2);
+  ABSL_DCHECK(seeds.size() == 2);
   std::iota(expanded_seed_a.begin(), expanded_seed_a.end(), seeds[0]);
   std::iota(expanded_seed_b.begin(), expanded_seed_b.end(), seeds[1]);
 
@@ -227,7 +227,7 @@ absl::uint128 DistributedPointFunction::DomainToTreeIndex(
     absl::uint128 domain_index, int hierarchy_level) const {
   int block_index_bits = parameters_[hierarchy_level].log_domain_size() -
                          hierarchy_to_tree_[hierarchy_level];
-  DCHECK_LT(block_index_bits, 128);
+  ABSL_DCHECK_LT(block_index_bits, 128);
   return domain_index >> block_index_bits;
 }
 
@@ -235,7 +235,7 @@ int DistributedPointFunction::DomainToBlockIndex(absl::uint128 domain_index,
                                                  int hierarchy_level) const {
   int block_index_bits = parameters_[hierarchy_level].log_domain_size() -
                          hierarchy_to_tree_[hierarchy_level];
-  DCHECK_LT(block_index_bits, 128);
+  ABSL_DCHECK_LT(block_index_bits, 128);
   return static_cast<int>(domain_index &
                           ((absl::uint128{1} << block_index_bits) - 1));
 }
@@ -274,12 +274,12 @@ absl::Status DistributedPointFunction::EvaluateSeeds(
     correction_controls_right[level] = correction.control_right();
   }
 
-  DCHECK(seeds.size() == num_seeds);
-  DCHECK(control_bits.size() == num_seeds);
-  DCHECK(correction_controls_left.size() == num_levels);
-  DCHECK(correction_controls_right.size() == num_levels);
-  DCHECK(seeds_out.size() == num_seeds);
-  DCHECK(control_bits_out.size() == num_seeds);
+  ABSL_DCHECK(seeds.size() == num_seeds);
+  ABSL_DCHECK(control_bits.size() == num_seeds);
+  ABSL_DCHECK(correction_controls_left.size() == num_levels);
+  ABSL_DCHECK(correction_controls_right.size() == num_levels);
+  ABSL_DCHECK(seeds_out.size() == num_seeds);
+  ABSL_DCHECK(control_bits_out.size() == num_seeds);
   DPF_RETURN_IF_ERROR(dpf_internal::EvaluateSeeds(
       num_seeds, num_levels, num_levels, seeds.data(), control_bits.data(),
       paths.data(), 0, correction_seeds.get(), correction_controls_left.data(),
@@ -295,13 +295,13 @@ DistributedPointFunction::ExpandSeeds(
   int num_expansions = static_cast<int>(correction_words.size());
 
   // Check that the output size fits in a size_t. This should already be checked
-  // by the caller, so using DCHECK here is enough.
-  DCHECK_LT(num_expansions, 63);
+  // by the caller, so using ABSL_DCHECK here is enough.
+  ABSL_DCHECK_LT(num_expansions, 63);
   auto current_level_size =
       static_cast<int64_t>(partial_evaluations.control_bits.size());
   absl::uint128 output_size_128 = absl::uint128{current_level_size}
                                   << num_expansions;
-  DCHECK_LE(output_size_128, std::numeric_limits<size_t>::max() / 2);
+  ABSL_DCHECK_LE(output_size_128, std::numeric_limits<size_t>::max() / 2);
   size_t output_size = static_cast<size_t>(output_size_128);
 
   // Allocate buffers with the correct size to avoid reallocations.
@@ -502,7 +502,7 @@ DistributedPointFunction::ExpandAndUpdateContext(
     // evaluation.
     bool update_ctx =
         (hierarchy_level < static_cast<int>(parameters_.size()) - 1);
-    DCHECK(ctx.previous_hierarchy_level() >= 0);
+    ABSL_DCHECK(ctx.previous_hierarchy_level() >= 0);
     DPF_ASSIGN_OR_RETURN(
         selected_partial_evaluations,
         ComputePartialEvaluations(prefixes, ctx.previous_hierarchy_level(),
@@ -593,8 +593,8 @@ absl::StatusOr<std::unique_ptr<DistributedPointFunction>>
 DistributedPointFunction::CreateIncremental(
     absl::Span<const DpfParameters> parameters) {
   // Log Highway mode for debugging.
-  LOG_FIRST_N(INFO, 1) << "Highway is in " << dpf_internal::GetHwyModeAsString()
-                       << " mode";
+  ABSL_LOG_FIRST_N(INFO, 1)
+      << "Highway is in " << dpf_internal::GetHwyModeAsString() << " mode";
 
   // Validate `parameters` and store validator for later.
   DPF_ASSIGN_OR_RETURN(

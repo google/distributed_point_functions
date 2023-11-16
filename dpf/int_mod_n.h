@@ -23,7 +23,7 @@
 
 #include "absl/base/config.h"
 #include "absl/container/inlined_vector.h"
-#include "absl/log/check.h"
+#include "absl/log/absl_check.h"
 #include "absl/numeric/int128.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -70,7 +70,7 @@ class IntModNBase {
   // to avoid depending on value_type_helpers here.
   template <typename T>
   static T ConvertBytesTo(absl::string_view bytes) {
-    CHECK(bytes.size() == sizeof(T));
+    ABSL_CHECK(bytes.size() == sizeof(T));
     T out{0};
 #ifdef ABSL_IS_LITTLE_ENDIAN
     std::copy_n(bytes.begin(), sizeof(T), reinterpret_cast<char*>(&out));

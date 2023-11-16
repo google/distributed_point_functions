@@ -23,8 +23,8 @@
 #include "absl/container/btree_set.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
-#include "absl/log/check.h"
-#include "absl/log/log.h"
+#include "absl/log/absl_check.h"
+#include "absl/log/absl_log.h"
 #include "absl/numeric/int128.h"
 #include "absl/random/random.h"
 #include "absl/status/statusor.h"
@@ -60,10 +60,6 @@ ABSL_FLAG(std::vector<std::string>, levels_to_evaluate, {},
           "List of integers specifying the log domain sizes at which to insert "
           "hierarchy levels.");
 
-#ifndef QCHECK
-#define QCHECK(x) CHECK(x)
-#endif
-
 namespace {
 
 const char* Usage() {
@@ -76,22 +72,22 @@ const char* Usage() {
 
 void ValidateFlags() {
   int log_domain_size = absl::GetFlag(FLAGS_log_domain_size);
-  QCHECK(log_domain_size >= 0) << "--log_domain_size must be non-negative";
+  ABSL_QCHECK(log_domain_size >= 0) << "--log_domain_size must be non-negative";
   int num_iterations = absl::GetFlag(FLAGS_num_iterations);
-  QCHECK(num_iterations > 0) << "--num_iterations must be positive";
+  ABSL_QCHECK(num_iterations > 0) << "--num_iterations must be positive";
   if (absl::GetFlag(FLAGS_only_nonzeros)) {
-    QCHECK(!absl::GetFlag(FLAGS_input).empty())
+    ABSL_QCHECK(!absl::GetFlag(FLAGS_input).empty())
         << "--input is required when --only_nonzeros is true";
   }
   int max_expansion_factor = absl::GetFlag(FLAGS_max_expansion_factor);
-  QCHECK(max_expansion_factor >= 2)
+  ABSL_QCHECK(max_expansion_factor >= 2)
       << "--max_expansion_factor must be at least 2";
   std::vector<std::string> levels_to_evaluate =
       absl::GetFlag(FLAGS_levels_to_evaluate);
   for (absl::string_view level_str : levels_to_evaluate) {
     int level;
-    QCHECK(absl::SimpleAtoi(level_str, &level));
-    QCHECK(level > 0 && level <= log_domain_size)
+    ABSL_QCHECK(absl::SimpleAtoi(level_str, &level));
+    ABSL_QCHECK(level > 0 && level <= log_domain_size)
         << "--levels_to_evaluate must be in [1, log_domain_size]";
   }
 }
@@ -123,23 +119,23 @@ std::vector<std::vector<absl::uint128>> ComputePrefixes(
 absl::btree_set<absl::uint128> ReadUniqueValuesFromFile(
     absl::string_view input_file) {
   absl::btree_set<absl::uint128> nonzeros;
-  LOG(INFO) << "Reading input file...";
+  ABSL_LOG(INFO) << "Reading input file...";
   int line_number = 0;
   riegeli::FdReader reader(input_file);
   absl::string_view line;
   while (riegeli::ReadLine(reader, line)) {
     std::vector<absl::string_view> fields =
         absl::StrSplit(line, ',', absl::SkipWhitespace());
-    QCHECK(!fields.empty()) << "Line " << line_number << " is empty";
+    ABSL_QCHECK(!fields.empty()) << "Line " << line_number << " is empty";
     absl::uint128 nonzero;
-    QCHECK(absl::SimpleAtoi(fields[0], &nonzero))
+    ABSL_QCHECK(absl::SimpleAtoi(fields[0], &nonzero))
         << "Invalid bucket ID on line " << line_number;
     nonzeros.insert(nonzero);
     ++line_number;
   }
-  QCHECK(reader.ok());
-  LOG(INFO) << "Read " << nonzeros.size() << " nonzeros from " << line_number
-            << " lines";
+  ABSL_QCHECK(reader.ok());
+  ABSL_LOG(INFO) << "Read " << nonzeros.size() << " nonzeros from "
+                 << line_number << " lines";
   return nonzeros;
 }
 
@@ -151,7 +147,7 @@ std::vector<int> ComputeLevelsToEvaluate(
     absl::Span<const std::vector<absl::uint128>> prefixes, int log_domain_size,
     int max_expansion_factor) {
   int num_nonzeros = prefixes.back().size();
-  CHECK_GT(num_nonzeros, 0);
+  ABSL_CHECK_GT(num_nonzeros, 0);
   std::vector<int> levels_to_evaluate;
   // The first level is chosen such that it has size at most expansion_factor
   // * num_nonzeros.
@@ -184,17 +180,17 @@ void RunHierarchicalEvaluation(
     absl::Span<const std::vector<absl::uint128>> prefixes, int num_iterations) {
   const distributed_point_functions::EvaluationContext ctx =
       dpf.CreateEvaluationContext(key).value();
-  CHECK_EQ(prefixes.size(), ctx.parameters_size());
+  ABSL_CHECK_EQ(prefixes.size(), ctx.parameters_size());
   for (int i = 0; i < num_iterations; ++i) {
     distributed_point_functions::EvaluationContext ctx_copy = ctx;
     for (int level = 0; level < static_cast<int>(prefixes.size()); ++level) {
       std::vector<T> result =
           dpf.EvaluateUntil<T>(level, prefixes[level], ctx_copy).value();
       if (i == 0) {
-        LOG(INFO) << "Number of outputs at " << level
-                  << "-th level: " << result.size();
-        LOG(INFO) << "log_domain_size="
-                  << ctx.parameters(level).log_domain_size();
+        ABSL_LOG(INFO) << "Number of outputs at " << level
+                       << "-th level: " << result.size();
+        ABSL_LOG(INFO) << "log_domain_size="
+                       << ctx.parameters(level).log_domain_size();
       }
       benchmark::DoNotOptimize(result);
     }
@@ -209,10 +205,10 @@ void RunBatchedSinglePointEvaluation(
     const distributed_point_functions::DpfKey& key,
     absl::Span<const absl::uint128> nonzeros, int num_iterations) {
   // Check that we have a single hierarchy level.
-  CHECK_EQ(dpf.parameters().size(), 1);
+  ABSL_CHECK_EQ(dpf.parameters().size(), 1);
   for (int i = 0; i < num_iterations; ++i) {
     std::vector<T> result = dpf.EvaluateAt<T>(key, 0, nonzeros).value();
-    CHECK_EQ(result.size(), nonzeros.size());
+    ABSL_CHECK_EQ(result.size(), nonzeros.size());
     benchmark::DoNotOptimize(result);
   }
 }
@@ -233,7 +229,7 @@ int main(int argc, char* argv[]) {
     prefixes = ComputePrefixes(nonzeros, log_domain_size);
   }
   int num_nonzeros = prefixes.back().size();
-  LOG(INFO) << "Number of nonzeros: " << num_nonzeros;
+  ABSL_LOG(INFO) << "Number of nonzeros: " << num_nonzeros;
 
   // Compute levels to evaluate and choose the correct prefixes.
   std::vector<std::string> levels_to_evaluate_str =
@@ -241,7 +237,8 @@ int main(int argc, char* argv[]) {
   std::vector<int> levels_to_evaluate(levels_to_evaluate_str.size());
   bool only_nonzeros = absl::GetFlag(FLAGS_only_nonzeros);
   for (int i = 0; i < static_cast<int>(levels_to_evaluate.size()); ++i) {
-    CHECK(absl::SimpleAtoi(levels_to_evaluate_str[i], &levels_to_evaluate[i]));
+    ABSL_CHECK(
+        absl::SimpleAtoi(levels_to_evaluate_str[i], &levels_to_evaluate[i]));
   }
   if (levels_to_evaluate.empty()) {
     if (!only_nonzeros && !prefixes.back().empty()) {
@@ -251,19 +248,21 @@ int main(int argc, char* argv[]) {
       levels_to_evaluate = {log_domain_size};
     }
   }
-  LOG(INFO) << "Levels to evaluate: " << absl::StrJoin(levels_to_evaluate, ",");
+  ABSL_LOG(INFO) << "Levels to evaluate: "
+                 << absl::StrJoin(levels_to_evaluate, ",");
   std::vector<std::vector<absl::uint128>> prefixes_to_evaluate(1);
   prefixes_to_evaluate.reserve(levels_to_evaluate.size());
   for (int i = 1; i < levels_to_evaluate.size(); ++i) {
     prefixes_to_evaluate.push_back(prefixes[levels_to_evaluate[i - 1]]);
   }
-  LOG(INFO) << "Numbers of prefixes per level: "
-            << absl::StrJoin(iter::imap([](auto& c) { return c.size(); },
-                                        prefixes_to_evaluate),
-                             ",");
-  LOG(INFO) << "Numbers of prefixes per bit: "
-            << absl::StrJoin(
-                   iter::imap([](auto& c) { return c.size(); }, prefixes), ",");
+  ABSL_LOG(INFO) << "Numbers of prefixes per level: "
+                 << absl::StrJoin(iter::imap([](auto& c) { return c.size(); },
+                                             prefixes_to_evaluate),
+                                  ",");
+  ABSL_LOG(INFO) << "Numbers of prefixes per bit: "
+                 << absl::StrJoin(
+                        iter::imap([](auto& c) { return c.size(); }, prefixes),
+                        ",");
 
   // Set up parameters and create DPF instance.
   std::vector<distributed_point_functions::DpfParameters> parameters(
@@ -290,7 +289,7 @@ int main(int argc, char* argv[]) {
   distributed_point_functions::DpfKey key;
   std::tie(key, std::ignore) =
       dpf->GenerateKeysIncremental(alpha, beta).value();
-  LOG(INFO) << "Key size: " << key.ByteSizeLong() << " bytes";
+  ABSL_LOG(INFO) << "Key size: " << key.ByteSizeLong() << " bytes";
 
   // Run the experiment and measure time.
   int num_iterations = absl::GetFlag(FLAGS_num_iterations);
@@ -304,5 +303,6 @@ int main(int argc, char* argv[]) {
                                  num_iterations);
   }
   absl::Duration wallclock = absl::Now() - start;
-  LOG(INFO) << "Wallclock time per iteration: " << wallclock / num_iterations;
+  ABSL_LOG(INFO) << "Wallclock time per iteration: "
+                 << wallclock / num_iterations;
 }
