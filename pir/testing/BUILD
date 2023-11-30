@@ -143,6 +143,17 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "mock_pir_server",
+    hdrs = ["mock_pir_server.h"],
+    deps = [
+        "//pir:pir_server",
+        "//pir:private_information_retrieval_cc_proto",
+        "@com_github_google_googletest//:gtest",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
 cc_test(
     name = "request_generator_test",
     srcs = ["request_generator_test.cc"],
