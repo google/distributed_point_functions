@@ -27,6 +27,7 @@
 #include "pir/testing/data/embedded_private_key.h"
 #include "pir/testing/data/embedded_public_key.h"
 #include "tink/cleartext_keyset_handle.h"
+#include "tink/hybrid/config_v0.h"
 #include "tink/hybrid/hybrid_config.h"
 #include "tink/json_keyset_reader.h"
 #include "tink/keyset_handle.h"
@@ -59,7 +60,8 @@ absl::StatusOr<std::unique_ptr<HybridDecrypt>> CreateFakeHybridDecrypt() {
       std::unique_ptr<KeysetHandle> private_key_handle,
       CleartextKeysetHandle::Read(std::move(private_key_reader)));
 
-  return private_key_handle->GetPrimitive<HybridDecrypt>();
+  return private_key_handle->GetPrimitive<HybridDecrypt>(
+      crypto::tink::ConfigHybridV0());
 }
 
 absl::StatusOr<std::unique_ptr<HybridEncrypt>> CreateFakeHybridEncrypt() {
@@ -77,7 +79,8 @@ absl::StatusOr<std::unique_ptr<HybridEncrypt>> CreateFakeHybridEncrypt() {
       std::unique_ptr<KeysetHandle> public_key_handle,
       CleartextKeysetHandle::Read(std::move(public_key_reader)));
 
-  return public_key_handle->GetPrimitive<HybridEncrypt>();
+  return public_key_handle->GetPrimitive<HybridEncrypt>(
+      crypto::tink::ConfigHybridV0());
 }
 
 }  // namespace pir_testing
