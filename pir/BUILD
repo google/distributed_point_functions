@@ -45,6 +45,11 @@ cc_proto_library(
     deps = [":private_information_retrieval_proto"],
 )
 
+java_lite_proto_library(
+    name = "private_information_retrieval_java_proto_lite",
+    deps = [":private_information_retrieval_proto"],
+)
+
 proto_library(
     name = "private_information_retrieval_proto",
     srcs = ["private_information_retrieval.proto"],

@@ -21,6 +21,8 @@ import "pir/hashing/hash_family_config.proto";
 
 // For faster allocations of sub-messages.
 option cc_enable_arenas = true;
+option java_multiple_files = true;
+option java_package = "com.google.dpf.pir";
 
 // PirConfig contanis the database dimensions, sparsity, type of PIR, etc...
 // It is used by both client and server, ususally in the respective factory

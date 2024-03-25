@@ -230,6 +230,11 @@ cc_proto_library(
     deps = [":hash_family_config_proto"],
 )
 
+java_lite_proto_library(
+    name = "hash_family_config_java_proto_lite",
+    deps = [":hash_family_config_proto"],
+)
+
 proto_library(
     name = "hash_family_config_proto",
     srcs = ["hash_family_config.proto"],

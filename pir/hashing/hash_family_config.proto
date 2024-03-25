@@ -16,6 +16,9 @@ syntax = "proto3";
 
 package distributed_point_functions;
 
+option java_multiple_files = true;
+option java_package = "com.google.dpf.pir.hashing";
+
 // HashFamily configuration. Used with the helper function
 // CreateHashFamilyFromConfig in hashing/hash_family_config.h to generate actual
 // HashFamily objects.
