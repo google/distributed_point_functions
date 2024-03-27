@@ -241,7 +241,7 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:variant",
-        "@tink_cc//:hybrid_decrypt",
+        "@tink_cc//tink:hybrid_decrypt",
     ],
 )
 
@@ -430,7 +430,7 @@ cc_test(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",
-        "@tink_cc//:hybrid_encrypt",
+        "@tink_cc//tink:hybrid_encrypt",
     ],
 )
 
@@ -564,6 +564,6 @@ cc_test(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",
-        "@tink_cc//:hybrid_encrypt",
+        "@tink_cc//tink:hybrid_encrypt",
     ],
 )

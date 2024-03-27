@@ -1,0 +1,86 @@
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+# IREE for cc_embed_data.
+# https://github.com/google/iree
+http_archive(
+    name = "com_github_google_iree",
+    sha256 = "aa369b29a5c45ae9d7aa8bf49ea1308221d1711277222f0755df6e0a575f6879",
+    strip_prefix = "iree-7e6012468cbaafaaf30302748a2943771b40e2c3",
+    urls = [
+        "https://github.com/google/iree/archive/7e6012468cbaafaaf30302748a2943771b40e2c3.zip",
+    ],
+)
+
+# riegeli for file IO
+# https://github.com/google/riegeli
+http_archive(
+    name = "com_github_google_riegeli",
+    sha256 = "3de21a222271a1e2c5d728e7f46b63ab4520da829c09ef9727a322e693c9ac18",
+    strip_prefix = "riegeli-43b7ef9f995469609b6ab07f6becc82186314bfb",
+    urls = [
+        "https://github.com/google/riegeli/archive/43b7ef9f995469609b6ab07f6becc82186314bfb.zip",
+    ],
+)
+
+# Highway for SIMD operations.
+# https://github.com/google/highway
+http_archive(
+    name = "com_github_google_highway",
+    sha256 = "83c252c7a9b8fcc36b9774778325c689e104365114a16adec0d536d47cb99e5f",
+    strip_prefix = "highway-1c8250ed008f4ca22f2bb9edb6b75a73d9c587ff",
+    urls = [
+        "https://github.com/google/highway/archive/1c8250ed008f4ca22f2bb9edb6b75a73d9c587ff.zip",
+    ],
+)
+
+# cppitertools for logging
+# https://github.com/ryanhaining/cppitertools
+http_archive(
+    name = "com_github_ryanhaining_cppitertools",
+    sha256 = "1608ddbe3c12b0c6e653b992ff63b5dceab9af5347ad93be8714d05e5dc17afb",
+    add_prefix = "cppitertools",
+    strip_prefix = "cppitertools-add5acc932dea2c78acd80747bab71ec0b5bce27",
+    urls = [
+        "https://github.com/ryanhaining/cppitertools/archive/add5acc932dea2c78acd80747bab71ec0b5bce27.zip",
+    ],
+)
+
+# Tink for hybrid encryption.
+http_archive(
+    name = "tink_cc",
+    sha256 = "60292dcdbb6a3573473feedde670bb8e1d074b95d869f0881c7da763cbf830b6",
+    strip_prefix = "tink-cc-f8faef72e119e14fe9d7f2c9f2f13bb8cf562cce",
+    urls = [
+        "https://github.com/tink-crypto/tink-cc/archive/f8faef72e119e14fe9d7f2c9f2f13bb8cf562cce.zip",
+    ],
+)
+
+load("@tink_cc//:tink_cc_deps.bzl", "tink_cc_deps")
+tink_cc_deps()
+
+load("@tink_cc//:tink_cc_deps_init.bzl", "tink_cc_deps_init")
+tink_cc_deps_init()
+
+# Farmhash.
+# https://github.com/google/farmhash
+http_archive(
+    name = "com_github_google_farmhash",
+    build_file = "@//:bazel/farmhash.BUILD",
+    sha256 = "470e87745d1393cc2793f49e9bfbd2c2cf282feeeb0c367f697996fa7e664fc5",
+    add_prefix = "farmhash",
+    strip_prefix = "farmhash-0d859a811870d10f53a594927d0d0b97573ad06d/src",
+    urls = [
+        "https://github.com/google/farmhash/archive/0d859a811870d10f53a594927d0d0b97573ad06d.zip",
+    ],
+)
+
+# SHELL for uint256.
+# https://github.com/google/shell-encryption
+http_archive(
+    name = "com_github_google_shell-encryption",
+    sha256 = "b2bad01c66debc8f437580f2016e8701f3487d473b3e7cb27e78f36b33b256ba",
+    strip_prefix = "shell-encryption-8eecd054a939788db923ad1e28787858f47c0aa3",
+    urls = [
+        "https://github.com/google/shell-encryption/archive/8eecd054a939788db923ad1e28787858f47c0aa3.zip",
+    ],
+)

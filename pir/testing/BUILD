@@ -102,12 +102,12 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
-        "@tink_cc//:cleartext_keyset_handle",
-        "@tink_cc//:hybrid_decrypt",
-        "@tink_cc//:json_keyset_reader",
-        "@tink_cc//:keyset_handle",
-        "@tink_cc//:keyset_reader",
-        "@tink_cc//hybrid:hybrid_config",
+        "@tink_cc//tink:cleartext_keyset_handle",
+        "@tink_cc//tink:hybrid_decrypt",
+        "@tink_cc//tink:json_keyset_reader",
+        "@tink_cc//tink:keyset_handle",
+        "@tink_cc//tink:keyset_reader",
+        "@tink_cc//tink/hybrid:hybrid_config",
     ],
 )
 
