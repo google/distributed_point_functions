@@ -107,6 +107,7 @@ cc_library(
         "@tink_cc//tink:json_keyset_reader",
         "@tink_cc//tink:keyset_handle",
         "@tink_cc//tink:keyset_reader",
+        "@tink_cc//tink/hybrid:config_v0",
         "@tink_cc//tink/hybrid:hybrid_config",
     ],
 )
