@@ -54,7 +54,7 @@ void BM_EvaluateRegularDpf(benchmark::State& state) {
   for (auto s : state) {
     google::protobuf::Arena arena;
     EvaluationContext* ctx =
-        google::protobuf::Arena::CreateMessage<EvaluationContext>(&arena);
+        google::protobuf::Arena::Create<EvaluationContext>(&arena);
     *ctx = ctx_0;
     std::vector<T> result = dpf->EvaluateNext<T>({}, *ctx).value();
     benchmark::DoNotOptimize(result);
@@ -133,7 +133,7 @@ void BM_EvaluateHierarchicalFull(benchmark::State& state) {
   for (auto s : state) {
     google::protobuf::Arena arena;
     EvaluationContext* ctx =
-        google::protobuf::Arena::CreateMessage<EvaluationContext>(&arena);
+        google::protobuf::Arena::Create<EvaluationContext>(&arena);
     *ctx = ctx_0;
     for (int i = 0; i < num_hierarchy_levels; ++i) {
       std::vector<T> result = dpf->EvaluateNext<T>(prefixes[i], *ctx).value();
@@ -222,7 +222,7 @@ void BM_IsrgExampleHierarchy(benchmark::State& state) {
   for (auto s : state) {
     google::protobuf::Arena arena;
     EvaluationContext* ctx =
-        google::protobuf::Arena::CreateMessage<EvaluationContext>(&arena);
+        google::protobuf::Arena::Create<EvaluationContext>(&arena);
     *ctx = ctx_0;
     for (int i = 0; i < kNumHierarchyLevels; ++i) {
       std::vector<uint32_t> result =
@@ -340,7 +340,7 @@ void BM_HeavyHitters(benchmark::State& state) {
   for (auto s : state) {
     google::protobuf::Arena arena;
     EvaluationContext* ctx =
-        google::protobuf::Arena::CreateMessage<EvaluationContext>(&arena);
+        google::protobuf::Arena::Create<EvaluationContext>(&arena);
     *ctx = ctx_0;
     for (int i = 0; i < num_parameters; ++i) {
       std::vector<uint64_t> result =
@@ -384,7 +384,7 @@ void BM_BatchEvaluation(benchmark::State& state) {
                                             absl::Uniform<uint64_t>(rng)) &
                           domain_mask;
     T beta{};
-    DpfKey* key = google::protobuf::Arena::CreateMessage<DpfKey>(&arena);
+    DpfKey* key = google::protobuf::Arena::Create<DpfKey>(&arena);
     *key = dpf->GenerateKeys(alpha, beta).value().first;
 
     for (int j = 0; j < evaluation_points_per_key; ++j) {
