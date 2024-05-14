@@ -567,3 +567,24 @@ cc_test(
         "@tink_cc//tink:hybrid_encrypt",
     ],
 )
+
+cc_test(
+    name = "simple_hashing_sparse_dpf_pir_server_benchmark",
+    srcs = ["simple_hashing_sparse_dpf_pir_server_benchmark.cc"],
+    tags = ["benchmark"],
+    deps = [
+        ":simple_hashed_dpf_pir_database",
+        ":simple_hashing_sparse_dpf_pir_server",
+        "//dpf/internal:status_matchers",
+        "//pir/hashing:hash_family",
+        "//pir/hashing:hash_family_config",
+        "//pir/hashing:hash_family_config_cc_proto",
+        "//pir/testing:mock_pir_database",
+        "//pir/testing:request_generator",
+        "@com_github_google_benchmark//:benchmark",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
+        "@com_google_absl//absl/random",
+        "@com_google_absl//absl/types:span",
+    ],
+)
