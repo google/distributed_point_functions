@@ -28,7 +28,7 @@
 #include "pir/testing/data/embedded_public_key.h"
 #include "tink/cleartext_keyset_handle.h"
 #include "tink/hybrid/hybrid_config.h"
-#include "tink/json_keyset_reader.h"
+#include "tink/json/json_keyset_reader.h"
 #include "tink/keyset_handle.h"
 #include "tink/keyset_reader.h"
 

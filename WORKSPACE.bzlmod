@@ -48,10 +48,10 @@ http_archive(
 # Tink for hybrid encryption.
 http_archive(
     name = "tink_cc",
-    sha256 = "60292dcdbb6a3573473feedde670bb8e1d074b95d869f0881c7da763cbf830b6",
-    strip_prefix = "tink-cc-f8faef72e119e14fe9d7f2c9f2f13bb8cf562cce",
+    sha256 = "4eb9bf3fad58ed57de15772464cdbb22dd7da9e63083cb9592763b8b7b936592",
+    strip_prefix = "tink-cc-420022aabbe7ff4ed011ee942173e7d7a746df11",
     urls = [
-        "https://github.com/tink-crypto/tink-cc/archive/f8faef72e119e14fe9d7f2c9f2f13bb8cf562cce.zip",
+        "https://github.com/tink-crypto/tink-cc/archive/420022aabbe7ff4ed011ee942173e7d7a746df11.zip",
     ],
 )
 
