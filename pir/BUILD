@@ -59,6 +59,12 @@ proto_library(
     ],
 )
 
+cc_library(
+    name = "canonical_status_payload_uris",
+    hdrs = ["canonical_status_payload_uris.h"],
+    deps = ["@com_google_absl//absl/strings:string_view"],
+)
+
 # Database interface.
 cc_library(
     name = "pir_key_value_pair",

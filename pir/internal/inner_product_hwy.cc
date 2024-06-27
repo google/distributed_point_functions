@@ -19,15 +19,17 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "absl/base/optimization.h"
 #include "absl/numeric/int128.h"
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
+#include "pir/canonical_status_payload_uris.h"
+#include "pir/private_information_retrieval.pb.h"
 
 // Guard the following definition of inline functions to make sure they are
 // defined only once, since hwy/foreach_target.h will include this .cc file
@@ -320,7 +322,13 @@ absl::StatusOr<std::vector<std::string>> InnerProduct(
           selections[i].size(), ", expected ", first_selection_vector_size));
     }
     if (max_value_size <= 0) {
-      return absl::InvalidArgumentError("`max_value_size` must be positive");
+      absl::Status status =
+          absl::InvalidArgumentError("`max_value_size` must be positive");
+      CanonicalPirError payload;
+      payload.set_code(CanonicalPirError::MAX_VALUE_SIZE_IS_ZERO);
+      status.SetPayload(kPirInternalErrorUri,
+                        std::move(payload).SerializeAsCord());
+      return status;
     }
   }
   for (int i = 0; i < values.size(); ++i) {

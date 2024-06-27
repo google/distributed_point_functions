@@ -182,3 +182,14 @@ message SimpleHashingSparseDpfPirRequestClientState {
 message DpfPirResponse {
   repeated bytes masked_response = 1;
 }
+
+message CanonicalPirError {
+  enum Code {
+    UNKNOWN = 0;
+    // ValueSize is zero when attempting to compute inner product with empty
+    // database.
+    MAX_VALUE_SIZE_IS_ZERO = 1;
+  }
+
+  Code code = 1;
+}

@@ -26,6 +26,8 @@ cc_library(
     hdrs = ["inner_product_hwy.h"],
     deps = [
         "//dpf:xor_wrapper",
+        "//pir:canonical_status_payload_uris",
+        "//pir:private_information_retrieval_cc_proto",
         "@com_github_google_highway//:hwy",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/numeric:int128",
@@ -62,6 +64,8 @@ cc_library(
     local_defines = ["HWY_COMPILE_ONLY_SCALAR"],
     deps = [
         "//dpf:xor_wrapper",
+        "//pir:canonical_status_payload_uris",
+        "//pir:private_information_retrieval_cc_proto",
         "@com_github_google_highway//:hwy",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/numeric:int128",
