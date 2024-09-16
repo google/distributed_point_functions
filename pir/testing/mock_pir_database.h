@@ -44,7 +44,7 @@ class MockPirDatabase : public PirDatabaseInterface<BlockType, RecordType> {
     MOCK_METHOD(Builder&, Clear, (), (override));
     MOCK_METHOD(absl::StatusOr<std::unique_ptr<Base>>, Build, (), (override));
     MOCK_METHOD(std::unique_ptr<typename Base::Builder>, Clone, (),
-                (const override));
+                (const, override));
   };
 
   MOCK_METHOD(size_t, size, (), (const));
