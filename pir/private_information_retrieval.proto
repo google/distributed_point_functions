@@ -19,8 +19,6 @@ package distributed_point_functions;
 import "dpf/distributed_point_function.proto";
 import "pir/hashing/hash_family_config.proto";
 
-// For faster allocations of sub-messages.
-option cc_enable_arenas = true;
 option java_multiple_files = true;
 option java_package = "com.google.dpf.pir";
 
@@ -101,8 +99,10 @@ message SimpleHashingSparseDpfPirConfig {
 message CuckooHashingParams {
   // Which particular hash family and seed to use.
   HashFamilyConfig hash_family_config = 1;
+
   // How many hash functions are used for cuckoo hashing.
   int32 num_hash_functions = 2;
+
   // How many buckets are used for cuckoo hashing.
   int64 num_buckets = 3;
 }
@@ -111,6 +111,7 @@ message CuckooHashingParams {
 message SimpleHashingParams {
   // Which particular hash family and seed to use.
   HashFamilyConfig hash_family_config = 1;
+
   // How many buckets are used for simple hashing.
   int64 num_buckets = 2;
 }
@@ -126,6 +127,7 @@ message DpfPirRequest {
   // A plain DPF PIR request. Contains one DPF key per batched request.
   message PlainRequest {
     repeated distributed_point_functions.DpfKey dpf_key = 1;
+
     // Optional fingerprint of the hash function seed for sparse PIRs. Not
     // needed for any security guarantees, but to catch programming errors when
     // inconsistent seeds are used.
@@ -167,6 +169,7 @@ message DenseDpfPirRequestClientState {
 // responses that we actually queried.
 message CuckooHashingSparseDpfPirRequestClientState {
   bytes one_time_pad_seed = 1;
+
   repeated bytes query_strings = 2;
 }
 
@@ -174,6 +177,7 @@ message CuckooHashingSparseDpfPirRequestClientState {
 // was present.
 message SimpleHashingSparseDpfPirRequestClientState {
   bytes one_time_pad_seed = 1;
+
   repeated bytes query_strings = 2;
 }
 
@@ -186,6 +190,7 @@ message DpfPirResponse {
 message CanonicalPirError {
   enum Code {
     UNKNOWN = 0;
+
     // ValueSize is zero when attempting to compute inner product with empty
     // database.
     MAX_VALUE_SIZE_IS_ZERO = 1;
