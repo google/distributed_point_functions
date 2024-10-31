@@ -15,6 +15,8 @@
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_proto//proto:defs.bzl", "proto_library")
+load("//third_party/protobuf/bazel:java_lite_proto_library.bzl", "java_lite_proto_library")
+load("//third_party/protobuf/bazel:proto_library.bzl", "proto_library")
 
 package(
     default_visibility = ["//visibility:public"],
