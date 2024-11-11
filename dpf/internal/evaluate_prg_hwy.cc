@@ -50,16 +50,18 @@ namespace hn = hwy::HWY_NAMESPACE;
 #if HWY_TARGET == HWY_SCALAR
 
 absl::Status EvaluateSeedsHwy(
-    int64_t num_seeds, int num_levels, const absl::uint128* seeds_in,
-    const bool* control_bits_in, const absl::uint128* paths,
+    int64_t num_seeds, int num_levels, int num_correction_words,
+    const absl::uint128* seeds_in, const bool* control_bits_in,
+    const absl::uint128* paths, int paths_rightshift,
     const absl::uint128* correction_seeds, const bool* correction_controls_left,
     const bool* correction_controls_right, const Aes128FixedKeyHash& prg_left,
     const Aes128FixedKeyHash& prg_right, absl::uint128* seeds_out,
     bool* control_bits_out) {
-  return EvaluateSeedsNoHwy(num_seeds, num_levels, seeds_in, control_bits_in,
-                            paths, correction_seeds, correction_controls_left,
-                            correction_controls_right, prg_left, prg_right,
-                            seeds_out, control_bits_out);
+    return EvaluateSeedsNoHwy(
+        num_seeds, num_levels, num_correction_words, seeds_in, control_bits_in,
+        paths, paths_rightshift, correction_seeds, correction_controls_left,
+        correction_controls_right, prg_left, prg_right, seeds_out,
+        control_bits_out);
 }
 
 #else
