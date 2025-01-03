@@ -33,13 +33,13 @@ cc_library(
         "//dpf:distributed_point_function_cc_proto",
         "//dpf:status_macros",
         "//dpf/internal:maybe_deref_span",
-        "@com_github_google_highway//:hwy",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/meta:type_traits",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/types:span",
+        "@highway//:hwy",
     ],
 )
 

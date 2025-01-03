@@ -36,9 +36,9 @@
 #include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "benchmark/benchmark.h"  // third_party/benchmark
-#include "cppitertools/imap.hpp"
 #include "dpf/distributed_point_function.h"
 #include "dpf/distributed_point_function.pb.h"
+#include "imap.hpp"  // cppitertools
 #include "riegeli/bytes/fd_reader.h"
 #include "riegeli/lines/line_reading.h"
 

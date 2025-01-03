@@ -27,9 +27,6 @@ cc_binary(
         "//dpf:distributed_point_function",
         "//dpf:distributed_point_function_cc_proto",
         "@com_github_google_benchmark//:benchmark",
-        "@com_github_google_riegeli//riegeli/bytes:fd_reader",
-        "@com_github_google_riegeli//riegeli/lines:line_reading",
-        "@com_github_ryanhaining_cppitertools//cppitertools",
         "@com_google_absl//absl/container:btree",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
@@ -41,5 +38,8 @@ cc_binary(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:span",
+        "@cppitertools",
+        "@riegeli//riegeli/bytes:fd_reader",
+        "@riegeli//riegeli/lines:line_reading",
     ],
 )

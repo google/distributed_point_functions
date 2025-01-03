@@ -84,7 +84,6 @@ cc_library(
         "//dpf/internal:proto_validator",
         "//dpf/internal:value_type_helpers",
         "@boringssl//:crypto",
-        "@com_github_google_highway//:hwy",
         "@com_google_absl//absl/container:btree",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:inlined_vector",
@@ -100,6 +99,7 @@ cc_library(
         "@com_google_absl//absl/types:span",
         "@com_google_protobuf//:protobuf",
         "@com_google_protobuf//:protobuf_lite",
+        "@highway//:hwy",
     ],
 )
 
@@ -154,7 +154,6 @@ cc_test(
         ":distributed_point_function",
         "@com_github_google_benchmark//:benchmark",
         "@com_github_google_googletest//:gtest_main",
-        "@com_github_google_highway//:hwy",
         "@com_google_absl//absl/container:btree",
         "@com_google_absl//absl/log:absl_check",
         "@com_google_absl//absl/numeric:int128",
@@ -165,6 +164,7 @@ cc_test(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
         "@com_google_protobuf//:protobuf",
+        "@highway//:hwy",
     ],
 )
 
@@ -182,6 +182,7 @@ cc_library(
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
     ],
 )

@@ -145,7 +145,6 @@ cc_library(
         "//dpf:aes_128_fixed_key_hash",
         "//dpf:status_macros",
         "@boringssl//:crypto",
-        "@com_github_google_highway//:hwy",
         "@com_google_absl//absl/base:config",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:inlined_vector",
@@ -153,6 +152,7 @@ cc_library(
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/types:span",
+        "@highway//:hwy",
     ],
 )
 
@@ -166,11 +166,11 @@ cc_test(
         ":status_matchers",
         "//dpf:aes_128_fixed_key_hash",
         "@com_github_google_googletest//:gtest_main",
-        "@com_github_google_highway//:hwy",
-        "@com_github_google_highway//:hwy_test_util",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@highway//:hwy",
+        "@highway//:hwy_test_util",
     ],
 )
 
@@ -179,8 +179,8 @@ cc_library(
     srcs = ["get_hwy_mode.cc"],
     hdrs = ["get_hwy_mode.h"],
     deps = [
-        "@com_github_google_highway//:hwy",
         "@com_google_absl//absl/strings",
+        "@highway//:hwy",
     ],
 )
 
@@ -190,8 +190,8 @@ cc_library(
         "aes_128_fixed_key_hash_hwy.h",
     ],
     deps = [
-        "@com_github_google_highway//:hwy",
         "@com_google_absl//absl/numeric:int128",
+        "@highway//:hwy",
     ],
 )
 
@@ -217,14 +217,14 @@ cc_test(
         "//dpf:aes_128_fixed_key_hash",
         "@boringssl//:crypto",
         "@com_github_google_googletest//:gtest_main",
-        "@com_github_google_highway//:hwy",
-        "@com_github_google_highway//:hwy_test_util",
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/log:absl_log",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/types:span",
+        "@highway//:hwy",
+        "@highway//:hwy_test_util",
     ],
 )
 
