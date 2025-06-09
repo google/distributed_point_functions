@@ -240,6 +240,7 @@ java_lite_proto_library(
 proto_library(
     name = "hash_family_config_proto",
     srcs = ["hash_family_config.proto"],
+    deps = ["//google/api:inclusion"],
 )
 
 cc_library(

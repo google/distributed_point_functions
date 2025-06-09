@@ -16,6 +16,11 @@ syntax = "proto3";
 
 package distributed_point_functions;
 
+import "google/api/inclusion.proto";
+
+option (google.api.inclusion) = {
+  scopes: [ "package:google/internal/android/location/contextpir/v0" ]
+};
 option java_multiple_files = true;
 option java_package = "com.google.dpf.pir.hashing";
 
