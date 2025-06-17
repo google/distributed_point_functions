@@ -16,7 +16,12 @@ syntax = "proto3";
 
 package distributed_point_functions;
 
+import "google/api/inclusion.proto";
+
 // For faster allocations of sub-messages.
+option (google.api.inclusion) = {
+  scopes: [ "package:google/internal/android/location/contextpir/v0" ]
+};
 option cc_enable_arenas = true;
 
 // Describes the type of a single DPF output value. Any additional types added

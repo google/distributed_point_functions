@@ -131,6 +131,7 @@ cc_test(
 proto_library(
     name = "distributed_point_function_proto",
     srcs = ["distributed_point_function.proto"],
+    deps = ["//google/api:inclusion"],
 )
 
 cc_proto_library(
