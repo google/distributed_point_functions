@@ -14,6 +14,8 @@
 
 load("@com_github_google_iree//build_tools/embed_data:build_defs.bzl", "cc_embed_data")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("//third_party/bazel_rules/rules_cc/cc:cc_library.bzl", "cc_library")
+load("//third_party/bazel_rules/rules_cc/cc:cc_test.bzl", "cc_test")
 
 package(
     default_visibility = ["//:__subpackages__"],

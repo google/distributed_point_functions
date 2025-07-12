@@ -13,6 +13,7 @@
 # limitations under the License.
 
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("//third_party/bazel_rules/rules_cc/cc:cc_binary.bzl", "cc_binary")
 
 package(
     default_visibility = ["//visibility:private"],
