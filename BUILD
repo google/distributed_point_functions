@@ -14,6 +14,7 @@
 
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@rules_license//rules:license.bzl", "license")
+load("//testing/fuzzing/build_defs:guitar.bzl", "fuzztest_ci_workflows")
 
 package(
     default_visibility = [":allowlist"],
@@ -27,3 +28,13 @@ license(
 licenses(["notice"])
 
 exports_files(["LICENSE"])
+
+# http://go/fuzztest-setting-up-ci
+fuzztest_ci_workflows(
+    name = "fuzz_testing_workflows",
+    # Privacy > PIE > Private Statistics > Distributed Point Functions
+    buganizer_component_id = 1044360,
+    metadata = ":METADATA",
+    notification_email = "fss-dev+fuzztest@google.com",
+    project_name = "distributed_point_functions",
+)
