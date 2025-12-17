@@ -164,7 +164,7 @@ TEST_F(CuckooHashedDpfPirDatabaseBuilderTest,
 TEST_F(CuckooHashedDpfPirDatabaseBuilderTest, BuildsEmptyDatabase) {
   EXPECT_THAT(
       builder_.Build(),
-      IsOkAndHolds(Truly([](auto &db) -> bool { return db->size() == 0; })));
+      IsOkAndHolds(Truly([](auto& db) -> bool { return db->size() == 0; })));
 }
 
 TEST_F(CuckooHashedDpfPirDatabaseBuilderTest, FailsToBuildWithEmptyKey) {
