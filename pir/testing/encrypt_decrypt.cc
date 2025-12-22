@@ -19,15 +19,15 @@
 
 #include "absl/base/attributes.h"
 #include "absl/base/call_once.h"
-#include "absl/log/absl_check.h"
-#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "dpf/status_macros.h"
 #include "pir/testing/data/embedded_private_key.h"
 #include "pir/testing/data/embedded_public_key.h"
 #include "tink/cleartext_keyset_handle.h"
-#include "tink/hybrid/hybrid_config.h"
+#include "tink/hybrid/config_v0.h"
+#include "tink/hybrid_decrypt.h"
+#include "tink/hybrid_encrypt.h"
 #include "tink/json/json_keyset_reader.h"
 #include "tink/keyset_handle.h"
 #include "tink/keyset_reader.h"
@@ -45,10 +45,6 @@ using ::crypto::tink::KeysetReader;
 absl::once_flag register_tink_once ABSL_ATTRIBUTE_UNUSED;
 
 absl::StatusOr<std::unique_ptr<HybridDecrypt>> CreateFakeHybridDecrypt() {
-  absl::call_once(register_tink_once, []() {
-    ABSL_CHECK_OK(crypto::tink::HybridConfig::Register());
-  });
-
   const auto* const toc = embedded_private_key_create();
   absl::string_view private_key_json(toc->data, toc->size);
 
@@ -59,14 +55,11 @@ absl::StatusOr<std::unique_ptr<HybridDecrypt>> CreateFakeHybridDecrypt() {
       std::unique_ptr<KeysetHandle> private_key_handle,
       CleartextKeysetHandle::Read(std::move(private_key_reader)));
 
-  return private_key_handle->GetPrimitive<HybridDecrypt>();
+  return private_key_handle->GetPrimitive<HybridDecrypt>(
+      crypto::tink::ConfigHybridV0());
 }
 
 absl::StatusOr<std::unique_ptr<HybridEncrypt>> CreateFakeHybridEncrypt() {
-  absl::call_once(register_tink_once, []() {
-    ABSL_CHECK_OK(crypto::tink::HybridConfig::Register());
-  });
-
   const auto* const toc = embedded_public_key_create();
   absl::string_view public_key_json(toc->data, toc->size);
 
@@ -77,7 +70,8 @@ absl::StatusOr<std::unique_ptr<HybridEncrypt>> CreateFakeHybridEncrypt() {
       std::unique_ptr<KeysetHandle> public_key_handle,
       CleartextKeysetHandle::Read(std::move(public_key_reader)));
 
-  return public_key_handle->GetPrimitive<HybridEncrypt>();
+  return public_key_handle->GetPrimitive<HybridEncrypt>(
+      crypto::tink::ConfigHybridV0());
 }
 
 }  // namespace pir_testing
