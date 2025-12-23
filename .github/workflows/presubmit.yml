@@ -16,9 +16,9 @@ name: Distributed Point Functions
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "master" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "master" ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
@@ -43,12 +43,13 @@ jobs:
 
       - name: "Run `bazel build` (C++14)"
         run: |
-          bazel build -c opt --cxxopt=-std=c++14 --host_cxxopt=-std=c++14 -- //... -//experiments/...
+          bazel --output_base $HOME/.cache/bazel/cpp14 build -c opt --cxxopt=-std=c++14 \
+             --host_cxxopt=-std=c++14 -- //... -//experiments/...
 
       - name: "Run `bazel build` (C++17)"
         run: |
-          bazel build -c opt --cxxopt=-std=c++17 --host_cxxopt=-std=c++17 //...
+          bazel --output_base $HOME/.cache/bazel/cpp17 build -c opt //...
 
       - name: "Run `bazel test`"
         run: |
-          bazel test -c opt --test_tag_filters=-benchmark //... 
+          bazel --output_base $HOME/.cache/bazel/cpp17 test -c opt --test_tag_filters=-benchmark //...
