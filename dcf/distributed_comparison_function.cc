@@ -54,13 +54,6 @@ DistributedComparisonFunction::Create(const DcfParameters& parameters) {
     return absl::InvalidArgumentError("A DCF must have log_domain_size >= 1");
   }
 
-  // We don't support the legacy element_bitsize field in DCFs.
-  if (!parameters.parameters().has_value_type()) {
-    return absl::InvalidArgumentError(
-        "parameters.value_type must be set for "
-        "DistributedComparisonFunction::Create");
-  }
-
   // Create parameter vector for the incremental DPF.
   std::vector<DpfParameters> dpf_parameters(
       parameters.parameters().log_domain_size());

@@ -66,6 +66,16 @@ TEST(DcfTest, CreateFailsWithZeroLogDomainSize) {
                                      "A DCF must have log_domain_size >= 1"));
 }
 
+TEST(DcfTest, CreateFailsWithoutValueType) {
+  DcfParameters parameters;
+  parameters.mutable_parameters()->set_log_domain_size(10);
+  // don't set value_type
+
+  EXPECT_THAT(DistributedComparisonFunction::Create(parameters),
+              dpf_internal::StatusIs(absl::StatusCode::kInvalidArgument,
+                                     HasSubstr("ValueType")));
+}
+
 template <typename T, int log_domain_size>
 class DcfTestParameters {
  public:
