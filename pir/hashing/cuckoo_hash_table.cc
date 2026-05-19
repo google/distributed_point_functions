@@ -32,7 +32,7 @@ namespace distributed_point_functions {
 
 CuckooHashTable::CuckooHashTable(std::vector<HashFunction> hash_functions,
                                  int num_buckets, int max_relocations,
-                                 absl::optional<int> max_stash_size)
+                                 std::optional<int> max_stash_size)
     : num_buckets_(num_buckets),
       max_relocations_(max_relocations),
       max_stash_size_(max_stash_size),
@@ -46,7 +46,7 @@ CuckooHashTable::CuckooHashTable(std::vector<HashFunction> hash_functions,
 
 absl::StatusOr<std::unique_ptr<CuckooHashTable>> CuckooHashTable::Create(
     std::vector<HashFunction> hash_functions, int num_buckets,
-    int max_relocations, absl::optional<int> max_stash_size) {
+    int max_relocations, std::optional<int> max_stash_size) {
   if (num_buckets <= 0) {
     return absl::InvalidArgumentError("num_buckets must be positive");
   }
