@@ -222,7 +222,7 @@ TEST_F(CuckooHashingSparseDpfPirClientTest, EndToEndSucceeds) {
                            client_->CreateRequest(queries));
   DPF_ASSERT_OK_AND_ASSIGN(PirResponse response,
                            leader_->HandleRequest(request));
-  DPF_ASSERT_OK_AND_ASSIGN(std::vector<absl::optional<std::string>> result,
+  DPF_ASSERT_OK_AND_ASSIGN(std::vector<std::optional<std::string>> result,
                            client_->HandleResponse(response, client_state));
 
   EXPECT_EQ(result.size(), queries.size());
@@ -247,7 +247,7 @@ TEST_F(CuckooHashingSparseDpfPirClientTest,
 
   DPF_ASSERT_OK_AND_ASSIGN(PirResponse response,
                            leader_->HandleRequest(request));
-  DPF_ASSERT_OK_AND_ASSIGN(std::vector<absl::optional<std::string>> result,
+  DPF_ASSERT_OK_AND_ASSIGN(std::vector<std::optional<std::string>> result,
                            client_->HandleResponse(response, client_state));
 
   EXPECT_EQ(result.size(), queries.size());

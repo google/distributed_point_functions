@@ -164,7 +164,7 @@ CuckooHashingSparseDpfPirClient::CreatePlainRequests(
                          std::move(request_client_state));
 }
 
-absl::StatusOr<std::vector<absl::optional<std::string>>>
+absl::StatusOr<std::vector<std::optional<std::string>>>
 CuckooHashingSparseDpfPirClient::HandleResponse(
     const PirResponse& pir_response,
     const PirRequestClientState& request_client_state) const {
@@ -199,7 +199,7 @@ CuckooHashingSparseDpfPirClient::HandleResponse(
   DPF_ASSIGN_OR_RETURN(
       std::vector<std::string> raw_responses,
       wrapped_client_->HandleResponse(pir_response, wrapped_client_state));
-  std::vector<absl::optional<std::string>> result(
+  std::vector<std::optional<std::string>> result(
       raw_responses.size() / hash_functions_.size() / 2, absl::nullopt);
   for (int i = 0; i < result.size(); ++i) {
     for (int j = 0; j < hash_functions_.size(); ++j) {

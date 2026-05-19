@@ -151,7 +151,7 @@ CuckooHashedDpfPirDatabase::Builder::Build() {
 
   // For each key in the cuckoo hash table, insert it into key_database_ and
   // the corresponding value into value_database_.
-  absl::Span<const absl::optional<std::string>> cuckoo_table =
+  absl::Span<const std::optional<std::string>> cuckoo_table =
       cuckoo_hasher->GetTable();
   for (int i = 0; i < cuckoo_table.size(); ++i) {
     if (cuckoo_table[i].has_value()) {
