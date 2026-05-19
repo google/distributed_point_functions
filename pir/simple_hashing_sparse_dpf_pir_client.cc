@@ -157,7 +157,7 @@ SimpleHashingSparseDpfPirClient::CreatePlainRequests(
                          std::move(request_client_state));
 }
 
-absl::StatusOr<std::vector<absl::optional<std::string>>>
+absl::StatusOr<std::vector<std::optional<std::string>>>
 SimpleHashingSparseDpfPirClient::HandleResponse(
     const PirResponse& pir_response,
     const PirRequestClientState& request_client_state) const {
@@ -188,8 +188,8 @@ SimpleHashingSparseDpfPirClient::HandleResponse(
   DPF_ASSIGN_OR_RETURN(
       std::vector<std::string> raw_responses,
       wrapped_client_->HandleResponse(pir_response, wrapped_client_state));
-  std::vector<absl::optional<std::string>> result(raw_responses.size(),
-                                                  absl::nullopt);
+  std::vector<std::optional<std::string>> result(raw_responses.size(),
+                                                 absl::nullopt);
   for (int i = 0; i < result.size(); ++i) {
     // We need to use a CodedInputStream here to handle the null bytes at the
     // end of the string.
