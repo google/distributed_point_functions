@@ -30,7 +30,7 @@ namespace distributed_point_functions {
 
 absl::StatusOr<std::unique_ptr<SimpleHashTable>> SimpleHashTable::Create(
     std::vector<HashFunction> hash_functions, int num_buckets,
-    absl::optional<int> max_bucket_size) {
+    std::optional<int> max_bucket_size) {
   if (num_buckets <= 0) {
     return absl::InvalidArgumentError("num_buckets must be positive");
   }
@@ -46,7 +46,7 @@ absl::StatusOr<std::unique_ptr<SimpleHashTable>> SimpleHashTable::Create(
 
 SimpleHashTable::SimpleHashTable(std::vector<HashFunction> hash_functions,
                                  int num_buckets,
-                                 absl::optional<int> max_bucket_size)
+                                 std::optional<int> max_bucket_size)
     : num_buckets_(num_buckets),
       max_bucket_size_(max_bucket_size),
       hash_functions_(std::move(hash_functions)),
