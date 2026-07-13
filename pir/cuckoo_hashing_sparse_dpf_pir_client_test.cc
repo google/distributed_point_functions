@@ -227,7 +227,7 @@ TEST_F(CuckooHashingSparseDpfPirClientTest, EndToEndSucceeds) {
 
   EXPECT_EQ(result.size(), queries.size());
   EXPECT_THAT(result[0], Optional(StartsWith(values_[1])));
-  EXPECT_EQ(result[1], absl::nullopt);
+  EXPECT_EQ(result[1], std::nullopt);
   EXPECT_THAT(result[2], Optional(StartsWith(values_[42])));
 }
 
@@ -252,7 +252,7 @@ TEST_F(CuckooHashingSparseDpfPirClientTest,
 
   EXPECT_EQ(result.size(), queries.size());
   EXPECT_THAT(result[0], Optional(StartsWith(values_[1])));
-  EXPECT_EQ(result[1], absl::nullopt);
+  EXPECT_EQ(result[1], std::nullopt);
   EXPECT_THAT(result[2], Optional(StartsWith(values_[42])));
 }
 
