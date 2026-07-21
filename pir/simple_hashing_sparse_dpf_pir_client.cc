@@ -189,7 +189,7 @@ SimpleHashingSparseDpfPirClient::HandleResponse(
       std::vector<std::string> raw_responses,
       wrapped_client_->HandleResponse(pir_response, wrapped_client_state));
   std::vector<absl::optional<std::string>> result(raw_responses.size(),
-                                                  absl::nullopt);
+                                                  std::nullopt);
   for (int i = 0; i < result.size(); ++i) {
     // We need to use a CodedInputStream here to handle the null bytes at the
     // end of the string.
