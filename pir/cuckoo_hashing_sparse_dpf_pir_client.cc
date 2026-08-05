@@ -200,7 +200,7 @@ CuckooHashingSparseDpfPirClient::HandleResponse(
       std::vector<std::string> raw_responses,
       wrapped_client_->HandleResponse(pir_response, wrapped_client_state));
   std::vector<absl::optional<std::string>> result(
-      raw_responses.size() / hash_functions_.size() / 2, absl::nullopt);
+      raw_responses.size() / hash_functions_.size() / 2, std::nullopt);
   for (int i = 0; i < result.size(); ++i) {
     for (int j = 0; j < hash_functions_.size(); ++j) {
       int raw_index = 2 * (hash_functions_.size() * i + j);
