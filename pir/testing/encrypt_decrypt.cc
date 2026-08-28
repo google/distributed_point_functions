@@ -42,7 +42,7 @@ using ::crypto::tink::JsonKeysetReader;
 using ::crypto::tink::KeysetHandle;
 using ::crypto::tink::KeysetReader;
 
-absl::once_flag register_tink_once ABSL_ATTRIBUTE_UNUSED;
+absl::once_flag register_tink_once [[maybe_unused]];
 
 absl::StatusOr<std::unique_ptr<HybridDecrypt>> CreateFakeHybridDecrypt() {
   const auto* const toc = embedded_private_key_create();
