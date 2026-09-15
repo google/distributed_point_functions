@@ -17,12 +17,10 @@
 # uses the Distributed Comparison Function (as implemented in
 # distributed_comparison_function.cc) as a central component.
 
+load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
-load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
-load("@rules_cc//cc:defs.bzl", "cc_library")
-load("@rules_proto//proto:defs.bzl", "proto_library")
 
 package(
     default_visibility = ["//visibility:public"],

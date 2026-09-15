@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@com_github_google_iree//build_tools/embed_data:build_defs.bzl", "cc_embed_data")
-load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@gutil//gutil/embed_data:build_defs.bzl", "cc_embed_data")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 

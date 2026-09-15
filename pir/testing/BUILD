@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 
@@ -102,7 +101,7 @@ cc_library(
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
-        "@tink_cc//tink:cleartext_keyset_handle_testonly",
+        "@tink_cc//tink:cleartext_keyset_handle",
         "@tink_cc//tink:hybrid_decrypt",
         "@tink_cc//tink:hybrid_encrypt",
         "@tink_cc//tink:keyset_handle",

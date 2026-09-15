@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@rules_license//rules:license.bzl", "license")
 
 package(
-    default_visibility = [":allowlist"],
+    default_visibility = ["//visibility:public"],
 )
 
 license(
