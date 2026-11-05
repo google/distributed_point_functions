@@ -4,7 +4,6 @@ module(
     name = "distributed_point_functions",
     # Note: the publish-to-BCR app will patch this line to stamp the version being published.
     version = "0.0.0",
-    compatibility_level = 1,
 )
 
 bazel_dep(
@@ -12,83 +11,93 @@ bazel_dep(
     version = "1.0.0",
 )
 bazel_dep(
-    name = "rules_proto",
-    version = "7.1.0",
-)
-bazel_dep(
     name = "rules_go",
-    version = "0.46.0",
+    version = "0.60.0",
     repo_name = "io_bazel_rules_go",
 )
 bazel_dep(
     name = "rules_cc",
-    version = "0.1.5",
+    version = "0.2.19",
 )
 bazel_dep(
     name = "protobuf",
-    version = "29.1",
+    version = "35.1",
     repo_name = "com_google_protobuf",
 )
 bazel_dep(
     name = "abseil-cpp",
-    version = "20240722.0",
+    version = "20260526.0",
     repo_name = "com_google_absl",
 )
 bazel_dep(
     name = "boringssl",
-    version = "0.20240930.0",
+    version = "0.20260813.0",
 )
 bazel_dep(
     name = "googletest",
-    version = "1.15.2",
+    version = "1.17.0.bcr.2",
     repo_name = "com_github_google_googletest",
 )
 bazel_dep(
     name = "google_benchmark",
-    version = "1.8.3",
+    version = "1.9.5",
     repo_name = "com_github_google_benchmark",
 )
 bazel_dep(
-    name = "gflags",
-    version = "2.2.2",
-    repo_name = "com_github_gflags_gflags",
-)
-bazel_dep(
-    name = "glog",
-    version = "0.7.0",
-    repo_name = "com_github_google_glog",
-)
-bazel_dep(
-    name = "rapidjson",
-    version = "1.1.0.bcr.20241007",
-)
-bazel_dep(
     name = "tink_cc",
-    version = "2.3.0",
-)
-bazel_dep(
-    name = "cppitertools",
-    version = "2.1",
-)
-bazel_dep(
-    name = "riegeli",
-    version = "0.0.0-20240927-cdfb25a",
+    version = "2.9.2",
 )
 bazel_dep(
     name = "highway",
-    version = "1.2.0",
+    version = "1.4.0",
+)
+bazel_dep(
+    name = "gutil",
+    version = "20260924.0",
+)
+
+# Riegeli (pinned past BCR's 20250822 snapshot for Bazel 9 compatibility).
+# https://github.com/google/riegeli
+bazel_dep(
+    name = "riegeli",
+    version = "0.0.0",
+)
+archive_override(
+    module_name = "riegeli",
+    integrity = "sha256-DajoxHTXNvfBjnLJvX7hjJB6h4WNVD0sYROcaAC81hc=",
+    strip_prefix = "riegeli-4604c50c33b486bd7bd19abe2212175dca3a8c24",
+    urls = [
+        "https://github.com/google/riegeli/archive/4604c50c33b486bd7bd19abe2212175dca3a8c24.zip",
+    ],
+)
+
+# SHELL for uint256.
+# https://github.com/google/shell-encryption
+bazel_dep(
+    name = "shell-encryption",
+    version = "0.0.0",
+    repo_name = "com_github_google_shell-encryption",
+)
+archive_override(
+    module_name = "shell-encryption",
+    integrity = "sha256-ujQ5dxau/uCF7QAY9j2XbxREXOQaDmdE2fNSw68LnV4=",
+    strip_prefix = "shell-encryption-61c9af6da23c08358c3c595e810f7f4d9a919345",
+    urls = [
+        "https://github.com/google/shell-encryption/archive/61c9af6da23c08358c3c595e810f7f4d9a919345.zip",
+    ],
 )
 
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-# IREE for cc_embed_data.
-# https://github.com/google/iree
+# cppitertools (upstream v2.2 lacks @rules_cc loads required by Bazel 9).
+# https://github.com/ryanhaining/cppitertools
 http_archive(
-    name = "com_github_google_iree",
-    sha256 = "aa369b29a5c45ae9d7aa8bf49ea1308221d1711277222f0755df6e0a575f6879",
-    strip_prefix = "iree-7e6012468cbaafaaf30302748a2943771b40e2c3",
+    name = "cppitertools",
+    build_file = "//:bazel/cppitertools.BUILD",
+    sha256 = "d4e796c9d8ec769fbd68df92943d238d0c43667307995ede058069e770827481",
+    strip_prefix = "cppitertools-2.2",
     urls = [
-        "https://github.com/google/iree/archive/7e6012468cbaafaaf30302748a2943771b40e2c3.zip",
+        "https://github.com/ryanhaining/cppitertools/archive/refs/tags/v2.2.tar.gz",
     ],
 )
 
@@ -102,16 +111,5 @@ http_archive(
     strip_prefix = "farmhash-0d859a811870d10f53a594927d0d0b97573ad06d/src",
     urls = [
         "https://github.com/google/farmhash/archive/0d859a811870d10f53a594927d0d0b97573ad06d.zip",
-    ],
-)
-
-# SHELL for uint256.
-# https://github.com/google/shell-encryption
-http_archive(
-    name = "com_github_google_shell-encryption",
-    sha256 = "e4db301b036879fe422da7b5f0f6c6bdc5b15c5cec2a3817c2561ddc2cfa1046",
-    strip_prefix = "shell-encryption-b381c4ef6b6c3c11f9da3a39c75f0cb835ee296a",
-    urls = [
-        "https://github.com/google/shell-encryption/archive/b381c4ef6b6c3c11f9da3a39c75f0cb835ee296a.zip",
     ],
 )
