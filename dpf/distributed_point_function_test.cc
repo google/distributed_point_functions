@@ -1185,5 +1185,16 @@ TYPED_TEST(DpfEvaluationTest, EvaluateAndApplyFailsWithInvalidKey) {
               StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("key")));
 }
 
+TYPED_TEST(DpfEvaluationTest, EvaluateAndApplyFailsWithInvalidKeyParty) {
+  DpfKey key = this->keys_.first;
+  key.set_party(2);
+
+  EXPECT_THAT(this->dpf_->template EvaluateAndApply<TypeParam>(
+                  absl::MakeConstSpan(&key, 1), {0},
+                  [](absl::Span<const TypeParam>) { return true; }),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("key.party must be 0 or 1")));
+}
+
 }  // namespace
 }  // namespace distributed_point_functions

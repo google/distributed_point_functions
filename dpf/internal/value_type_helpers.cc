@@ -103,13 +103,16 @@ absl::StatusOr<int> BitsNeeded(const ValueType& value_type,
       }
     }
     if (num_other > 0) {
-      for (int i = 0; i < num_other; ++i) {
-        double per_element_security_parameter =
-            security_parameter + std::log2(static_cast<double>(num_other));
-        DPF_ASSIGN_OR_RETURN(int el_bitsize,
-                             BitsNeeded(value_type.tuple().elements(i),
-                                        per_element_security_parameter));
-        bitsize_other += el_bitsize;
+      double per_element_security_parameter =
+          security_parameter + std::log2(static_cast<double>(num_other));
+      // Only consider the elements that are not of type IntModN, since those
+      // were accounted for above.
+      for (const ValueType& el : value_type.tuple().elements()) {
+        if (el.type_case() != ValueType::kIntModN) {
+          DPF_ASSIGN_OR_RETURN(int el_bitsize,
+                               BitsNeeded(el, per_element_security_parameter));
+          bitsize_other += el_bitsize;
+        }
       }
     }
     if (num_ints_mod_n > 0) {

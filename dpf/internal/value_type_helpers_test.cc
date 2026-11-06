@@ -126,6 +126,22 @@ TYPED_TEST(ValueTypeIntegerTest, ValueConversionFailsIfValueOutOfRange) {
   }
 }
 
+TYPED_TEST(ValueTypeIntegerTest, ValueConversionFailsIfHigh64BitsSet) {
+  Value value;
+  *(value.mutable_integer()) =
+      Uint128ToValueInteger(absl::MakeUint128(/*high=*/1, /*low=*/23));
+
+  if (sizeof(TypeParam) == sizeof(absl::uint128)) {
+    DPF_ASSERT_OK_AND_ASSIGN(TypeParam result,
+                             ValueTypeHelper<TypeParam>::FromValue(value));
+    EXPECT_EQ(result, absl::MakeUint128(1, 23));
+  } else {
+    EXPECT_THAT(ValueTypeHelper<TypeParam>::FromValue(value),
+                StatusIs(absl::StatusCode::kInvalidArgument,
+                         testing::HasSubstr("too large for the given type T")));
+  }
+}
+
 template <typename T>
 class ValueTypeTupleTest : public testing::Test {};
 
@@ -225,6 +241,23 @@ TEST(ValueTypeTupleTest, TestValueTypesAreNotEqual) {
   DPF_ASSERT_OK_AND_ASSIGN(equal,
                            ValueTypesAreEqual(value_type_2, value_type_1));
   EXPECT_FALSE(equal);
+}
+
+TEST(ValueTypeTupleTest, BitsNeededForMixedTupleIsIndependentOfElementOrder) {
+  using MyIntModN = IntModN<uint32_t, 4294967291u>;
+  ValueType int_mod_n_first =
+      ValueTypeHelper<Tuple<MyIntModN, uint8_t>>::ToValueType();
+  ValueType int_mod_n_last =
+      ValueTypeHelper<Tuple<uint8_t, MyIntModN>>::ToValueType();
+  DPF_ASSERT_OK_AND_ASSIGN(int bits_int_mod_n,
+                           BitsNeeded(ValueTypeHelper<MyIntModN>::ToValueType(),
+                                      kDefaultSecurityParameter));
+
+  // The uint8_t element needs 8 bits, regardless of its position in the tuple.
+  EXPECT_THAT(BitsNeeded(int_mod_n_first, kDefaultSecurityParameter),
+              IsOkAndHolds(bits_int_mod_n + 8));
+  EXPECT_THAT(BitsNeeded(int_mod_n_last, kDefaultSecurityParameter),
+              IsOkAndHolds(bits_int_mod_n + 8));
 }
 
 TEST(ValueTypeTupleTest, TestFromBytesWithConcreteExample) {

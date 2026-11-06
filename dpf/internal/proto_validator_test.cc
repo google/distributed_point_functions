@@ -214,6 +214,53 @@ TEST_F(ProtoValidatorTest, ValidateDpfKeyFailsIfOutputCorrectionIsMissing) {
                StartsWith("Malformed DpfKey: expected correction_words")));
 }
 
+TEST_F(ProtoValidatorTest, ValidateDpfKeySucceedsForWellFormedKey) {
+  DPF_EXPECT_OK(proto_validator_->ValidateDpfKey(dpf_key_));
+}
+
+TEST_F(ProtoValidatorTest, ValidateDpfKeyFailsIfPartyIsInvalid) {
+  dpf_key_.set_party(2);
+
+  EXPECT_THAT(
+      proto_validator_->ValidateDpfKey(dpf_key_),
+      StatusIs(absl::StatusCode::kInvalidArgument, "key.party must be 0 or 1"));
+}
+
+TEST_F(ProtoValidatorTest,
+       ValidateDpfKeyFailsIfLastLevelValueCorrectionTooLarge) {
+  auto value_64 = uint64_t{1} << 32;
+  dpf_key_.mutable_last_level_value_correction(0)
+      ->mutable_integer()
+      ->set_value_uint64(value_64);
+
+  EXPECT_THAT(
+      proto_validator_->ValidateDpfKey(dpf_key_),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               absl::StrFormat(
+                   "Value (= %d) too large for ValueType with bitsize = %d",
+                   value_64, 32)));
+}
+
+TEST_F(ProtoValidatorTest,
+       ValidateDpfKeyFailsIfIntermediateValueCorrectionHasHighBitsSet) {
+  // Setting the upper 64 bits of an otherwise in-range value must not be
+  // accepted for a 32-bit value type.
+  int num_modified = 0;
+  for (CorrectionWord& cw : *(dpf_key_.mutable_correction_words())) {
+    for (Value& value : *(cw.mutable_value_correction())) {
+      Block* block = value.mutable_integer()->mutable_value_uint128();
+      block->set_high(1);
+      block->set_low(23);
+      ++num_modified;
+    }
+  }
+  ASSERT_GT(num_modified, 0);
+
+  EXPECT_THAT(proto_validator_->ValidateDpfKey(dpf_key_),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       testing::HasSubstr("too large for ValueType")));
+}
+
 TEST_F(ProtoValidatorTest, ValidateEvaluationContextFailsIfKeyIsMissing) {
   ctx_.clear_key();
 

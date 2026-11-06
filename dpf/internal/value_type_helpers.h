@@ -169,8 +169,9 @@ template <typename T, typename = absl::enable_if_t<is_unsigned_integer_v<T>>>
 absl::StatusOr<T> Uint128To(absl::uint128 in) {
   // Check whether value is in range if it's smaller than 128 bits.
   if (!std::is_same<T, absl::uint128>::value &&
-      absl::Uint128Low64(in) >
-          static_cast<uint64_t>(std::numeric_limits<T>::max())) {
+      (absl::Uint128High64(in) != 0 ||
+       absl::Uint128Low64(in) >
+           static_cast<uint64_t>(std::numeric_limits<T>::max()))) {
     return absl::InvalidArgumentError(absl::StrCat(
         "Value (= ", absl::Uint128Low64(in),
         ") too large for the given type T (size ", sizeof(T), ")"));

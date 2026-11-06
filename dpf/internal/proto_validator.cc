@@ -217,6 +217,14 @@ absl::Status ProtoValidator::ValidateDpfKey(const DpfKey& key) const {
         "Malformed DpfKey: expected ", tree_levels_needed_ - 1,
         " correction words, but got ", key.correction_words_size()));
   }
+  if (key.party() != 0 && key.party() != 1) {
+    return absl::InvalidArgumentError("key.party must be 0 or 1");
+  }
+  // Value corrections of untrusted keys must be valid elements of the value
+  // type of the hierarchy level they belong to.
+  for (const Value& value : key.last_level_value_correction()) {
+    DPF_RETURN_IF_ERROR(ValidateValue(value, parameters_.back().value_type()));
+  }
   for (int i = 0; i < static_cast<int>(hierarchy_to_tree_.size()); ++i) {
     if (hierarchy_to_tree_[i] == tree_levels_needed_ - 1) {
       // The output correction of the last tree level is always stored in
@@ -230,6 +238,10 @@ absl::Status ProtoValidator::ValidateDpfKey(const DpfKey& key) const {
       return absl::InvalidArgumentError(absl::StrCat(
           "Malformed DpfKey: expected correction_words[", hierarchy_to_tree_[i],
           "] to contain the value correction of hierarchy level ", i));
+    }
+    for (const Value& value :
+         key.correction_words(hierarchy_to_tree_[i]).value_correction()) {
+      DPF_RETURN_IF_ERROR(ValidateValue(value, parameters_[i].value_type()));
     }
   }
   return absl::OkStatus();
