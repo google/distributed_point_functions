@@ -40,6 +40,8 @@ Prefix bit lengths to evaluate for hierarchical evaluation: 21,23,25,27,29,31,32
   <tr>
    <td>Distribution
    </td>
+   <td>Key size
+   </td>
    <td>1
    </td>
    <td>2
@@ -50,6 +52,8 @@ Prefix bit lengths to evaluate for hierarchical evaluation: 21,23,25,27,29,31,32
   <tr>
    <td>Hierarchical Evaluation
    </td>
+   <td>1105 bytes
+   </td>
    <td>1.36s
    </td>
    <td>2.22s
@@ -59,6 +63,8 @@ Prefix bit lengths to evaluate for hierarchical evaluation: 21,23,25,27,29,31,32
   </tr>
   <tr>
    <td>Direct Evaluation
+   </td>
+   <td>883 bytes
    </td>
    <td>0.67s
    </td>
@@ -78,6 +84,8 @@ Levels to evaluate for hierarchical evaluation:
   <tr>
    <td>Distribution
    </td>
+   <td>Key Size
+   </td>
    <td>1
    </td>
    <td>2
@@ -87,6 +95,8 @@ Levels to evaluate for hierarchical evaluation:
   </tr>
   <tr>
    <td>Hierarchical Evaluation
+   </td>
+   <td>5603 bytes
    </td>
    <td>32.68s
    </td>
@@ -98,11 +108,139 @@ Levels to evaluate for hierarchical evaluation:
   <tr>
    <td>Direct Evaluation
    </td>
+   <td>3504 bytes
+   </td>
    <td>3.08s
    </td>
    <td>3.13s
    </td>
    <td>3.13s
+   </td>
+  </tr>
+</table>
+
+
+
+## Key Generation
+
+We evaluate the efficiency of the DPF generation and the length of the DPF keys with _value_ bit length 32 bits and several different settings for the _index_ bit length. The keys are generated for non-hierarchical DPFs (i.e., for direct evaluation only).
+
+
+<table>
+  <tr>
+   <td>Bit length
+   </td>
+   <td>20
+   </td>
+   <td>21
+   </td>
+   <td>22
+   </td>
+   <td>23
+   </td>
+   <td>24
+   </td>
+   <td>25
+   </td>
+   <td>26
+   </td>
+   <td>27
+   </td>
+   <td>28
+   </td>
+   <td>29
+   </td>
+   <td>30
+   </td>
+   <td>31
+   </td>
+   <td>32
+   </td>
+  </tr>
+  <tr>
+   <td>KeyGen (µs)
+   </td>
+   <td>6.9
+   </td>
+   <td>7.2
+   </td>
+   <td>7.3
+   </td>
+   <td>7.6
+   </td>
+   <td>7.8
+   </td>
+   <td>8.0
+   </td>
+   <td>8.3
+   </td>
+   <td>8.4
+   </td>
+   <td>8.5
+   </td>
+   <td>8.7
+   </td>
+   <td>9.0
+   </td>
+   <td>9.2
+   </td>
+   <td>9.6
+   </td>
+  </tr>
+  <tr>
+   <td>Size (Bytes)
+   </td>
+   <td>547
+   </td>
+   <td>575
+   </td>
+   <td>609
+   </td>
+   <td>637
+   </td>
+   <td>651
+   </td>
+   <td>680
+   </td>
+   <td>721
+   </td>
+   <td>737
+   </td>
+   <td>772
+   </td>
+   <td>797
+   </td>
+   <td>828
+   </td>
+   <td>839
+   </td>
+   <td>892
+   </td>
+  </tr>
+</table>
+
+
+## Full Domain Evaluation
+
+<table>
+  <tr>
+   <td>Domain Size
+   </td>
+   <td>2<sup>10</sup>
+   </td>
+   <td>2<sup>15</sup>
+   </td>
+   <td>2<sup>20</sup>
+   </td>
+  </tr>
+  <tr>
+   <td>Time
+   </td>
+   <td>18.53µs
+   </td>
+   <td>511.24µs
+   </td>
+   <td>17.04ms
    </td>
   </tr>
 </table>
